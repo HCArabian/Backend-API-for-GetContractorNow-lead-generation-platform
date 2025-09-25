@@ -1,15 +1,232 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id                String   @id @default(uuid())
+  
+  // Customer Info
+  customerFirstName String
+  customerLastName  String
+  customerEmail     String
+  customerPhone     String
+  customerAddress   String
+  customerCity      String
+  customerState     String
+  customerZip       String
+  
+  // Service Details
+  serviceType       String
+  serviceDescription String?
+  timeline          String
+  budgetRange       String
+  propertyType      String
+  
+  // Scoring
+  score             Int
+  smsLogs           SMSLog[]
+  category          String
+  price             Float
+  qualityFlags      Json?
+  
+  // Status
+  status            String   @default("pending_assignment")
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  assignedAt        DateTime?
+  firstContactAt    DateTime?
+  
+  // Relations
+  assignment        LeadAssignment?
+  billingRecords    BillingRecord[]
+  callLogs          CallLog[]
+  feedback          CustomerFeedback[]
+  
+  @@index([customerEmail])
+  @@index([customerPhone])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Contractor {
+  id                String   @id @default(uuid())
+  
+  // Business Info
+  businessName      String
+  email             String   @unique
+  phone             String
+  passwordHash      String
+  
+  // Service Coverage
+  serviceZipCodes   String[]
+  specializations   String[]
+  
+  // Performance
+  avgResponseTime   Int?
+  conversionRate    Float?
+  customerRating    Float?
+  totalReviews      Int      @default(0)
+  
+  // Status
+  status            String   @default("active")
+  isAcceptingLeads  Boolean  @default(true)
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  assignments       LeadAssignment[]
+  billingRecords    BillingRecord[]
+  callLogs          CallLog[]
+  smsLogs           SMSLog[]
+  disputes          Dispute[]
+  feedback          CustomerFeedback[]
+  
+  @@index([status])
+  @@index([isAcceptingLeads])
+}
+
+model LeadAssignment {
+  id               String   @id @default(uuid())
+  leadId           String   @unique
+  contractorId     String
+  
+  assignedAt       DateTime @default(now())
+  responseDeadline DateTime
+  status           String   @default("assigned")
+  
+  lead             Lead      @relation(fields: [leadId], references: [id])
+  contractor       Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([contractorId])
+  @@index([status])
+}
+
+model BillingRecord {
+  id            String   @id @default(uuid())
+  leadId        String
+  contractorId  String
+  
+  amountOwed    Float
+  status        String   @default("pending") // pending, invoiced, paid, credited
+  notes         String?
+  
+  dateIncurred  DateTime @default(now())
+  invoicedAt    DateTime?
+  paidAt        DateTime?
+  
+  lead          Lead      @relation(fields: [leadId], references: [id])
+  contractor    Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([contractorId])
+  @@index([status])
+  @@index([dateIncurred])
+}
+
+model TrackingNumber {
+  id               String   @id @default(uuid())
+  leadId           String
+  contractorId     String
+  
+  twilioNumber     String
+  customerNumber   String
+  contractorNumber String
+  
+  status           String   @default("active")
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+  
+  @@index([leadId])
+  @@index([status])
+}
+
+model CallLog {
+  id              String   @id @default(uuid())
+  leadId          String
+  contractorId    String
+  
+  callSid         String   @unique
+  callDirection   String
+  trackingNumber  String
+  
+  callStartedAt   DateTime
+  callEndedAt     DateTime?
+  callDuration    Int?      // seconds
+  callStatus      String
+  recordingUrl    String?
+  
+  lead            Lead      @relation(fields: [leadId], references: [id])
+  contractor      Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([leadId])
+  @@index([contractorId])
+  @@index([callSid])
+}
+
+model SMSLog {
+  id              String   @id @default(uuid())
+  leadId          String
+  contractorId    String
+  
+  messageSid      String   @unique
+  fromNumber      String
+  toNumber        String
+  messageBody     String
+  direction       String   // contractor_to_customer, customer_to_contractor
+  
+  status          String
+  sentAt          DateTime @default(now())
+  
+  lead            Lead      @relation(fields: [leadId], references: [id])
+  contractor      Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([leadId])
+  @@index([contractorId])
+}
+
+model Dispute {
+  id              String   @id @default(uuid())
+  leadId          String
+  contractorId    String
+  
+  reason          String
+  evidence        Json?
+  status          String   @default("pending") // pending, approved, denied
+  
+  resolution      String?  // full_credit, partial_credit, denied
+  resolutionNotes String?
+  
+  submittedAt     DateTime @default(now())
+  resolvedAt      DateTime?
+  
+  contractor      Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([contractorId])
+  @@index([status])
+}
+
+model CustomerFeedback {
+  id                String   @id @default(uuid())
+  leadId            String
+  contractorId      String
+  
+  contractorCalled  Boolean?  // Did contractor call?
+  outcome           String?   // job_completed, job_scheduled, quote_provided, no_conversion
+  rating            Int?      // 1-5 stars
+  feedbackText      String?
+  wouldRecommend    Boolean?
+  
+  submittedAt       DateTime @default(now())
+  
+  lead              Lead      @relation(fields: [leadId], references: [id])
+  contractor        Contractor @relation(fields: [contractorId], references: [id])
+  
+  @@index([leadId])
+  @@index([contractorId])
 }
