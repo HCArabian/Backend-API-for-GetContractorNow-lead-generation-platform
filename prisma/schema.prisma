@@ -26,32 +26,58 @@ model Lead {
   timeline          String
   budgetRange       String
   propertyType      String
+  propertyAge       String?   // 0-5, 5-10, 10-20, 20+ years
+  existingSystem    String?   // central_air, window_units, heat_pump, none
+  systemIssue       String?   // not_cooling, strange_noise, not_heating, complete_failure
+  
+  // Contact Preferences
+  preferredContactTime String? // anytime, morning, afternoon, evening
+  preferredContactMethod String? @default("phone") // phone, email, sms
+  
+  // Marketing/Tracking
+  referralSource    String?   // google, facebook, referral, direct, other
+  utmSource         String?   // Track ad campaigns
+  utmMedium         String?   // Track ad campaigns
+  utmCampaign       String?   // Track ad campaigns
+  
+  // Form Metadata (fraud detection)
+  formCompletionTime Int?    // Seconds to complete form
+  ipAddress         String?   // For duplicate/fraud detection
+  userAgent         String?   // Browser/device info
+  deviceFingerprint String?   // Unique device ID
   
   // Scoring
   score             Int
-  smsLogs           SMSLog[]
   category          String
   price             Float
   qualityFlags      Json?
+  confidenceLevel   Int?      // Confidence in conversion (0-100%)
   
   // Status
   status            String   @default("pending_assignment")
+  rejectionReason   String?   // Why lead was rejected (if auto-rejected)
   
   // Timestamps
   createdAt         DateTime @default(now())
   assignedAt        DateTime?
   firstContactAt    DateTime?
+  outcomeConfirmedAt DateTime?
   
   // Relations
   assignment        LeadAssignment?
   billingRecords    BillingRecord[]
   callLogs          CallLog[]
+  smsLogs           SMSLog[]
   feedback          CustomerFeedback[]
   
   @@index([customerEmail])
   @@index([customerPhone])
+  @@index([customerZip])
   @@index([status])
+  @@index([category])
   @@index([createdAt])
+  @@index([referralSource])
+  @@index([ipAddress])
 }
 
 model Contractor {
@@ -59,26 +85,47 @@ model Contractor {
   
   // Business Info
   businessName      String
+  ownerName         String?
   email             String   @unique
   phone             String
   passwordHash      String
+  businessAddress   String?
+  businessCity      String?
+  businessState     String?
+  businessZip       String?
+  
+  // Licenses & Insurance
+  licenseNumber     String?
+  insuranceCertificate String?
+  yearsInBusiness   Int?
   
   // Service Coverage
-  serviceZipCodes   String[]
-  specializations   String[]
+  serviceZipCodes   String[]  // Array of ZIP codes
+  specializations   String[]  // Array: emergency_repair, installation, etc.
+  maxTravelDistance Int?      // Miles willing to travel
   
-  // Performance
-  avgResponseTime   Int?
-  conversionRate    Float?
-  customerRating    Float?
-  totalReviews      Int      @default(0)
+  // Availability
+  maxLeadsPerDay    Int       @default(5)
+  maxLeadsPerWeek   Int       @default(20)
+  currentLeadCount  Int       @default(0)
+  
+  // Performance Metrics
+  avgResponseTime   Int?      // Minutes
+  conversionRate    Float?    // Percentage (0.75 = 75%)
+  customerRating    Float?    // 1.0 to 5.0
+  totalReviews      Int       @default(0)
+  totalLeadsReceived Int      @default(0)
+  totalJobsCompleted Int      @default(0)
   
   // Status
-  status            String   @default("active")
+  status            String   @default("active") // active, suspended, inactive
   isAcceptingLeads  Boolean  @default(true)
+  isVerified        Boolean  @default(false)
+  suspensionReason  String?
   
   // Timestamps
   createdAt         DateTime @default(now())
+  lastActiveAt      DateTime?
   
   // Relations
   assignments       LeadAssignment[]
@@ -90,6 +137,8 @@ model Contractor {
   
   @@index([status])
   @@index([isAcceptingLeads])
+  @@index([businessZip])
+  @@index([customerRating])
 }
 
 model LeadAssignment {
@@ -97,15 +146,21 @@ model LeadAssignment {
   leadId           String   @unique
   contractorId     String
   
+  // Assignment Details
   assignedAt       DateTime @default(now())
   responseDeadline DateTime
-  status           String   @default("assigned")
+  status           String   @default("assigned") // assigned, contacted, completed, expired
   
+  // Tracking
+  responseTime     Int?     // Actual minutes to first contact
+  
+  // Relations
   lead             Lead      @relation(fields: [leadId], references: [id])
   contractor       Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([contractorId])
   @@index([status])
+  @@index([responseDeadline])
 }
 
 model BillingRecord {
@@ -113,20 +168,25 @@ model BillingRecord {
   leadId        String
   contractorId  String
   
+  // Billing Details
   amountOwed    Float
   status        String   @default("pending") // pending, invoiced, paid, credited
   notes         String?
+  invoiceNumber String?  // Your invoice number when sent
   
+  // Timestamps
   dateIncurred  DateTime @default(now())
   invoicedAt    DateTime?
   paidAt        DateTime?
   
+  // Relations
   lead          Lead      @relation(fields: [leadId], references: [id])
   contractor    Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([contractorId])
   @@index([status])
   @@index([dateIncurred])
+  @@index([invoicedAt])
 }
 
 model TrackingNumber {
@@ -134,16 +194,22 @@ model TrackingNumber {
   leadId           String
   contractorId     String
   
+  // Twilio Numbers
   twilioNumber     String
+  twilioSid        String?  // Twilio phone number SID
   customerNumber   String
   contractorNumber String
   
-  status           String   @default("active")
+  // Status
+  status           String   @default("active") // active, expired, released
   createdAt        DateTime @default(now())
   expiresAt        DateTime
+  releasedAt       DateTime?
   
   @@index([leadId])
+  @@index([twilioNumber])
   @@index([status])
+  @@index([expiresAt])
 }
 
 model CallLog {
@@ -151,22 +217,32 @@ model CallLog {
   leadId          String
   contractorId    String
   
+  // Call Details
   callSid         String   @unique
-  callDirection   String
+  callDirection   String   // contractor_to_customer, customer_to_contractor
   trackingNumber  String
   
+  // Call Metrics
   callStartedAt   DateTime
   callEndedAt     DateTime?
-  callDuration    Int?      // seconds
-  callStatus      String
+  callDuration    Int?      // Seconds
+  callStatus      String    // completed, no-answer, busy, failed
   recordingUrl    String?
+  recordingSid    String?
   
+  // Analysis (optional - for future AI features)
+  transcript      String?
+  sentiment       String?   // positive, neutral, negative
+  keywordsDetected String[] // ["schedule", "quote", "price"]
+  
+  // Relations
   lead            Lead      @relation(fields: [leadId], references: [id])
   contractor      Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([leadId])
   @@index([contractorId])
   @@index([callSid])
+  @@index([callStartedAt])
 }
 
 model SMSLog {
@@ -174,20 +250,25 @@ model SMSLog {
   leadId          String
   contractorId    String
   
+  // SMS Details
   messageSid      String   @unique
   fromNumber      String
   toNumber        String
   messageBody     String
   direction       String   // contractor_to_customer, customer_to_contractor
   
-  status          String
+  // Status
+  status          String   // sent, delivered, failed
   sentAt          DateTime @default(now())
+  deliveredAt     DateTime?
   
+  // Relations
   lead            Lead      @relation(fields: [leadId], references: [id])
   contractor      Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([leadId])
   @@index([contractorId])
+  @@index([messageSid])
 }
 
 model Dispute {
@@ -195,20 +276,29 @@ model Dispute {
   leadId          String
   contractorId    String
   
-  reason          String
-  evidence        Json?
-  status          String   @default("pending") // pending, approved, denied
+  // Dispute Details
+  reason          String   // invalid_phone, customer_no_contact, wrong_info, etc.
+  description     String?
+  evidence        Json?    // Screenshots, notes, etc.
+  status          String   @default("pending") // pending, under_review, approved, denied
   
-  resolution      String?  // full_credit, partial_credit, denied
+  // Resolution
+  resolution      String?  // full_credit, partial_credit, replacement_lead, denied
   resolutionNotes String?
+  creditAmount    Float?   // If credit given
   
+  // Timestamps
   submittedAt     DateTime @default(now())
+  reviewedAt      DateTime?
   resolvedAt      DateTime?
   
+  // Relations
   contractor      Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([contractorId])
+  @@index([leadId])
   @@index([status])
+  @@index([submittedAt])
 }
 
 model CustomerFeedback {
@@ -216,17 +306,60 @@ model CustomerFeedback {
   leadId            String
   contractorId      String
   
+  // Contact Confirmation
   contractorCalled  Boolean?  // Did contractor call?
+  contactMethod     String?   // phone, sms, email
+  
+  // Outcome
   outcome           String?   // job_completed, job_scheduled, quote_provided, no_conversion
+  jobValue          Float?    // How much the job cost (if completed)
+  outcomeNotes      String?
+  
+  // Rating
   rating            Int?      // 1-5 stars
   feedbackText      String?
   wouldRecommend    Boolean?
   
+  // Specific Ratings (optional detailed feedback)
+  professionalismRating Int?  // 1-5
+  qualityRating        Int?   // 1-5
+  valueRating          Int?   // 1-5
+  timelinessRating     Int?   // 1-5
+  
+  // Timestamps
   submittedAt       DateTime @default(now())
   
+  // Relations
   lead              Lead      @relation(fields: [leadId], references: [id])
   contractor        Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([leadId])
   @@index([contractorId])
+  @@index([rating])
+  @@index([outcome])
+}
+
+model NotificationLog {
+  id              String   @id @default(uuid())
+  leadId          String?
+  contractorId    String?
+  recipientEmail  String?
+  recipientPhone  String?
+  
+  // Notification Details
+  type            String   // sms, email, push, voice
+  channel         String   // lead_alert, customer_confirmation, reminder, etc.
+  subject         String?
+  body            String
+  
+  // Status
+  status          String   // sent, delivered, failed, bounced
+  sentAt          DateTime @default(now())
+  deliveredAt     DateTime?
+  errorMessage    String?
+  
+  @@index([leadId])
+  @@index([contractorId])
+  @@index([sentAt])
+  @@index([type])
 }
