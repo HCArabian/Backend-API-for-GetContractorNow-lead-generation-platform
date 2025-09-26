@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-
+const { PrismaClient } = require('@prisma/client'); // ADD THIS LINE
+const prisma = new PrismaClient(); // ADD THIS LINE
 const app = express();
 
 // CORS - Allow requests from your Webflow site
