@@ -170,34 +170,25 @@ function validateName(name, fieldName) {
 function validateAddress(address) {
   const issues = [];
   
-  if (!address || address.trim().length < 5) {
-    issues.push('Address must be at least 5 characters');
+  if (!address || address.trim().length < 3) {
+    issues.push('Address is required');
     return { valid: false, issues };
   }
   
-  // Check for fake addresses
+  // Check for obviously fake addresses
   const fakePatterns = [
-    /123.*fake/i,
-    /test.*street/i,
-    /asdf/i,
-    /^na$/i,
-    /^n\/a$/i,
-    /none/i
+    /^(asdf|qwer|test.*test)/i,
+    /^(na|n\/a|none)$/i
   ];
   
   for (const pattern of fakePatterns) {
-    if (pattern.test(address)) {
-      issues.push('Address appears invalid');
+    if (pattern.test(address.trim())) {
+      issues.push('Please enter a valid address');
       return { valid: false, issues };
     }
   }
   
-  // Should contain at least one number (street number)
-  if (!/\d/.test(address)) {
-    issues.push('Address should include a street number');
-    return { valid: false, issues };
-  }
-  
+  // That's it - much more lenient now
   return { valid: true, issues: [] };
 }
 
