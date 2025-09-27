@@ -299,9 +299,9 @@ async function calculateLeadScore(leadData, prisma) {
   
   // 5. Address validation
   const addressCheck = validateAddress(leadData.address);
-  if (!addressCheck.valid) {
-    validationErrors.push(...addressCheck.issues);
-  }
+  if (!leadData.address || leadData.address.trim().length < 3) {
+  validationErrors.push('Address is required');
+}
   
   // 6. ZIP code validation
   const zipCheck = validateZipCode(leadData.zip, leadData.state);
