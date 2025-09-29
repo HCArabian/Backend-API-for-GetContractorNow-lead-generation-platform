@@ -285,7 +285,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
           contractorId: contractorId,
           amountOwed: 250.00, // Your lead price
           status: 'pending',
-          billedAt: new Date(),
+          dateIncurred: new Date(),
           serviceType: trackingNumber.lead.serviceType,
         }
       });
@@ -369,9 +369,9 @@ app.get('/api/admin/billing', adminAuth, async (req, res) => {
     if (status) where.status = status;
     if (contractorId) where.contractorId = contractorId;
     if (startDate || endDate) {
-      where.billedAt = {};
-      if (startDate) where.billedAt.gte = new Date(startDate);
-      if (endDate) where.billedAt.lte = new Date(endDate);
+      where.dateIncurred= {};
+      if (startDate) where.dateIncurred.gte = new Date(startDate);
+      if (endDate) where.dateIncurred.lte = new Date(endDate);
     }
     
     const billingRecords = await prisma.billingRecord.findMany({
@@ -396,7 +396,7 @@ app.get('/api/admin/billing', adminAuth, async (req, res) => {
         }
       },
       orderBy: {
-        billedAt: 'desc'
+        dateIncurred: 'desc'
       }
     });
     

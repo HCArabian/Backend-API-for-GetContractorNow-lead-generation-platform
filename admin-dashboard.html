@@ -554,7 +554,7 @@
                     <tbody>
                         ${records.map(record => `
                             <tr>
-                                <td>${new Date(record.billedAt).toLocaleDateString()}</td>
+                                <td>${new Date(record.dateIncurred).toLocaleDateString()}</td>
                                 <td>
                                     <strong>${record.contractor.businessName}</strong><br>
                                     <small style="color: #718096;">${record.contractor.email}</small>
@@ -564,7 +564,7 @@
                                     <small style="color: #718096;">${record.lead.customerCity}, ${record.lead.customerState}</small>
                                 </td>
                                 <td>${record.serviceType}</td>
-                                <td><strong>$${record.amount.toFixed(2)}</strong></td>
+                                <td><strong>$${record.amountOwed.toFixed(2)}</strong></td>
                                 <td>
                                     <span class="status-badge status-${record.status}">
                                         ${record.status.toUpperCase()}
@@ -626,7 +626,7 @@
             const csv = [
                 ['Date', 'Contractor', 'Contractor Email', 'Customer', 'Phone', 'City', 'State', 'Service', 'Amount', 'Status'],
                 ...billingData.map(record => [
-                    new Date(record.billedAt).toLocaleDateString(),
+                    new Date(record.dateIncurred).toLocaleDateString(),
                     record.contractor.businessName,
                     record.contractor.email,
                     `${record.lead.customerFirstName} ${record.lead.customerLastName}`,
@@ -634,7 +634,7 @@
                     record.lead.customerCity,
                     record.lead.customerState,
                     record.serviceType,
-                    record.amount,
+                    record.amountOwed,
                     record.status
                 ])
             ].map(row => row.join(',')).join('\n');
