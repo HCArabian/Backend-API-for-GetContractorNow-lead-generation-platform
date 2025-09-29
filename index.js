@@ -283,7 +283,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
         data: {
           leadId: trackingNumber.leadId,
           contractorId: contractorId,
-          amount: 250.00, // Your lead price
+          amountOwed: 250.00, // Your lead price
           status: 'pending',
           billedAt: new Date(),
           serviceType: trackingNumber.lead.serviceType,
@@ -403,12 +403,12 @@ app.get('/api/admin/billing', adminAuth, async (req, res) => {
     // Calculate summary stats
     const summary = {
       total: billingRecords.length,
-      totalAmount: billingRecords.reduce((sum, record) => sum + record.amount, 0),
+      totalAmount: billingRecords.reduce((sum, record) => sum + record.amountOwed, 0),
       pending: billingRecords.filter(r => r.status === 'pending').length,
-      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amount, 0),
+      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amountOwed, 0),
       invoiced: billingRecords.filter(r => r.status === 'invoiced').length,
       paid: billingRecords.filter(r => r.status === 'paid').length,
-      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0),
+      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amountOwed, 0),
     };
     
     res.json({
@@ -521,7 +521,7 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
       prisma.billingRecord.count({ where: { status: 'pending' } }),
       prisma.billingRecord.aggregate({
         where: { status: 'paid' },
-        _sum: { amount: true }
+        _sum: { amountOwed: true }
       })
     ]);
     
