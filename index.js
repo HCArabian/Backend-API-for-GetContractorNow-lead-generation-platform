@@ -164,6 +164,9 @@ app.post('/api/leads/submit', async (req, res) => {
 // ============================================
 // TWILIO WEBHOOK - BILLING AUTOMATION
 // ============================================
+// ============================================
+// TWILIO WEBHOOK - BILLING AUTOMATION
+// ============================================
 app.post('/api/webhooks/twilio/call-status', async (req, res) => {
   try {
     // Get Twilio's call data (sent as form-urlencoded)
@@ -177,11 +180,6 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       RecordingUrl: recordingUrl,
       RecordingSid: recordingSid
     } = req.body;
-    
-    // Validate required fields
-    if (!callSid || !callStatus) {
-      return res.status(400).json({ error: 'Missing required Twilio fields' });
-    }
 
     console.log('📞 TWILIO WEBHOOK RECEIVED:', {
       callSid,
@@ -192,35 +190,79 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       direction,
     });
 
+    // ============================================
+    // HANDLE INCOMING CALLS WITH TWIML
+    // ============================================
+    
+    // If this is the initial call (not a status callback), return TwiML
+    if (!callStatus || callStatus === 'ringing' || callStatus === 'in-progress') {
+      console.log('📞 Handling incoming call with TwiML...');
+      
+      // Find tracking number to get customer phone
+      const trackingRecord = await prisma.trackingNumber.findFirst({
+        where: {
+          twilioNumber: to,
+          status: 'active'
+        }
+      });
+      
+      if (trackingRecord) {
+        // Forward call to customer and record it
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Connecting your call, please wait.</Say>
+  <Dial record="record-from-answer" recordingStatusCallback="${process.env.RAILWAY_URL}/api/webhooks/twilio/call-status">
+    ${trackingRecord.customerNumber}
+  </Dial>
+</Response>`;
+        
+        console.log('✅ Forwarding call to customer:', trackingRecord.customerNumber);
+        return res.type('text/xml').send(twiml);
+      } else {
+        // No tracking number found - play error message
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry, this number is not currently active. Please contact support.</Say>
+  <Hangup/>
+</Response>`;
+        
+        return res.type('text/xml').send(twiml);
+      }
+    }
+
+    // ============================================
+    // HANDLE STATUS CALLBACKS (for billing)
+    // ============================================
+    
+    // Validate required fields
+    if (!callSid) {
+      return res.status(400).json({ error: 'Missing required Twilio fields' });
+    }
+
     // STEP 1: Find the tracking number record
-const trackingNumber = await prisma.trackingNumber.findFirst({
-  where: {
-    twilioNumber: to,
-    status: 'active'
-  }
-});
-
-if (!trackingNumber) {
-  console.error('❌ Tracking number not found:', to);
-  return res.status(404).json({ error: 'Tracking number not found' });
-}
-
-// Get the lead separately
-const lead = await prisma.lead.findUnique({
-  where: { id: trackingNumber.leadId },
-  include: {
-    assignment: true
-  }
-});
-
-if (!lead) {
-  console.error('❌ Lead not found:', trackingNumber.leadId);
-  return res.status(404).json({ error: 'Lead not found' });
-}
+    const trackingNumber = await prisma.trackingNumber.findFirst({
+      where: {
+        twilioNumber: to,
+        status: 'active'
+      }
+    });
 
     if (!trackingNumber) {
       console.error('❌ Tracking number not found:', to);
       return res.status(404).json({ error: 'Tracking number not found' });
+    }
+
+    // Get the lead separately
+    const lead = await prisma.lead.findUnique({
+      where: { id: trackingNumber.leadId },
+      include: {
+        assignment: true
+      }
+    });
+
+    if (!lead) {
+      console.error('❌ Lead not found:', trackingNumber.leadId);
+      return res.status(404).json({ error: 'Lead not found' });
     }
 
     console.log('✅ Found tracking number for Lead ID:', trackingNumber.leadId);
@@ -263,11 +305,6 @@ if (!lead) {
     console.log('✅ CallLog created/updated:', callLog.id);
 
     // STEP 3: BILLING LOGIC - THE CRITICAL PART!
-    // Only create billing if:
-    // 1. Call is completed
-    // 2. Call duration > 30 seconds
-    // 3. No existing billing record for this lead + contractor
-    
     if (callStatus === 'completed' && callDuration && parseInt(callDuration) > 30) {
       
       console.log('💰 Call qualifies for billing (>30 seconds)');
@@ -289,12 +326,12 @@ if (!lead) {
         });
       }
 
-      // CREATE BILLING RECORD - This is where the money is tracked!
+      // CREATE BILLING RECORD
       const billingRecord = await prisma.billingRecord.create({
         data: {
           leadId: trackingNumber.leadId,
           contractorId: contractorId,
-          amountOwed: 250.00, // Your lead price
+          amountOwed: 250.00,
           status: 'pending',
           dateIncurred: new Date(),
           serviceType: lead.serviceType,
@@ -543,7 +580,7 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
         totalContractors,
         totalBillingRecords,
         pendingBilling,
-        totalRevenue: totalRevenue._sum.amount || 0
+        totalRevenue: totalRevenue._sum.amountOwed  || 0
       }
     });
   } catch (error) {
