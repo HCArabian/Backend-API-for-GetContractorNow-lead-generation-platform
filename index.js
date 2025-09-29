@@ -798,6 +798,58 @@ app.get('/api/contractor/billing', contractorAuth, async (req, res) => {
   }
 });
 
+// Change contractor password
+app.post('/api/contractor/change-password', contractorAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password required' });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+    
+    // Get contractor
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractorId }
+    });
+    
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+    
+    // Verify current password
+    const isValidPassword = await comparePassword(currentPassword, contractor.passwordHash);
+    
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    // Hash new password
+    const newPasswordHash = await hashPassword(newPassword);
+    
+    // Update password
+    await prisma.contractor.update({
+      where: { id: req.contractorId },
+      data: { passwordHash: newPasswordHash }
+    });
+    
+    console.log('✅ Password changed for contractor:', contractor.businessName);
+    
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+    
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
