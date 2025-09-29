@@ -10,9 +10,10 @@ const app = express();
 
 // CORS - Allow requests from your Webflow site
 app.use(cors({
-  origin: '*', // Allow all origins for now (we'll restrict later)
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 app.use(express.json());

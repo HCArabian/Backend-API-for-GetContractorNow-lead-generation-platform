@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GetContractorNow - Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            color: #2d3748;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: white;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #1a202c;
+        }
+
+        .logout-btn {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: #c53030;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #1a202c;
+        }
+
+        .stat-value.money {
+            color: #38a169;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-size: 14px;
+            color: #4a5568;
+            margin-bottom: 5px;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3182ce;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f7fafc;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px 20px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-pending {
+            background: #fef5e7;
+            color: #d97706;
+        }
+
+        .status-invoiced {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .status-paid {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .action-btn.invoice {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .action-btn.paid {
+            background: #10b981;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h2 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .login-box button:hover {
+            background: #3182ce;
+        }
+
+        #dashboard {
+            display: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <h2>🔐 Admin Login</h2>
+            <input type="password" id="passwordInput" placeholder="Enter admin password" />
+            <button onclick="login()">Login</button>
+            <div id="loginError" class="error" style="display: none; margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard">
+        <div class="container">
+            <header>
+                <h1>💼 GetContractorNow - Admin Dashboard</h1>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </header>
+
+            <div id="errorMessage" class="error" style="display: none;"></div>
+
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Leads</div>
+                    <div class="stat-value" id="statTotalLeads">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Contractors</div>
+                    <div class="stat-value" id="statTotalContractors">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Pending Billing</div>
+                    <div class="stat-value" id="statPendingBilling">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-value money" id="statTotalRevenue">$0</div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="filterStatus">
+                        <option value="">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="invoiced">Invoiced</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Contractor</label>
+                    <select id="filterContractor">
+                        <option value="">All Contractors</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Start Date</label>
+                    <input type="date" id="filterStartDate" />
+                </div>
+                <div class="filter-group">
+                    <label>End Date</label>
+                    <input type="date" id="filterEndDate" />
+                </div>
+                <div class="filter-group">
+                    <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+                </div>
+                <div class="filter-group">
+                    <button class="btn btn-success" onclick="exportCSV()">Export CSV</button>
+                </div>
+            </div>
+
+            <!-- Billing Records Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <div class="table-title">Billing Records</div>
+                    <div id="recordCount">0 records</div>
+                </div>
+                <div id="tableContent">
+                    <div class="loading">Loading billing records...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'https://backend-api-for-getcontractornow-lead-generation-production.up.railway.app'; // Replace with your Railway URL
+        let authToken = null;
+        let billingData = [];
+
+        // Check if already logged in
+        if (localStorage.getItem('adminToken')) {
+            authToken = localStorage.getItem('adminToken');
+            showDashboard();
+        }
+
+        // Login
+        function login() {
+            const password = document.getElementById('passwordInput').value;
+            authToken = password;
+            
+            // Test authentication
+            fetchStats()
+                .then(() => {
+                    localStorage.setItem('adminToken', password);
+                    document.getElementById('loginError').style.display = 'none';
+                    showDashboard();
+                })
+                .catch(() => {
+                    document.getElementById('loginError').textContent = 'Invalid password';
+                    document.getElementById('loginError').style.display = 'block';
+                    authToken = null;
+                });
+        }
+
+        // Logout
+        function logout() {
+            localStorage.removeItem('adminToken');
+            authToken = null;
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('dashboard').style.display = 'none';
+        }
+
+        // Show dashboard
+        function showDashboard() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            loadDashboard();
+        }
+
+        // Load all dashboard data
+        async function loadDashboard() {
+            try {
+                await Promise.all([
+                    fetchStats(),
+                    fetchContractors(),
+                    fetchBillingRecords()
+                ]);
+            } catch (error) {
+                showError('Failed to load dashboard data');
+            }
+        }
+
+        // Fetch stats
+        async function fetchStats() {
+            const response = await fetch(`${API_URL}/api/admin/stats`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch stats');
+
+            const data = await response.json();
+            document.getElementById('statTotalLeads').textContent = data.stats.totalLeads;
+            document.getElementById('statTotalContractors').textContent = data.stats.totalContractors;
+            document.getElementById('statPendingBilling').textContent = data.stats.pendingBilling;
+            document.getElementById('statTotalRevenue').textContent = `$${data.stats.totalRevenue.toFixed(2)}`;
+        }
+
+        // Fetch contractors for filter
+        async function fetchContractors() {
+            const response = await fetch(`${API_URL}/api/admin/contractors`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch contractors');
+
+            const data = await response.json();
+            const select = document.getElementById('filterContractor');
+            
+            data.contractors.forEach(contractor => {
+                const option = document.createElement('option');
+                option.value = contractor.id;
+                option.textContent = contractor.businessName;
+                select.appendChild(option);
+            });
+        }
+
+        // Fetch billing records
+        async function fetchBillingRecords() {
+            const params = new URLSearchParams();
+            
+            const status = document.getElementById('filterStatus').value;
+            const contractorId = document.getElementById('filterContractor').value;
+            const startDate = document.getElementById('filterStartDate').value;
+            const endDate = document.getElementById('filterEndDate').value;
+
+            if (status) params.append('status', status);
+            if (contractorId) params.append('contractorId', contractorId);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
+
+            const response = await fetch(`${API_URL}/api/admin/billing?${params}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch billing records');
+
+            const data = await response.json();
+            billingData = data.records;
+            renderBillingTable(data.records);
+            document.getElementById('recordCount').textContent = `${data.records.length} records`;
+        }
+
+        // Render billing table
+        function renderBillingTable(records) {
+            const tableContent = document.getElementById('tableContent');
+            
+            if (records.length === 0) {
+                tableContent.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div>No billing records found</div>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Contractor</th>
+                            <th>Customer</th>
+                            <th>Service</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${records.map(record => `
+                            <tr>
+                                <td>${new Date(record.billedAt).toLocaleDateString()}</td>
+                                <td>
+                                    <strong>${record.contractor.businessName}</strong><br>
+                                    <small style="color: #718096;">${record.contractor.email}</small>
+                                </td>
+                                <td>
+                                    ${record.lead.customerFirstName} ${record.lead.customerLastName}<br>
+                                    <small style="color: #718096;">${record.lead.customerCity}, ${record.lead.customerState}</small>
+                                </td>
+                                <td>${record.serviceType}</td>
+                                <td><strong>$${record.amount.toFixed(2)}</strong></td>
+                                <td>
+                                    <span class="status-badge status-${record.status}">
+                                        ${record.status.toUpperCase()}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-btns">
+                                        ${record.status === 'pending' ? `
+                                            <button class="action-btn invoice" onclick="updateStatus('${record.id}', 'invoiced')">
+                                                Mark Invoiced
+                                            </button>
+                                        ` : ''}
+                                        ${record.status !== 'paid' ? `
+                                            <button class="action-btn paid" onclick="updateStatus('${record.id}', 'paid')">
+                                                Mark Paid
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            tableContent.innerHTML = html;
+        }
+
+        // Update billing status
+        async function updateStatus(id, status) {
+            if (!confirm(`Are you sure you want to mark this as ${status}?`)) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/billing/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status })
+                });
+
+                if (!response.ok) throw new Error('Failed to update status');
+
+                await fetchBillingRecords();
+                await fetchStats();
+            } catch (error) {
+                showError('Failed to update billing status');
+            }
+        }
+
+        // Apply filters
+        function applyFilters() {
+            fetchBillingRecords();
+        }
+
+        // Export CSV
+        function exportCSV() {
+            const csv = [
+                ['Date', 'Contractor', 'Contractor Email', 'Customer', 'Phone', 'City', 'State', 'Service', 'Amount', 'Status'],
+                ...billingData.map(record => [
+                    new Date(record.billedAt).toLocaleDateString(),
+                    record.contractor.businessName,
+                    record.contractor.email,
+                    `${record.lead.customerFirstName} ${record.lead.customerLastName}`,
+                    record.lead.customerPhone,
+                    record.lead.customerCity,
+                    record.lead.customerState,
+                    record.serviceType,
+                    record.amount,
+                    record.status
+                ])
+            ].map(row => row.join(',')).join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `billing-export-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+        }
+
+        // Show error
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Allow Enter key for login
+        document.getElementById('passwordInput')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') login();
+        });
+    </script>
+</body>
+</html>
