@@ -193,19 +193,30 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
     });
 
     // STEP 1: Find the tracking number record
-    const trackingNumber = await prisma.trackingNumber.findFirst({
-      where: {
-        twilioNumber: to,
-        status: 'active'
-      },
-      include: {
-        lead: {
-          include: {
-            assignment: true
-          }
-        }
-      }
-    });
+const trackingNumber = await prisma.trackingNumber.findFirst({
+  where: {
+    twilioNumber: to,
+    status: 'active'
+  }
+});
+
+if (!trackingNumber) {
+  console.error('❌ Tracking number not found:', to);
+  return res.status(404).json({ error: 'Tracking number not found' });
+}
+
+// Get the lead separately
+const lead = await prisma.lead.findUnique({
+  where: { id: trackingNumber.leadId },
+  include: {
+    assignment: true
+  }
+});
+
+if (!lead) {
+  console.error('❌ Lead not found:', trackingNumber.leadId);
+  return res.status(404).json({ error: 'Lead not found' });
+}
 
     if (!trackingNumber) {
       console.error('❌ Tracking number not found:', to);
@@ -215,7 +226,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
     console.log('✅ Found tracking number for Lead ID:', trackingNumber.leadId);
 
     // Get contractor ID from lead assignment
-    const contractorId = trackingNumber.lead.assignment?.contractorId;
+    const contractorId = lead.assignment?.contractorId;
     
     if (!contractorId) {
       console.error('❌ No contractor assigned to lead:', trackingNumber.leadId);
@@ -286,7 +297,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
           amountOwed: 250.00, // Your lead price
           status: 'pending',
           dateIncurred: new Date(),
-          serviceType: trackingNumber.lead.serviceType,
+          serviceType: lead.serviceType,
         }
       });
 
@@ -307,9 +318,9 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       });
 
       // STEP 5: Update lead assignment status
-      if (trackingNumber.lead.assignment) {
+      if (lead.assignment) {
         await prisma.leadAssignment.update({
-          where: { id: trackingNumber.lead.assignment.id },
+          where: { id: lead.assignment.id },
           data: { 
             status: 'contacted',
             contactedAt: new Date()
