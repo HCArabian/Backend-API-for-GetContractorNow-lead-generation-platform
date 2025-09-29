@@ -10,11 +10,13 @@ const app = express();
 
 // CORS - Allow requests from your Webflow site
 app.use(cors({
-  origin: '*', // Allow all origins
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
+app.options('*', cors()); // Handle preflight requests
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
