@@ -110,14 +110,42 @@ app.post('/api/leads/submit', async (req, res) => {
       price: savedLead.price
     });
     
-    // Return success with lead details
-    res.json({
-      success: true,
-      message: 'Lead received and approved',
-      leadId: savedLead.id,
-      category: savedLead.category,
-      score: savedLead.score
-    });
+    // ============================================
+    // NEW: AUTOMATICALLY ASSIGN CONTRACTOR
+    // ============================================
+    
+    console.log('\n🔄 Starting contractor assignment...');
+    
+    const assignmentResult = await assignContractorToLead(savedLead.id, prisma);
+    
+    if (assignmentResult.success && assignmentResult.assigned) {
+      console.log('✅ Lead assigned to contractor:', assignmentResult.contractor.businessName);
+      
+      // Return success with assignment details
+      return res.json({
+        success: true,
+        message: 'Lead received, approved, and assigned to contractor',
+        leadId: savedLead.id,
+        category: savedLead.category,
+        score: savedLead.score,
+        assignment: {
+          contractor: assignmentResult.contractor.businessName,
+          responseDeadline: assignmentResult.assignment.responseDeadline
+        }
+      });
+    } else {
+      console.log('⚠️  Lead saved but not assigned:', assignmentResult.error || 'No contractors available');
+      
+      // Lead saved but couldn't assign
+      return res.json({
+        success: true,
+        message: 'Lead received and approved, but no contractors available',
+        leadId: savedLead.id,
+        category: savedLead.category,
+        score: savedLead.score,
+        warning: assignmentResult.error || 'No contractors available in this area'
+      });
+    }
     
   } catch (error) {
     console.error('❌ Error processing lead:', error);
