@@ -333,8 +333,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
           contractorId: contractorId,
           amountOwed: 250.00,
           status: 'pending',
-          dateIncurred: new Date(),
-          serviceType: lead.serviceType,
+          dateIncurred: new Date()
         }
       });
 
