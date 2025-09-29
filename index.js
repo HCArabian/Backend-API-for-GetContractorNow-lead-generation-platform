@@ -340,6 +340,204 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
   }
 });
 
+// ============================================
+// ADMIN API ENDPOINTS
+// ============================================
+
+// Simple auth middleware (we'll improve this later)
+const adminAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const adminPassword = process.env.ADMIN_PASSWORD || 'changeme123'; // Set this in Railway variables
+  
+  if (authHeader === `Bearer ${adminPassword}`) {
+    next();
+  } else {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+};
+
+// Get all billing records with filters
+app.get('/api/admin/billing', adminAuth, async (req, res) => {
+  try {
+    const { status, contractorId, startDate, endDate } = req.query;
+    
+    const where = {};
+    
+    if (status) where.status = status;
+    if (contractorId) where.contractorId = contractorId;
+    if (startDate || endDate) {
+      where.billedAt = {};
+      if (startDate) where.billedAt.gte = new Date(startDate);
+      if (endDate) where.billedAt.lte = new Date(endDate);
+    }
+    
+    const billingRecords = await prisma.billingRecord.findMany({
+      where,
+      include: {
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            customerCity: true,
+            customerState: true,
+            serviceType: true
+          }
+        },
+        contractor: {
+          select: {
+            businessName: true,
+            email: true,
+            phone: true
+          }
+        }
+      },
+      orderBy: {
+        billedAt: 'desc'
+      }
+    });
+    
+    // Calculate summary stats
+    const summary = {
+      total: billingRecords.length,
+      totalAmount: billingRecords.reduce((sum, record) => sum + record.amount, 0),
+      pending: billingRecords.filter(r => r.status === 'pending').length,
+      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amount, 0),
+      invoiced: billingRecords.filter(r => r.status === 'invoiced').length,
+      paid: billingRecords.filter(r => r.status === 'paid').length,
+      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount, 0),
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      records: billingRecords
+    });
+  } catch (error) {
+    console.error('Error fetching billing records:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single billing record
+app.get('/api/admin/billing/:id', adminAuth, async (req, res) => {
+  try {
+    const billingRecord = await prisma.billingRecord.findUnique({
+      where: { id: req.params.id },
+      include: {
+        lead: true,
+        contractor: true
+      }
+    });
+    
+    if (!billingRecord) {
+      return res.status(404).json({ error: 'Billing record not found' });
+    }
+    
+    res.json({ success: true, record: billingRecord });
+  } catch (error) {
+    console.error('Error fetching billing record:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update billing record status
+app.patch('/api/admin/billing/:id', adminAuth, async (req, res) => {
+  try {
+    const { status, notes } = req.body;
+    
+    const data = { status };
+    
+    if (status === 'invoiced' && !req.body.invoicedAt) {
+      data.invoicedAt = new Date();
+    } else if (req.body.invoicedAt) {
+      data.invoicedAt = new Date(req.body.invoicedAt);
+    }
+    
+    if (status === 'paid' && !req.body.paidAt) {
+      data.paidAt = new Date();
+    } else if (req.body.paidAt) {
+      data.paidAt = new Date(req.body.paidAt);
+    }
+    
+    if (notes !== undefined) {
+      data.notes = notes;
+    }
+    
+    const updatedRecord = await prisma.billingRecord.update({
+      where: { id: req.params.id },
+      data,
+      include: {
+        lead: true,
+        contractor: true
+      }
+    });
+    
+    res.json({ success: true, record: updatedRecord });
+  } catch (error) {
+    console.error('Error updating billing record:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all contractors (for filter dropdown)
+app.get('/api/admin/contractors', adminAuth, async (req, res) => {
+  try {
+    const contractors = await prisma.contractor.findMany({
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        status: true
+      },
+      orderBy: {
+        businessName: 'asc'
+      }
+    });
+    
+    res.json({ success: true, contractors });
+  } catch (error) {
+    console.error('Error fetching contractors:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Dashboard stats
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    const [
+      totalLeads,
+      totalContractors,
+      totalBillingRecords,
+      pendingBilling,
+      totalRevenue
+    ] = await Promise.all([
+      prisma.lead.count(),
+      prisma.contractor.count(),
+      prisma.billingRecord.count(),
+      prisma.billingRecord.count({ where: { status: 'pending' } }),
+      prisma.billingRecord.aggregate({
+        where: { status: 'paid' },
+        _sum: { amount: true }
+      })
+    ]);
+    
+    res.json({
+      success: true,
+      stats: {
+        totalLeads,
+        totalContractors,
+        totalBillingRecords,
+        pendingBilling,
+        totalRevenue: totalRevenue._sum.amount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
