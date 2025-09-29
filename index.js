@@ -1,11 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-const { PrismaClient } = require('@prisma/client'); // ADD THIS LINE
-const prisma = new PrismaClient(); // ADD THIS LINE
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 const { calculateLeadScore } = require('./scoring');
-const { assignContractorToLead } = require('./assignment'); // THIS LINE MUST BE HERE
-
+const { assignContractorToLead } = require('./assignment');
 
 const app = express();
 
@@ -17,6 +16,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -27,7 +27,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Lead submission endpoint
 // Lead submission endpoint
 app.post('/api/leads/submit', async (req, res) => {
   try {
@@ -155,6 +154,188 @@ app.post('/api/leads/submit', async (req, res) => {
       success: false,
       error: 'Internal server error',
       message: 'Something went wrong processing your request'
+    });
+  }
+});
+
+// ============================================
+// TWILIO WEBHOOK - BILLING AUTOMATION
+// ============================================
+app.post('/api/webhooks/twilio/call-status', async (req, res) => {
+  try {
+    // Get Twilio's call data (sent as form-urlencoded)
+    const {
+      CallSid: callSid,
+      CallStatus: callStatus,
+      CallDuration: callDuration,
+      From: from,
+      To: to,
+      Direction: direction,
+      RecordingUrl: recordingUrl,
+      RecordingSid: recordingSid
+    } = req.body;
+    
+    // Validate required fields
+    if (!callSid || !callStatus) {
+      return res.status(400).json({ error: 'Missing required Twilio fields' });
+    }
+
+    console.log('📞 TWILIO WEBHOOK RECEIVED:', {
+      callSid,
+      callStatus,
+      callDuration,
+      from,
+      to,
+      direction,
+    });
+
+    // STEP 1: Find the tracking number record
+    const trackingNumber = await prisma.trackingNumber.findFirst({
+      where: {
+        twilioNumber: to,
+        status: 'active'
+      },
+      include: {
+        lead: {
+          include: {
+            assignment: true
+          }
+        }
+      }
+    });
+
+    if (!trackingNumber) {
+      console.error('❌ Tracking number not found:', to);
+      return res.status(404).json({ error: 'Tracking number not found' });
+    }
+
+    console.log('✅ Found tracking number for Lead ID:', trackingNumber.leadId);
+
+    // Get contractor ID from lead assignment
+    const contractorId = trackingNumber.lead.assignment?.contractorId;
+    
+    if (!contractorId) {
+      console.error('❌ No contractor assigned to lead:', trackingNumber.leadId);
+      return res.status(400).json({ error: 'No contractor assigned' });
+    }
+
+    // STEP 2: Create or update CallLog
+    const callLog = await prisma.callLog.upsert({
+      where: {
+        callSid: callSid
+      },
+      update: {
+        callStatus: callStatus,
+        callEndedAt: callStatus === 'completed' ? new Date() : null,
+        callDuration: callDuration ? parseInt(callDuration) : null,
+        recordingUrl: recordingUrl || null,
+        recordingSid: recordingSid || null,
+      },
+      create: {
+        callSid: callSid,
+        leadId: trackingNumber.leadId,
+        contractorId: contractorId,
+        callDirection: direction === 'inbound' ? 'customer_to_contractor' : 'contractor_to_customer',
+        trackingNumber: to,
+        callStartedAt: new Date(),
+        callEndedAt: callStatus === 'completed' ? new Date() : null,
+        callDuration: callDuration ? parseInt(callDuration) : null,
+        callStatus: callStatus,
+        recordingUrl: recordingUrl || null,
+        recordingSid: recordingSid || null,
+      }
+    });
+
+    console.log('✅ CallLog created/updated:', callLog.id);
+
+    // STEP 3: BILLING LOGIC - THE CRITICAL PART!
+    // Only create billing if:
+    // 1. Call is completed
+    // 2. Call duration > 30 seconds
+    // 3. No existing billing record for this lead + contractor
+    
+    if (callStatus === 'completed' && callDuration && parseInt(callDuration) > 30) {
+      
+      console.log('💰 Call qualifies for billing (>30 seconds)');
+
+      // Check if billing record already exists (prevent double-billing)
+      const existingBilling = await prisma.billingRecord.findFirst({
+        where: {
+          leadId: trackingNumber.leadId,
+          contractorId: contractorId
+        }
+      });
+
+      if (existingBilling) {
+        console.log('⚠️ Billing record already exists - skipping duplicate');
+        return res.json({ 
+          success: true, 
+          message: 'Call logged - billing already exists',
+          callLogId: callLog.id 
+        });
+      }
+
+      // CREATE BILLING RECORD - This is where the money is tracked!
+      const billingRecord = await prisma.billingRecord.create({
+        data: {
+          leadId: trackingNumber.leadId,
+          contractorId: contractorId,
+          amount: 250.00, // Your lead price
+          status: 'pending',
+          billedAt: new Date(),
+          serviceType: trackingNumber.lead.serviceType,
+        }
+      });
+
+      console.log('🎉 BILLING RECORD CREATED:', {
+        billingId: billingRecord.id,
+        contractorId: contractorId,
+        leadId: trackingNumber.leadId,
+        amount: '$250.00'
+      });
+
+      // STEP 4: Update lead status to "contacted"
+      await prisma.lead.update({
+        where: { id: trackingNumber.leadId },
+        data: { 
+          status: 'contacted',
+          firstContactAt: new Date()
+        }
+      });
+
+      // STEP 5: Update lead assignment status
+      if (trackingNumber.lead.assignment) {
+        await prisma.leadAssignment.update({
+          where: { id: trackingNumber.lead.assignment.id },
+          data: { 
+            status: 'contacted',
+            contactedAt: new Date()
+          }
+        });
+      }
+
+      return res.json({ 
+        success: true,
+        message: 'Call logged and billing created',
+        callLogId: callLog.id,
+        billingRecordId: billingRecord.id,
+        amount: 250.00
+      });
+    }
+
+    // Call completed but didn't meet billing threshold
+    return res.json({ 
+      success: true,
+      message: 'Call logged - did not meet billing criteria',
+      callLogId: callLog.id,
+      reason: callDuration ? `Duration too short (${callDuration}s < 30s)` : 'No duration recorded'
+    });
+
+  } catch (error) {
+    console.error('❌ WEBHOOK ERROR:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: error.message
     });
   }
 });
