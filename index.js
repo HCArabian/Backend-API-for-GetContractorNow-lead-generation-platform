@@ -360,8 +360,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
         await prisma.leadAssignment.update({
           where: { id: lead.assignment.id },
           data: { 
-            status: 'contacted',
-            contactedAt: new Date()
+            status: 'contacted'
           }
         });
       }
