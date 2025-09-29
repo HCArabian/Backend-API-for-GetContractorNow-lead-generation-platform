@@ -5,6 +5,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const { calculateLeadScore } = require('./scoring');
 const { assignContractorToLead } = require('./assignment');
+const cookieParser = require('cookie-parser');
+const { hashPassword, comparePassword, generateToken, contractorAuth } = require('./auth');
 
 const app = express();
 
@@ -20,6 +22,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
+app.use(cookieParser());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -584,6 +587,215 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error fetching stats:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ============================================
+// CONTRACTOR AUTH ENDPOINTS
+// ============================================
+
+// Contractor login
+app.post('/api/contractor/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+    
+    // Find contractor
+    const contractor = await prisma.contractor.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+    
+    if (!contractor) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Check password
+    const isValidPassword = await comparePassword(password, contractor.passwordHash);
+    
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Check if account is active
+    if (contractor.status !== 'active') {
+      return res.status(403).json({ error: 'Account is suspended or inactive' });
+    }
+    
+    // Generate token
+    const token = generateToken(contractor.id);
+    
+    // Update last active
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: { lastActiveAt: new Date() }
+    });
+    
+    console.log('✅ Contractor logged in:', contractor.businessName);
+    
+    res.json({
+      success: true,
+      token,
+      contractor: {
+        id: contractor.id,
+        businessName: contractor.businessName,
+        email: contractor.email,
+        phone: contractor.phone
+      }
+    });
+    
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Get contractor profile
+app.get('/api/contractor/profile', contractorAuth, async (req, res) => {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractorId },
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        phone: true,
+        serviceZipCodes: true,
+        specializations: true,
+        avgResponseTime: true,
+        conversionRate: true,
+        customerRating: true,
+        totalReviews: true,
+        totalLeadsReceived: true,
+        totalJobsCompleted: true,
+        status: true,
+        isAcceptingLeads: true,
+        createdAt: true
+      }
+    });
+    
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+    
+    res.json({ success: true, contractor });
+    
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+// Get contractor's assigned leads
+app.get('/api/contractor/leads', contractorAuth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    const where = {
+      contractorId: req.contractorId
+    };
+    
+    if (status) {
+      where.status = status;
+    }
+    
+    const assignments = await prisma.leadAssignment.findMany({
+      where,
+      include: {
+        lead: {
+          select: {
+            id: true,
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            customerCity: true,
+            customerState: true,
+            customerZip: true,
+            serviceType: true,
+            timeline: true,
+            budgetRange: true,
+            category: true,
+            price: true,
+            status: true,
+            createdAt: true
+          }
+        }
+      },
+      orderBy: {
+        assignedAt: 'desc'
+      }
+    });
+    
+    // Get tracking numbers for each lead
+    const leadsWithTracking = await Promise.all(
+      assignments.map(async (assignment) => {
+        const trackingNumber = await prisma.trackingNumber.findFirst({
+          where: {
+            leadId: assignment.leadId,
+            status: 'active'
+          }
+        });
+        
+        return {
+          ...assignment,
+          trackingNumber: trackingNumber?.twilioNumber || null
+        };
+      })
+    );
+    
+    res.json({
+      success: true,
+      leads: leadsWithTracking
+    });
+    
+  } catch (error) {
+    console.error('Leads fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
+  }
+});
+
+// Get contractor's billing history
+app.get('/api/contractor/billing', contractorAuth, async (req, res) => {
+  try {
+    const billingRecords = await prisma.billingRecord.findMany({
+      where: {
+        contractorId: req.contractorId
+      },
+      include: {
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            serviceType: true,
+            category: true
+          }
+        }
+      },
+      orderBy: {
+        dateIncurred: 'desc'
+      }
+    });
+    
+    const summary = {
+      totalBilled: billingRecords.reduce((sum, r) => sum + r.amountOwed, 0),
+      pending: billingRecords.filter(r => r.status === 'pending').length,
+      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amountOwed, 0),
+      paid: billingRecords.filter(r => r.status === 'paid').length,
+      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amountOwed, 0)
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      records: billingRecords
+    });
+    
+  } catch (error) {
+    console.error('Billing fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch billing' });
   }
 });
 
