@@ -743,12 +743,21 @@
                 return;
             }
 
+            // Get token from localStorage
+            const token = localStorage.getItem('contractorToken');
+
+            if (!token) {
+                errorDiv.textContent = 'Not authenticated. Please log in again.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
             try {
                 const response = await fetch(`${API_URL}/api/contractor/change-password`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({ currentPassword, newPassword })
                 });
@@ -762,10 +771,12 @@
                 } else {
                     errorDiv.textContent = data.error || 'Failed to change password';
                     errorDiv.style.display = 'block';
+                    console.error('Password change error:', data);
                 }
             } catch (error) {
                 errorDiv.textContent = 'Network error. Please try again.';
                 errorDiv.style.display = 'block';
+                console.error('Network error:', error);
             }
         }
     </script>
