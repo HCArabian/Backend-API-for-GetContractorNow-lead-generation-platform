@@ -348,8 +348,7 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       await prisma.lead.update({
         where: { id: trackingNumber.leadId },
         data: { 
-          status: 'contacted',
-          firstContactAt: new Date()
+          status: 'contacted'
         }
       });
 
