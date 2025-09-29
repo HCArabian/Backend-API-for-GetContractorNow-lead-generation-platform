@@ -4,6 +4,8 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client'); // ADD THIS LINE
 const prisma = new PrismaClient(); // ADD THIS LINE
 const { calculateLeadScore } = require('./scoring');
+const { assignContractorToLead } = require('./assignment'); // THIS LINE MUST BE HERE
+
 
 const app = express();
 
