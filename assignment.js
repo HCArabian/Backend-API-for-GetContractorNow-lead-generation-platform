@@ -3,6 +3,7 @@
 // ============================================
 // ASSIGNMENT ALGORITHM
 // ============================================
+const { assignTrackingNumber } = require('./trackingNumbers');
 
 async function assignContractorToLead(leadId, prisma) {
   try {
@@ -291,10 +292,30 @@ async function assignContractorToLead(leadId, prisma) {
       }
     });
     
-    console.log(`\n🎉 Assignment complete!`);
-    console.log(`   Assignment ID: ${assignment.id}`);
-    console.log(`   Response deadline: ${responseDeadline.toLocaleString()}`);
-    console.log(`   Must respond within: ${responseTimeMinutes} minutes\n`);
+// ============================================
+// ASSIGN TRACKING NUMBER
+// ============================================
+
+console.log(`\n📞 Assigning tracking number...`);
+
+const trackingResult = await assignTrackingNumber(
+  lead.id,
+  selectedContractor.id,
+  lead.customerPhone,
+  selectedContractor.phone,
+  prisma
+);
+
+if (!trackingResult.success) {
+  console.error('⚠️  Failed to assign tracking number:', trackingResult.error);
+  // Assignment still succeeds, but without tracking number
+}
+
+console.log(`\n🎉 Assignment complete!`);
+console.log(`   Assignment ID: ${assignment.id}`);
+console.log(`   Tracking Number: ${trackingResult.trackingNumber || 'Not assigned'}`);
+console.log(`   Response deadline: ${responseDeadline.toLocaleString()}`);
+console.log(`   Must respond within: ${responseTimeMinutes} minutes\n`);
     
     return {
       success: true,
@@ -309,7 +330,8 @@ async function assignContractorToLead(leadId, prisma) {
         id: assignment.id,
         responseDeadline: responseDeadline,
         responseTimeMinutes: responseTimeMinutes
-      }
+      },
+      trackingNumber: trackingResult.success ? trackingResult.trackingNumber : null
     };
     
   } catch (error) {
