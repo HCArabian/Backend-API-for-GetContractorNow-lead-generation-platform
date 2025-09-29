@@ -1,0 +1,171 @@
+// notifications.js - Email Notification System
+
+const sgMail = require('@sendgrid/mail');
+
+// Initialize SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+// ============================================
+// SEND NEW LEAD EMAIL TO CONTRACTOR
+// ============================================
+
+async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
+  try {
+    console.log(`\n📧 Sending new lead email to ${contractor.businessName}...`);
+    
+    const responseTimeText = {
+      'PLATINUM': '20 minutes',
+      'GOLD': '2 hours',
+      'SILVER': '24 hours',
+      'BRONZE': '48 hours'
+    }[lead.category] || '24 hours';
+    
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+    .lead-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; margin: 10px 0; }
+    .platinum { background: #a78bfa; color: white; }
+    .gold { background: #fbbf24; color: #1f2937; }
+    .silver { background: #9ca3af; color: white; }
+    .bronze { background: #d97706; color: white; }
+    .tracking-box { background: #dbeafe; border: 2px solid #2563eb; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; }
+    .tracking-number { font-size: 32px; font-weight: bold; color: #1e40af; letter-spacing: 2px; }
+    .info-section { background: white; padding: 15px; margin: 15px 0; border-radius: 6px; border-left: 4px solid #2563eb; }
+    .info-label { color: #6b7280; font-size: 12px; text-transform: uppercase; margin-bottom: 5px; }
+    .info-value { font-size: 16px; font-weight: 600; color: #1f2937; }
+    .urgent { background: #fee2e2; border-left-color: #dc2626; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
+    .cta-button { display: inline-block; background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎯 New Lead Assigned!</h1>
+    </div>
+    
+    <div class="content">
+      <div style="text-align: center;">
+        <span class="lead-badge ${lead.category.toLowerCase()}">${lead.category} LEAD</span>
+      </div>
+      
+      <div class="tracking-box">
+        <div style="font-size: 14px; margin-bottom: 10px;">CALL CUSTOMER AT:</div>
+        <div class="tracking-number">${trackingNumber}</div>
+        <div style="margin-top: 10px; font-size: 12px; color: #6b7280;">
+          This number tracks your call for billing
+        </div>
+      </div>
+      
+      <div class="info-section ${lead.category === 'PLATINUM' ? 'urgent' : ''}">
+        <div class="info-label">⏰ Response Deadline</div>
+        <div class="info-value">${new Date(assignment.responseDeadline).toLocaleString()}</div>
+        <div style="margin-top: 5px; font-size: 14px; color: #dc2626;">
+          ${lead.category === 'PLATINUM' ? '🔥 URGENT: Respond within ' + responseTimeText : 'Respond within ' + responseTimeText}
+        </div>
+      </div>
+      
+      <h2 style="margin-top: 30px;">Customer Information</h2>
+      
+      <div class="info-section">
+        <div class="info-label">Customer Name</div>
+        <div class="info-value">${lead.customerFirstName} ${lead.customerLastName}</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Phone Number</div>
+        <div class="info-value">${lead.customerPhone}</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Address</div>
+        <div class="info-value">
+          ${lead.customerAddress}<br>
+          ${lead.customerCity}, ${lead.customerState} ${lead.customerZip}
+        </div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Service Needed</div>
+        <div class="info-value">${lead.serviceType.replace(/_/g, ' ').toUpperCase()}</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Timeline</div>
+        <div class="info-value">${lead.timeline.replace(/_/g, ' ').toUpperCase()}</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Budget Range</div>
+        <div class="info-value">${lead.budgetRange.replace(/_/g, ' ').toUpperCase()}</div>
+      </div>
+      
+      <div class="info-section">
+        <div class="info-label">Property Type</div>
+        <div class="info-value">${lead.propertyType.replace(/_/g, ' ').toUpperCase()}</div>
+      </div>
+      
+      ${lead.serviceDescription ? `
+      <div class="info-section">
+        <div class="info-label">Additional Details</div>
+        <div class="info-value">${lead.serviceDescription}</div>
+      </div>
+      ` : ''}
+      
+      <div style="background: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0;">
+        <strong>💡 Important:</strong>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>Call the customer using the tracking number above</li>
+          <li>Calls over 30 seconds are automatically billed</li>
+          <li>Respond before the deadline to maintain your rating</li>
+          <li>Provide excellent service to earn repeat business</li>
+        </ul>
+      </div>
+      
+    </div>
+    
+    <div class="footer">
+      <p>GetContractorNow Lead Generation Platform</p>
+      <p>Questions? Contact support@getcontractornow.com</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+    
+    const msg = {
+      to: contractor.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: `🎯 New ${lead.category} Lead - ${lead.serviceType.replace(/_/g, ' ')} in ${lead.customerCity}`,
+      html: emailHtml
+    };
+    
+    await sgMail.send(msg);
+    
+    console.log(`✅ Email sent successfully to ${contractor.email}`);
+    
+    // Log the notification
+    return {
+      success: true,
+      sentTo: contractor.email,
+      sentAt: new Date()
+    };
+    
+  } catch (error) {
+    console.error('❌ Error sending email:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+module.exports = {
+  sendNewLeadEmail
+};

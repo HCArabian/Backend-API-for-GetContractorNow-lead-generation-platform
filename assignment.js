@@ -4,6 +4,8 @@
 // ASSIGNMENT ALGORITHM
 // ============================================
 const { assignTrackingNumber } = require('./trackingNumbers');
+const { sendNewLeadEmail } = require('./notifications');
+
 
 async function assignContractorToLead(leadId, prisma) {
   try {
@@ -311,6 +313,24 @@ if (!trackingResult.success) {
   // Assignment still succeeds, but without tracking number
 }
 
+// ============================================
+// SEND EMAIL NOTIFICATION
+// ============================================
+
+console.log(`\n📧 Sending email notification...`);
+
+const emailResult = await sendNewLeadEmail(
+  selectedContractor,
+  lead,
+  assignment,
+  trackingResult.trackingNumber
+);
+
+if (!emailResult.success) {
+  console.error('⚠️  Failed to send email:', emailResult.error);
+}
+
+// NOW THE EXISTING COMPLETION LOG:
 console.log(`\n🎉 Assignment complete!`);
 console.log(`   Assignment ID: ${assignment.id}`);
 console.log(`   Tracking Number: ${trackingResult.trackingNumber || 'Not assigned'}`);
