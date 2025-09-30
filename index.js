@@ -1161,6 +1161,183 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
   }
 });
 
+// Submit customer feedback (public endpoint - no auth required)
+app.post('/api/feedback/submit', async (req, res) => {
+  try {
+    const { leadId, contractorCalled, outcome, rating, feedbackText, wouldRecommend } = req.body;
+    
+    // Validate lead exists
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { assignment: true }
+    });
+    
+    if (!lead) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    
+    if (!lead.assignment) {
+      return res.status(400).json({ error: 'No contractor assigned to this lead' });
+    }
+    
+    // Check if feedback already exists
+    const existingFeedback = await prisma.customerFeedback.findFirst({
+      where: { leadId: leadId }
+    });
+    
+    if (existingFeedback) {
+      return res.status(400).json({ error: 'Feedback already submitted for this lead' });
+    }
+    
+    // Create feedback
+    const feedback = await prisma.customerFeedback.create({
+      data: {
+        leadId: leadId,
+        contractorId: lead.assignment.contractorId,
+        contractorCalled: contractorCalled,
+        outcome: outcome || null,
+        rating: rating || null,
+        feedbackText: feedbackText || null,
+        wouldRecommend: wouldRecommend || null
+      }
+    });
+    
+    console.log('Customer feedback received:', feedback.id);
+    
+    // If customer says contractor never called, flag for review
+    if (contractorCalled === false) {
+      console.log('WARNING: Customer reports no contact from contractor for lead:', leadId);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Thank you for your feedback!'
+    });
+    
+  } catch (error) {
+    console.error('Feedback submission error:', error);
+    res.status(500).json({ error: 'Failed to submit feedback' });
+  }
+});
+
+// Get feedback for admin
+app.get('/api/admin/feedback', adminAuth, async (req, res) => {
+  try {
+    const { contractorId, contractorCalled } = req.query;
+    
+    const where = {};
+    if (contractorId) where.contractorId = contractorId;
+    if (contractorCalled !== undefined) where.contractorCalled = contractorCalled === 'true';
+    
+    const feedback = await prisma.customerFeedback.findMany({
+      where,
+      include: {
+        contractor: {
+          select: {
+            businessName: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        submittedAt: 'desc'
+      }
+    });
+    
+    // Get lead details separately
+    const feedbackWithLeads = await Promise.all(
+      feedback.map(async (fb) => {
+        const lead = await prisma.lead.findUnique({
+          where: { id: fb.leadId },
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            serviceType: true,
+            category: true
+          }
+        });
+        
+        return {
+          ...fb,
+          lead
+        };
+      })
+    );
+    
+    const summary = {
+      total: feedbackWithLeads.length,
+      contractorCalled: feedbackWithLeads.filter(f => f.contractorCalled === true).length,
+      contractorDidNotCall: feedbackWithLeads.filter(f => f.contractorCalled === false).length,
+      avgRating: feedbackWithLeads.filter(f => f.rating).length > 0
+        ? (feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) / feedbackWithLeads.filter(f => f.rating).length).toFixed(1)
+        : 'N/A'
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      feedback: feedbackWithLeads
+    });
+    
+  } catch (error) {
+    console.error('Feedback fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch feedback' });
+  }
+});
+
+// Get contractor's feedback (for their portal)
+app.get('/api/contractor/feedback', contractorAuth, async (req, res) => {
+  try {
+    const feedback = await prisma.customerFeedback.findMany({
+      where: {
+        contractorId: req.contractorId
+      },
+      orderBy: {
+        submittedAt: 'desc'
+      }
+    });
+    
+    // Get lead details separately
+    const feedbackWithLeads = await Promise.all(
+      feedback.map(async (fb) => {
+        const lead = await prisma.lead.findUnique({
+          where: { id: fb.leadId },
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            serviceType: true,
+            category: true
+          }
+        });
+        
+        return {
+          ...fb,
+          lead
+        };
+      })
+    );
+    
+    const summary = {
+      total: feedbackWithLeads.length,
+      avgRating: feedbackWithLeads.filter(f => f.rating).length > 0
+        ? (feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) / feedbackWithLeads.filter(f => f.rating).length).toFixed(1)
+        : 'N/A',
+      wouldRecommend: feedbackWithLeads.filter(f => f.wouldRecommend === true).length
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      feedback: feedbackWithLeads
+    });
+    
+  } catch (error) {
+    console.error('Feedback fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch feedback' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
