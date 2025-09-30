@@ -449,6 +449,9 @@
                 <div class="filter-group">
                     <button class="btn btn-primary" onclick="viewDisputes()">View Disputes</button>
                 </div>
+                <div class="filter-group">
+                    <button class="btn btn-primary" onclick="viewFeedback()">View Feedback</button>
+                </div>
             </div>
 
             <!-- Billing Records Table -->
@@ -943,6 +946,98 @@
                 showError('Failed to deny dispute');
             }
         }
+        function viewFeedback() {
+            fetchFeedback();
+            document.getElementById('feedbackModal').style.display = 'block';
+        }
+
+        function closeFeedbackModal() {
+            document.getElementById('feedbackModal').style.display = 'none';
+        }
+
+        async function fetchFeedback() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/feedback`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch feedback');
+
+                const data = await response.json();
+                renderAdminFeedback(data.feedback, data.summary);
+            } catch (error) {
+                showError('Failed to load feedback');
+            }
+        }
+
+        function renderAdminFeedback(feedback, summary) {
+            document.getElementById('feedbackTotal').textContent = summary.total;
+            document.getElementById('feedbackCalled').textContent = summary.contractorCalled;
+            document.getElementById('feedbackNotCalled').textContent = summary.contractorDidNotCall;
+
+            const container = document.getElementById('feedbackList');
+
+            if (feedback.length === 0) {
+                container.innerHTML = '<div class="empty-state">No feedback received yet</div>';
+                return;
+            }
+
+            const html = feedback.map(fb => {
+                return `
+            <div class="dispute-card" style="border-left-color: ${fb.contractorCalled ? '#10b981' : '#ef4444'}">
+                <div style="display: flex; justify-content: between; margin-bottom: 15px;">
+                    <div>
+                        <strong>${fb.contractor.businessName}</strong>
+                        <div style="font-size: 12px; color: #718096; margin-top: 5px;">
+                            Customer: ${fb.lead.customerFirstName} ${fb.lead.customerLastName}
+                        </div>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #718096;">
+                        ${new Date(fb.submittedAt).toLocaleDateString()}
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                    <div>
+                        <div style="font-size: 12px; color: #718096;">Contractor Called</div>
+                        <div style="font-weight: 600; color: ${fb.contractorCalled ? '#059669' : '#dc2626'}">
+                            ${fb.contractorCalled ? 'YES' : 'NO'}
+                        </div>
+                    </div>
+                    ${fb.outcome ? `
+                    <div>
+                        <div style="font-size: 12px; color: #718096;">Outcome</div>
+                        <div style="font-weight: 600;">${fb.outcome.replace(/_/g, ' ').toUpperCase()}</div>
+                    </div>
+                    ` : ''}
+                    ${fb.rating ? `
+                    <div>
+                        <div style="font-size: 12px; color: #718096;">Rating</div>
+                        <div style="font-weight: 600; color: #f59e0b;">${'★'.repeat(fb.rating)} (${fb.rating}/5)</div>
+                    </div>
+                    ` : ''}
+                    ${fb.wouldRecommend !== null ? `
+                    <div>
+                        <div style="font-size: 12px; color: #718096;">Would Recommend</div>
+                        <div style="font-weight: 600; color: ${fb.wouldRecommend ? '#059669' : '#dc2626'}">
+                            ${fb.wouldRecommend ? 'YES' : 'NO'}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${fb.feedbackText ? `
+                <div style="background: white; padding: 10px; border-radius: 6px;">
+                    <div style="font-size: 12px; color: #718096; margin-bottom: 5px;">Comments</div>
+                    ${fb.feedbackText}
+                </div>
+                ` : ''}
+            </div>
+        `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
     </script>
     <!-- Disputes Modal -->
     <div id="disputesModal" class="modal">
@@ -968,6 +1063,32 @@
             </div>
 
             <div id="disputesList"></div>
+        </div>
+    </div>
+    <!-- Feedback Modal -->
+    <div id="feedbackModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Customer Feedback</h2>
+                <button class="close-btn" onclick="closeFeedbackModal()">&times;</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px;">
+                <div style="background: #dbeafe; padding: 15px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 12px; color: #1e40af;">Total Feedback</div>
+                    <div style="font-size: 24px; font-weight: bold; color: #1e40af;" id="feedbackTotal">0</div>
+                </div>
+                <div style="background: #d1fae5; padding: 15px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 12px; color: #065f46;">Contractor Called</div>
+                    <div style="font-size: 24px; font-weight: bold; color: #065f46;" id="feedbackCalled">0</div>
+                </div>
+                <div style="background: #fee2e2; padding: 15px; border-radius: 8px; text-align: center;">
+                    <div style="font-size: 12px; color: #991b1b;">Did Not Call</div>
+                    <div style="font-size: 24px; font-weight: bold; color: #991b1b;" id="feedbackNotCalled">0</div>
+                </div>
+            </div>
+
+            <div id="feedbackList"></div>
         </div>
     </div>
 </body>

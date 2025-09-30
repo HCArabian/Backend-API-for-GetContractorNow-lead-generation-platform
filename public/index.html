@@ -355,6 +355,7 @@
                 <button class="tab active" onclick="switchTab('leads')">My Leads</button>
                 <button class="tab" onclick="switchTab('billing')">Billing</button>
                 <button class="tab" onclick="switchTab('disputes')">Disputes</button>
+                <button class="tab" onclick="switchTab('feedback')">Feedback</button>
                 <button class="tab" onclick="switchTab('profile')">Profile</button>
             </div>
 
@@ -417,6 +418,26 @@
                 </div>
 
                 <div id="disputesContainer"></div>
+            </div>
+
+            <!-- Feedback Tab -->
+            <div id="feedbackTab" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Feedback</div>
+                        <div class="stat-value" id="totalFeedback">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Average Rating</div>
+                        <div class="stat-value" id="avgRating">N/A</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Would Recommend</div>
+                        <div class="stat-value" id="wouldRecommend">0</div>
+                    </div>
+                </div>
+
+                <div id="feedbackContainer"></div>
             </div>
 
             <!-- Profile Tab -->
@@ -499,6 +520,8 @@
             if (tab === 'billing') loadBilling();
             if (tab === 'disputes') loadDisputes();
             if (tab === 'profile') loadProfile();
+            if (tab === 'feedback') loadFeedback();
+
         }
 
         async function loadLeads() {
@@ -967,6 +990,90 @@
                     alert('Network error. Please try again.');
                 }
             });
+        }
+
+        async function loadFeedback() {
+            try {
+                const token = localStorage.getItem('contractorToken');
+                const response = await fetch(`${API_URL}/api/contractor/feedback`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderFeedback(data);
+                }
+            } catch (error) {
+                console.error('Failed to load feedback:', error);
+            }
+        }
+
+        function renderFeedback(data) {
+            document.getElementById('totalFeedback').textContent = data.summary.total;
+            document.getElementById('avgRating').textContent = data.summary.avgRating;
+            document.getElementById('wouldRecommend').textContent = data.summary.wouldRecommend;
+
+            const container = document.getElementById('feedbackContainer');
+
+            if (data.feedback.length === 0) {
+                container.innerHTML = '<div class="empty-state">No customer feedback yet</div>';
+                return;
+            }
+
+            const html = data.feedback.map(fb => {
+                return `
+            <div class="lead-card">
+                <div class="lead-header">
+                    <div>
+                        <h3>${fb.lead.customerFirstName} ${fb.lead.customerLastName}</h3>
+                        <span class="lead-badge badge-${fb.lead.category.toLowerCase()}">${fb.lead.category}</span>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #718096;">
+                        ${new Date(fb.submittedAt).toLocaleDateString()}
+                    </div>
+                </div>
+                
+                <div class="lead-info">
+                    <div class="info-item">
+                        <div class="info-label">Contractor Called</div>
+                        <div class="info-value" style="color: ${fb.contractorCalled ? '#059669' : '#dc2626'}">
+                            ${fb.contractorCalled ? 'Yes' : 'No'}
+                        </div>
+                    </div>
+                    ${fb.outcome ? `
+                    <div class="info-item">
+                        <div class="info-label">Outcome</div>
+                        <div class="info-value">${fb.outcome.replace(/_/g, ' ').toUpperCase()}</div>
+                    </div>
+                    ` : ''}
+                    ${fb.rating ? `
+                    <div class="info-item">
+                        <div class="info-label">Rating</div>
+                        <div class="info-value">${'★'.repeat(fb.rating)}${'☆'.repeat(5 - fb.rating)} (${fb.rating}/5)</div>
+                    </div>
+                    ` : ''}
+                    ${fb.wouldRecommend !== null ? `
+                    <div class="info-item">
+                        <div class="info-label">Would Recommend</div>
+                        <div class="info-value" style="color: ${fb.wouldRecommend ? '#059669' : '#dc2626'}">
+                            ${fb.wouldRecommend ? 'Yes' : 'No'}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                ${fb.feedbackText ? `
+                <div style="margin-top: 15px; padding: 15px; background: #f7fafc; border-radius: 6px;">
+                    <strong>Customer Comments:</strong>
+                    <div style="margin-top: 10px;">${fb.feedbackText}</div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+            }).join('');
+
+            container.innerHTML = html;
         }
     </script>
 </body>
