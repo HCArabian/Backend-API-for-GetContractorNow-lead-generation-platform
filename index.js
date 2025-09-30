@@ -1102,8 +1102,12 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
       },
       include: {
         contractor: true,
-        lead: true,
       },
+    });
+
+    // Get lead details separately
+    const lead = await prisma.lead.findUnique({
+      where: { id: dispute.leadId },
     });
 
     // If approved, update the billing record
@@ -1146,7 +1150,10 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
 
     res.json({
       success: true,
-      dispute: dispute,
+      dispute: {
+        ...dispute,
+        lead,
+      },
     });
   } catch (error) {
     console.error("Dispute resolution error:", error);
