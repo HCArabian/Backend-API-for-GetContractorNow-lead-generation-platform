@@ -1,65 +1,72 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
-const { PrismaClient } = require('@prisma/client');
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const { calculateLeadScore } = require('./scoring');
-const { assignContractorToLead } = require('./assignment');
-const cookieParser = require('cookie-parser');
-const { hashPassword, comparePassword, generateToken, contractorAuth } = require('./auth');
+const { calculateLeadScore } = require("./scoring");
+const { assignContractorToLead } = require("./assignment");
+const cookieParser = require("cookie-parser");
+const {
+  hashPassword,
+  comparePassword,
+  generateToken,
+  contractorAuth,
+} = require("./auth");
 
 const app = express();
 
 // CORS - Allow requests from your Webflow site
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'GetContractorNow API is running',
-    timestamp: new Date().toISOString()
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "GetContractorNow API is running",
+    timestamp: new Date().toISOString(),
   });
 });
 
 // Lead submission endpoint
-app.post('/api/leads/submit', async (req, res) => {
+app.post("/api/leads/submit", async (req, res) => {
   try {
     const leadData = req.body;
-    console.log('Received lead submission:', {
+    console.log("Received lead submission:", {
       email: leadData.email,
       phone: leadData.phone,
-      service: leadData.service_type
+      service: leadData.service_type,
     });
-    
+
     // Run advanced scoring algorithm
     const scoringResult = await calculateLeadScore(leadData, prisma);
-    
-    console.log('Scoring result:', scoringResult);
-    
+
+    console.log("Scoring result:", scoringResult);
+
     // If lead is rejected, return error with specific reasons
-    if (scoringResult.status === 'rejected') {
-      console.log('Lead rejected:', scoringResult.rejectReasons);
-      
+    if (scoringResult.status === "rejected") {
+      console.log("Lead rejected:", scoringResult.rejectReasons);
+
       return res.status(400).json({
         success: false,
-        error: 'Lead validation failed',
+        error: "Lead validation failed",
         validationErrors: scoringResult.validationErrors,
-        message: scoringResult.validationErrors.join('. ')
+        message: scoringResult.validationErrors.join(". "),
       });
     }
-    
+
     // Lead approved - save to database
     const savedLead = await prisma.lead.create({
       data: {
@@ -72,7 +79,7 @@ app.post('/api/leads/submit', async (req, res) => {
         customerCity: leadData.city,
         customerState: leadData.state,
         customerZip: leadData.zip,
-        
+
         // Service Details
         serviceType: leadData.service_type,
         serviceDescription: leadData.service_description || null,
@@ -82,84 +89,90 @@ app.post('/api/leads/submit', async (req, res) => {
         propertyAge: leadData.property_age || null,
         existingSystem: leadData.existing_system || null,
         systemIssue: leadData.system_issue || null,
-        
+
         // Contact Preferences
         preferredContactTime: leadData.preferred_contact_time || null,
-        preferredContactMethod: leadData.preferred_contact_method || 'phone',
-        
+        preferredContactMethod: leadData.preferred_contact_method || "phone",
+
         // Marketing Tracking
         referralSource: leadData.referral_source || null,
         utmSource: leadData.utm_source || null,
         utmMedium: leadData.utm_medium || null,
         utmCampaign: leadData.utm_campaign || null,
-        
+
         // Form Metadata
         formCompletionTime: leadData.form_completion_time || null,
         ipAddress: leadData.ip_address || null,
         userAgent: leadData.user_agent || null,
-        
+
         // Scoring Results
         score: scoringResult.score,
         category: scoringResult.category,
         price: scoringResult.price,
         confidenceLevel: scoringResult.confidenceLevel,
         qualityFlags: scoringResult.qualityFlags,
-        
+
         // Status
-        status: 'pending_assignment'
-      }
+        status: "pending_assignment",
+      },
     });
-    
-    console.log('✅ Lead saved successfully:', {
+
+    console.log("✅ Lead saved successfully:", {
       id: savedLead.id,
       category: savedLead.category,
       score: savedLead.score,
-      price: savedLead.price
+      price: savedLead.price,
     });
-    
+
     // ============================================
     // NEW: AUTOMATICALLY ASSIGN CONTRACTOR
     // ============================================
-    
-    console.log('\n🔄 Starting contractor assignment...');
-    
+
+    console.log("\n🔄 Starting contractor assignment...");
+
     const assignmentResult = await assignContractorToLead(savedLead.id, prisma);
-    
+
     if (assignmentResult.success && assignmentResult.assigned) {
-      console.log('✅ Lead assigned to contractor:', assignmentResult.contractor.businessName);
-      
+      console.log(
+        "✅ Lead assigned to contractor:",
+        assignmentResult.contractor.businessName
+      );
+
       // Return success with assignment details
       return res.json({
         success: true,
-        message: 'Lead received, approved, and assigned to contractor',
+        message: "Lead received, approved, and assigned to contractor",
         leadId: savedLead.id,
         category: savedLead.category,
         score: savedLead.score,
         assignment: {
           contractor: assignmentResult.contractor.businessName,
-          responseDeadline: assignmentResult.assignment.responseDeadline
-        }
+          responseDeadline: assignmentResult.assignment.responseDeadline,
+        },
       });
     } else {
-      console.log('⚠️  Lead saved but not assigned:', assignmentResult.error || 'No contractors available');
-      
+      console.log(
+        "⚠️  Lead saved but not assigned:",
+        assignmentResult.error || "No contractors available"
+      );
+
       // Lead saved but couldn't assign
       return res.json({
         success: true,
-        message: 'Lead received and approved, but no contractors available',
+        message: "Lead received and approved, but no contractors available",
         leadId: savedLead.id,
         category: savedLead.category,
         score: savedLead.score,
-        warning: assignmentResult.error || 'No contractors available in this area'
+        warning:
+          assignmentResult.error || "No contractors available in this area",
       });
     }
-    
   } catch (error) {
-    console.error('❌ Error processing lead:', error);
+    console.error("❌ Error processing lead:", error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
-      message: 'Something went wrong processing your request'
+      error: "Internal server error",
+      message: "Something went wrong processing your request",
     });
   }
 });
@@ -170,7 +183,7 @@ app.post('/api/leads/submit', async (req, res) => {
 // ============================================
 // TWILIO WEBHOOK - BILLING AUTOMATION
 // ============================================
-app.post('/api/webhooks/twilio/call-status', async (req, res) => {
+app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   try {
     // Get Twilio's call data (sent as form-urlencoded)
     const {
@@ -181,10 +194,10 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       To: to,
       Direction: direction,
       RecordingUrl: recordingUrl,
-      RecordingSid: recordingSid
+      RecordingSid: recordingSid,
     } = req.body;
 
-    console.log('📞 TWILIO WEBHOOK RECEIVED:', {
+    console.log("📞 TWILIO WEBHOOK RECEIVED:", {
       callSid,
       callStatus,
       callDuration,
@@ -196,19 +209,23 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
     // ============================================
     // HANDLE INCOMING CALLS WITH TWIML
     // ============================================
-    
+
     // If this is the initial call (not a status callback), return TwiML
-    if (!callStatus || callStatus === 'ringing' || callStatus === 'in-progress') {
-      console.log('📞 Handling incoming call with TwiML...');
-      
+    if (
+      !callStatus ||
+      callStatus === "ringing" ||
+      callStatus === "in-progress"
+    ) {
+      console.log("📞 Handling incoming call with TwiML...");
+
       // Find tracking number to get customer phone
       const trackingRecord = await prisma.trackingNumber.findFirst({
         where: {
           twilioNumber: to,
-          status: 'active'
-        }
+          status: "active",
+        },
       });
-      
+
       if (trackingRecord) {
         // Forward call to customer and record it
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -218,9 +235,12 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
     ${trackingRecord.customerNumber}
   </Dial>
 </Response>`;
-        
-        console.log('✅ Forwarding call to customer:', trackingRecord.customerNumber);
-        return res.type('text/xml').send(twiml);
+
+        console.log(
+          "✅ Forwarding call to customer:",
+          trackingRecord.customerNumber
+        );
+        return res.type("text/xml").send(twiml);
       } else {
         // No tracking number found - play error message
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -228,64 +248,67 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
   <Say voice="alice">Sorry, this number is not currently active. Please contact support.</Say>
   <Hangup/>
 </Response>`;
-        
-        return res.type('text/xml').send(twiml);
+
+        return res.type("text/xml").send(twiml);
       }
     }
 
     // ============================================
     // HANDLE STATUS CALLBACKS (for billing)
     // ============================================
-    
+
     // Validate required fields
     if (!callSid) {
-      return res.status(400).json({ error: 'Missing required Twilio fields' });
+      return res.status(400).json({ error: "Missing required Twilio fields" });
     }
 
     // STEP 1: Find the tracking number record
     const trackingNumber = await prisma.trackingNumber.findFirst({
       where: {
         twilioNumber: to,
-        status: 'active'
-      }
+        status: "active",
+      },
     });
 
     if (!trackingNumber) {
-      console.error('❌ Tracking number not found:', to);
-      return res.status(404).json({ error: 'Tracking number not found' });
+      console.error("❌ Tracking number not found:", to);
+      return res.status(404).json({ error: "Tracking number not found" });
     }
 
     // Get the lead separately
     const lead = await prisma.lead.findUnique({
       where: { id: trackingNumber.leadId },
       include: {
-        assignment: true
-      }
+        assignment: true,
+      },
     });
 
     if (!lead) {
-      console.error('❌ Lead not found:', trackingNumber.leadId);
-      return res.status(404).json({ error: 'Lead not found' });
+      console.error("❌ Lead not found:", trackingNumber.leadId);
+      return res.status(404).json({ error: "Lead not found" });
     }
 
-    console.log('✅ Found tracking number for Lead ID:', trackingNumber.leadId);
+    console.log("✅ Found tracking number for Lead ID:", trackingNumber.leadId);
 
     // Get contractor ID from lead assignment
     const contractorId = lead.assignment?.contractorId;
-    
+
     if (!contractorId) {
-      console.error('❌ No contractor assigned to lead:', trackingNumber.leadId);
-      return res.status(400).json({ error: 'No contractor assigned' });
+      console.error(
+        "❌ No contractor assigned to lead:",
+        trackingNumber.leadId
+      );
+      return res.status(400).json({ error: "No contractor assigned" });
     }
 
     // STEP 2: Create or update CallLog
     const callLog = await prisma.callLog.upsert({
       where: {
-        callSid: callSid
+        callSid: callSid,
       },
       update: {
         callStatus: callStatus,
-        callEndedAt: callStatus === 'completed' ? new Date() : null,
+        callEndedAt: callStatus === "completed" ? new Date() : null,
         callDuration: callDuration ? parseInt(callDuration) : null,
         recordingUrl: recordingUrl || null,
         recordingSid: recordingSid || null,
@@ -294,38 +317,44 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
         callSid: callSid,
         leadId: trackingNumber.leadId,
         contractorId: contractorId,
-        callDirection: direction === 'inbound' ? 'customer_to_contractor' : 'contractor_to_customer',
+        callDirection:
+          direction === "inbound"
+            ? "customer_to_contractor"
+            : "contractor_to_customer",
         trackingNumber: to,
         callStartedAt: new Date(),
-        callEndedAt: callStatus === 'completed' ? new Date() : null,
+        callEndedAt: callStatus === "completed" ? new Date() : null,
         callDuration: callDuration ? parseInt(callDuration) : null,
         callStatus: callStatus,
         recordingUrl: recordingUrl || null,
         recordingSid: recordingSid || null,
-      }
+      },
     });
 
-    console.log('✅ CallLog created/updated:', callLog.id);
+    console.log("✅ CallLog created/updated:", callLog.id);
 
     // STEP 3: BILLING LOGIC - THE CRITICAL PART!
-    if (callStatus === 'completed' && callDuration && parseInt(callDuration) > 30) {
-      
-      console.log('💰 Call qualifies for billing (>30 seconds)');
+    if (
+      callStatus === "completed" &&
+      callDuration &&
+      parseInt(callDuration) > 30
+    ) {
+      console.log("💰 Call qualifies for billing (>30 seconds)");
 
       // Check if billing record already exists (prevent double-billing)
       const existingBilling = await prisma.billingRecord.findFirst({
         where: {
           leadId: trackingNumber.leadId,
-          contractorId: contractorId
-        }
+          contractorId: contractorId,
+        },
       });
 
       if (existingBilling) {
-        console.log('⚠️ Billing record already exists - skipping duplicate');
-        return res.json({ 
-          success: true, 
-          message: 'Call logged - billing already exists',
-          callLogId: callLog.id 
+        console.log("⚠️ Billing record already exists - skipping duplicate");
+        return res.json({
+          success: true,
+          message: "Call logged - billing already exists",
+          callLogId: callLog.id,
         });
       }
 
@@ -334,59 +363,60 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
         data: {
           leadId: trackingNumber.leadId,
           contractorId: contractorId,
-          amountOwed: 250.00,
-          status: 'pending',
-          dateIncurred: new Date()
-        }
+          amountOwed: 250.0,
+          status: "pending",
+          dateIncurred: new Date(),
+        },
       });
 
-      console.log('🎉 BILLING RECORD CREATED:', {
+      console.log("🎉 BILLING RECORD CREATED:", {
         billingId: billingRecord.id,
         contractorId: contractorId,
         leadId: trackingNumber.leadId,
-        amount: '$250.00'
+        amount: "$250.00",
       });
 
       // STEP 4: Update lead status to "contacted"
       await prisma.lead.update({
         where: { id: trackingNumber.leadId },
-        data: { 
-          status: 'contacted'
-        }
+        data: {
+          status: "contacted",
+        },
       });
 
       // STEP 5: Update lead assignment status
       if (lead.assignment) {
         await prisma.leadAssignment.update({
           where: { id: lead.assignment.id },
-          data: { 
-            status: 'contacted'
-          }
+          data: {
+            status: "contacted",
+          },
         });
       }
 
-      return res.json({ 
+      return res.json({
         success: true,
-        message: 'Call logged and billing created',
+        message: "Call logged and billing created",
         callLogId: callLog.id,
         billingRecordId: billingRecord.id,
-        amount: 250.00
+        amount: 250.0,
       });
     }
 
     // Call completed but didn't meet billing threshold
-    return res.json({ 
+    return res.json({
       success: true,
-      message: 'Call logged - did not meet billing criteria',
+      message: "Call logged - did not meet billing criteria",
       callLogId: callLog.id,
-      reason: callDuration ? `Duration too short (${callDuration}s < 30s)` : 'No duration recorded'
+      reason: callDuration
+        ? `Duration too short (${callDuration}s < 30s)`
+        : "No duration recorded",
     });
-
   } catch (error) {
-    console.error('❌ WEBHOOK ERROR:', error);
+    console.error("❌ WEBHOOK ERROR:", error);
     return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message
+      error: "Internal server error",
+      details: error.message,
     });
   }
 });
@@ -398,30 +428,30 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
 // Simple auth middleware (we'll improve this later)
 const adminAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const adminPassword = process.env.ADMIN_PASSWORD || 'changeme123'; // Set this in Railway variables
-  
+  const adminPassword = process.env.ADMIN_PASSWORD || "changeme123"; // Set this in Railway variables
+
   if (authHeader === `Bearer ${adminPassword}`) {
     next();
   } else {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: "Unauthorized" });
   }
 };
 
 // Get all billing records with filters
-app.get('/api/admin/billing', adminAuth, async (req, res) => {
+app.get("/api/admin/billing", adminAuth, async (req, res) => {
   try {
     const { status, contractorId, startDate, endDate } = req.query;
-    
+
     const where = {};
-    
+
     if (status) where.status = status;
     if (contractorId) where.contractorId = contractorId;
     if (startDate || endDate) {
-      where.dateIncurred= {};
+      where.dateIncurred = {};
       if (startDate) where.dateIncurred.gte = new Date(startDate);
       if (endDate) where.dateIncurred.lte = new Date(endDate);
     }
-    
+
     const billingRecords = await prisma.billingRecord.findMany({
       where,
       include: {
@@ -432,147 +462,154 @@ app.get('/api/admin/billing', adminAuth, async (req, res) => {
             customerPhone: true,
             customerCity: true,
             customerState: true,
-            serviceType: true
-          }
+            serviceType: true,
+          },
         },
         contractor: {
           select: {
             businessName: true,
             email: true,
-            phone: true
-          }
-        }
+            phone: true,
+          },
+        },
       },
       orderBy: {
-        dateIncurred: 'desc'
-      }
+        dateIncurred: "desc",
+      },
     });
-    
+
     // Calculate summary stats
     const summary = {
       total: billingRecords.length,
-      totalAmount: billingRecords.reduce((sum, record) => sum + record.amountOwed, 0),
-      pending: billingRecords.filter(r => r.status === 'pending').length,
-      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amountOwed, 0),
-      invoiced: billingRecords.filter(r => r.status === 'invoiced').length,
-      paid: billingRecords.filter(r => r.status === 'paid').length,
-      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amountOwed, 0),
+      totalAmount: billingRecords.reduce(
+        (sum, record) => sum + record.amountOwed,
+        0
+      ),
+      pending: billingRecords.filter((r) => r.status === "pending").length,
+      pendingAmount: billingRecords
+        .filter((r) => r.status === "pending")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+      invoiced: billingRecords.filter((r) => r.status === "invoiced").length,
+      paid: billingRecords.filter((r) => r.status === "paid").length,
+      paidAmount: billingRecords
+        .filter((r) => r.status === "paid")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
     };
-    
+
     res.json({
       success: true,
       summary,
-      records: billingRecords
+      records: billingRecords,
     });
   } catch (error) {
-    console.error('Error fetching billing records:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching billing records:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Get single billing record
-app.get('/api/admin/billing/:id', adminAuth, async (req, res) => {
+app.get("/api/admin/billing/:id", adminAuth, async (req, res) => {
   try {
     const billingRecord = await prisma.billingRecord.findUnique({
       where: { id: req.params.id },
       include: {
         lead: true,
-        contractor: true
-      }
+        contractor: true,
+      },
     });
-    
+
     if (!billingRecord) {
-      return res.status(404).json({ error: 'Billing record not found' });
+      return res.status(404).json({ error: "Billing record not found" });
     }
-    
+
     res.json({ success: true, record: billingRecord });
   } catch (error) {
-    console.error('Error fetching billing record:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching billing record:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Update billing record status
-app.patch('/api/admin/billing/:id', adminAuth, async (req, res) => {
+app.patch("/api/admin/billing/:id", adminAuth, async (req, res) => {
   try {
     const { status, notes } = req.body;
-    
+
     const data = { status };
-    
-    if (status === 'invoiced' && !req.body.invoicedAt) {
+
+    if (status === "invoiced" && !req.body.invoicedAt) {
       data.invoicedAt = new Date();
     } else if (req.body.invoicedAt) {
       data.invoicedAt = new Date(req.body.invoicedAt);
     }
-    
-    if (status === 'paid' && !req.body.paidAt) {
+
+    if (status === "paid" && !req.body.paidAt) {
       data.paidAt = new Date();
     } else if (req.body.paidAt) {
       data.paidAt = new Date(req.body.paidAt);
     }
-    
+
     if (notes !== undefined) {
       data.notes = notes;
     }
-    
+
     const updatedRecord = await prisma.billingRecord.update({
       where: { id: req.params.id },
       data,
       include: {
         lead: true,
-        contractor: true
-      }
+        contractor: true,
+      },
     });
-    
+
     res.json({ success: true, record: updatedRecord });
   } catch (error) {
-    console.error('Error updating billing record:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error updating billing record:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Get all contractors (for filter dropdown)
-app.get('/api/admin/contractors', adminAuth, async (req, res) => {
+app.get("/api/admin/contractors", adminAuth, async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       select: {
         id: true,
         businessName: true,
         email: true,
-        status: true
+        status: true,
       },
       orderBy: {
-        businessName: 'asc'
-      }
+        businessName: "asc",
+      },
     });
-    
+
     res.json({ success: true, contractors });
   } catch (error) {
-    console.error('Error fetching contractors:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching contractors:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Dashboard stats
-app.get('/api/admin/stats', adminAuth, async (req, res) => {
+app.get("/api/admin/stats", adminAuth, async (req, res) => {
   try {
     const [
       totalLeads,
       totalContractors,
       totalBillingRecords,
       pendingBilling,
-      totalRevenue
+      totalRevenue,
     ] = await Promise.all([
       prisma.lead.count(),
       prisma.contractor.count(),
       prisma.billingRecord.count(),
-      prisma.billingRecord.count({ where: { status: 'pending' } }),
+      prisma.billingRecord.count({ where: { status: "pending" } }),
       prisma.billingRecord.aggregate({
-        where: { status: 'paid' },
-        _sum: { amountOwed: true }
-      })
+        where: { status: "paid" },
+        _sum: { amountOwed: true },
+      }),
     ]);
-    
+
     res.json({
       success: true,
       stats: {
@@ -580,12 +617,12 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
         totalContractors,
         totalBillingRecords,
         pendingBilling,
-        totalRevenue: totalRevenue._sum.amountOwed  || 0
-      }
+        totalRevenue: totalRevenue._sum.amountOwed || 0,
+      },
     });
   } catch (error) {
-    console.error('Error fetching stats:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching stats:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -594,47 +631,52 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
 // ============================================
 
 // Contractor login
-app.post('/api/contractor/login', async (req, res) => {
+app.post("/api/contractor/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     // Validate input
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+      return res.status(400).json({ error: "Email and password required" });
     }
-    
+
     // Find contractor
     const contractor = await prisma.contractor.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: email.toLowerCase() },
     });
-    
+
     if (!contractor) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
-    
+
     // Check password
-    const isValidPassword = await comparePassword(password, contractor.passwordHash);
-    
+    const isValidPassword = await comparePassword(
+      password,
+      contractor.passwordHash
+    );
+
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
-    
+
     // Check if account is active
-    if (contractor.status !== 'active') {
-      return res.status(403).json({ error: 'Account is suspended or inactive' });
+    if (contractor.status !== "active") {
+      return res
+        .status(403)
+        .json({ error: "Account is suspended or inactive" });
     }
-    
+
     // Generate token
     const token = generateToken(contractor.id);
-    
+
     // Update last active
     await prisma.contractor.update({
       where: { id: contractor.id },
-      data: { lastActiveAt: new Date() }
+      data: { lastActiveAt: new Date() },
     });
-    
-    console.log('✅ Contractor logged in:', contractor.businessName);
-    
+
+    console.log("✅ Contractor logged in:", contractor.businessName);
+
     res.json({
       success: true,
       token,
@@ -642,18 +684,17 @@ app.post('/api/contractor/login', async (req, res) => {
         id: contractor.id,
         businessName: contractor.businessName,
         email: contractor.email,
-        phone: contractor.phone
-      }
+        phone: contractor.phone,
+      },
     });
-    
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error("Login error:", error);
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
 // Get contractor profile
-app.get('/api/contractor/profile', contractorAuth, async (req, res) => {
+app.get("/api/contractor/profile", contractorAuth, async (req, res) => {
   try {
     const contractor = await prisma.contractor.findUnique({
       where: { id: req.contractorId },
@@ -672,35 +713,34 @@ app.get('/api/contractor/profile', contractorAuth, async (req, res) => {
         totalJobsCompleted: true,
         status: true,
         isAcceptingLeads: true,
-        createdAt: true
-      }
+        createdAt: true,
+      },
     });
-    
+
     if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
+      return res.status(404).json({ error: "Contractor not found" });
     }
-    
+
     res.json({ success: true, contractor });
-    
   } catch (error) {
-    console.error('Profile fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch profile' });
+    console.error("Profile fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
 
 // Get contractor's assigned leads
-app.get('/api/contractor/leads', contractorAuth, async (req, res) => {
+app.get("/api/contractor/leads", contractorAuth, async (req, res) => {
   try {
     const { status } = req.query;
-    
+
     const where = {
-      contractorId: req.contractorId
+      contractorId: req.contractorId,
     };
-    
+
     if (status) {
       where.status = status;
     }
-    
+
     const assignments = await prisma.leadAssignment.findMany({
       where,
       include: {
@@ -719,49 +759,48 @@ app.get('/api/contractor/leads', contractorAuth, async (req, res) => {
             category: true,
             price: true,
             status: true,
-            createdAt: true
-          }
-        }
+            createdAt: true,
+          },
+        },
       },
       orderBy: {
-        assignedAt: 'desc'
-      }
+        assignedAt: "desc",
+      },
     });
-    
+
     // Get tracking numbers for each lead
     const leadsWithTracking = await Promise.all(
       assignments.map(async (assignment) => {
         const trackingNumber = await prisma.trackingNumber.findFirst({
           where: {
             leadId: assignment.leadId,
-            status: 'active'
-          }
+            status: "active",
+          },
         });
-        
+
         return {
           ...assignment,
-          trackingNumber: trackingNumber?.twilioNumber || null
+          trackingNumber: trackingNumber?.twilioNumber || null,
         };
       })
     );
-    
+
     res.json({
       success: true,
-      leads: leadsWithTracking
+      leads: leadsWithTracking,
     });
-    
   } catch (error) {
-    console.error('Leads fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch leads' });
+    console.error("Leads fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch leads" });
   }
 });
 
 // Get contractor's billing history
-app.get('/api/contractor/billing', contractorAuth, async (req, res) => {
+app.get("/api/contractor/billing", contractorAuth, async (req, res) => {
   try {
     const billingRecords = await prisma.billingRecord.findMany({
       where: {
-        contractorId: req.contractorId
+        contractorId: req.contractorId,
       },
       include: {
         lead: {
@@ -769,121 +808,141 @@ app.get('/api/contractor/billing', contractorAuth, async (req, res) => {
             customerFirstName: true,
             customerLastName: true,
             serviceType: true,
-            category: true
-          }
-        }
+            category: true,
+          },
+        },
       },
       orderBy: {
-        dateIncurred: 'desc'
-      }
+        dateIncurred: "desc",
+      },
     });
-    
+
     const summary = {
       totalBilled: billingRecords.reduce((sum, r) => sum + r.amountOwed, 0),
-      pending: billingRecords.filter(r => r.status === 'pending').length,
-      pendingAmount: billingRecords.filter(r => r.status === 'pending').reduce((sum, r) => sum + r.amountOwed, 0),
-      paid: billingRecords.filter(r => r.status === 'paid').length,
-      paidAmount: billingRecords.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amountOwed, 0)
+      pending: billingRecords.filter((r) => r.status === "pending").length,
+      pendingAmount: billingRecords
+        .filter((r) => r.status === "pending")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+      paid: billingRecords.filter((r) => r.status === "paid").length,
+      paidAmount: billingRecords
+        .filter((r) => r.status === "paid")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
     };
-    
+
     res.json({
       success: true,
       summary,
-      records: billingRecords
+      records: billingRecords,
     });
-    
   } catch (error) {
-    console.error('Billing fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch billing' });
+    console.error("Billing fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch billing" });
   }
 });
 
 // Change contractor password
-app.post('/api/contractor/change-password', contractorAuth, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    
-    // Validate input
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current and new password required' });
+app.post(
+  "/api/contractor/change-password",
+  contractorAuth,
+  async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      // Validate input
+      if (!currentPassword || !newPassword) {
+        return res
+          .status(400)
+          .json({ error: "Current and new password required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res
+          .status(400)
+          .json({ error: "New password must be at least 8 characters" });
+      }
+
+      // Get contractor
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.contractorId },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Verify current password
+      const isValidPassword = await comparePassword(
+        currentPassword,
+        contractor.passwordHash
+      );
+
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const newPasswordHash = await hashPassword(newPassword);
+
+      // Update password
+      await prisma.contractor.update({
+        where: { id: req.contractorId },
+        data: { passwordHash: newPasswordHash },
+      });
+
+      console.log(
+        "✅ Password changed for contractor:",
+        contractor.businessName
+      );
+
+      res.json({
+        success: true,
+        message: "Password changed successfully",
+      });
+    } catch (error) {
+      console.error("Password change error:", error);
+      res.status(500).json({ error: "Failed to change password" });
     }
-    
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
-    }
-    
-    // Get contractor
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractorId }
-    });
-    
-    if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
-    }
-    
-    // Verify current password
-    const isValidPassword = await comparePassword(currentPassword, contractor.passwordHash);
-    
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
-    }
-    
-    // Hash new password
-    const newPasswordHash = await hashPassword(newPassword);
-    
-    // Update password
-    await prisma.contractor.update({
-      where: { id: req.contractorId },
-      data: { passwordHash: newPasswordHash }
-    });
-    
-    console.log('✅ Password changed for contractor:', contractor.businessName);
-    
-    res.json({
-      success: true,
-      message: 'Password changed successfully'
-    });
-    
-  } catch (error) {
-    console.error('Password change error:', error);
-    res.status(500).json({ error: 'Failed to change password' });
   }
-});
+);
 
 // Submit a dispute
-app.post('/api/contractor/disputes', contractorAuth, async (req, res) => {
+app.post("/api/contractor/disputes", contractorAuth, async (req, res) => {
   try {
     const { leadId, reason, description, evidence } = req.body;
-    
+
     // Validate input
     if (!leadId || !reason) {
-      return res.status(400).json({ error: 'Lead ID and reason required' });
+      return res.status(400).json({ error: "Lead ID and reason required" });
     }
-    
+
     // Verify this lead was assigned to this contractor
     const assignment = await prisma.leadAssignment.findFirst({
       where: {
         leadId: leadId,
-        contractorId: req.contractorId
-      }
+        contractorId: req.contractorId,
+      },
     });
-    
+
     if (!assignment) {
-      return res.status(403).json({ error: 'You cannot dispute a lead that was not assigned to you' });
+      return res.status(403).json({
+        error: "You cannot dispute a lead that was not assigned to you",
+      });
     }
-    
+
     // Check if dispute already exists for this lead
     const existingDispute = await prisma.dispute.findFirst({
       where: {
         leadId: leadId,
-        contractorId: req.contractorId
-      }
+        contractorId: req.contractorId,
+      },
     });
-    
+
     if (existingDispute) {
-      return res.status(400).json({ error: 'Dispute already submitted for this lead' });
+      return res
+        .status(400)
+        .json({ error: "Dispute already submitted for this lead" });
     }
-    
+
     // Create dispute
     const dispute = await prisma.dispute.create({
       data: {
@@ -892,64 +951,80 @@ app.post('/api/contractor/disputes', contractorAuth, async (req, res) => {
         reason: reason,
         description: description || null,
         evidence: evidence || null,
-        status: 'pending'
-      }
+        status: "pending",
+      },
     });
-    
-    console.log('Dispute submitted:', dispute.id);
-    
+
+    console.log("Dispute submitted:", dispute.id);
+
     res.json({
       success: true,
-      dispute: dispute
+      dispute: dispute,
     });
-    
   } catch (error) {
-    console.error('Dispute submission error:', error);
-    res.status(500).json({ error: 'Failed to submit dispute' });
+    console.error("Dispute submission error:", error);
+    res.status(500).json({ error: "Failed to submit dispute" });
   }
 });
 
 // Get contractor's disputes
-app.get('/api/contractor/disputes', contractorAuth, async (req, res) => {
+app.get("/api/contractor/disputes", contractorAuth, async (req, res) => {
   try {
     const disputes = await prisma.dispute.findMany({
       where: {
-        contractorId: req.contractorId
+        contractorId: req.contractorId,
       },
       include: {
-        lead: {
+        contractor: {
+          select: {
+            businessName: true,
+          },
+        },
+      },
+      orderBy: {
+        submittedAt: "desc",
+      },
+    });
+
+    // Get lead details separately for each dispute
+    const disputesWithLeads = await Promise.all(
+      disputes.map(async (dispute) => {
+        const lead = await prisma.lead.findUnique({
+          where: { id: dispute.leadId },
           select: {
             customerFirstName: true,
             customerLastName: true,
             customerPhone: true,
             serviceType: true,
-            category: true
-          }
-        }
-      },
-      orderBy: {
-        submittedAt: 'desc'
-      }
-    });
-    
+            category: true,
+          },
+        });
+
+        return {
+          ...dispute,
+          lead,
+        };
+      })
+    );
+
     res.json({
       success: true,
-      disputes: disputes
+      disputes: disputesWithLeads,
     });
-    
   } catch (error) {
-    console.error('Disputes fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch disputes' });
+    console.error("Disputes fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch disputes" });
   }
 });
+
 // Get all disputes (admin)
-app.get('/api/admin/disputes', adminAuth, async (req, res) => {
+app.get("/api/admin/disputes", adminAuth, async (req, res) => {
   try {
     const { status } = req.query;
-    
+
     const where = {};
     if (status) where.status = status;
-    
+
     const disputes = await prisma.dispute.findMany({
       where,
       include: {
@@ -957,10 +1032,20 @@ app.get('/api/admin/disputes', adminAuth, async (req, res) => {
           select: {
             businessName: true,
             email: true,
-            phone: true
-          }
+            phone: true,
+          },
         },
-        lead: {
+      },
+      orderBy: {
+        submittedAt: "desc",
+      },
+    });
+
+    // Get lead details separately for each dispute
+    const disputesWithLeads = await Promise.all(
+      disputes.map(async (dispute) => {
+        const lead = await prisma.lead.findUnique({
+          where: { id: dispute.leadId },
           select: {
             customerFirstName: true,
             customerLastName: true,
@@ -968,43 +1053,44 @@ app.get('/api/admin/disputes', adminAuth, async (req, res) => {
             customerEmail: true,
             serviceType: true,
             category: true,
-            price: true
-          }
-        }
-      },
-      orderBy: {
-        submittedAt: 'desc'
-      }
-    });
-    
+            price: true,
+          },
+        });
+
+        return {
+          ...dispute,
+          lead,
+        };
+      })
+    );
+
     const summary = {
-      total: disputes.length,
-      pending: disputes.filter(d => d.status === 'pending').length,
-      approved: disputes.filter(d => d.status === 'approved').length,
-      denied: disputes.filter(d => d.status === 'denied').length
+      total: disputesWithLeads.length,
+      pending: disputesWithLeads.filter((d) => d.status === "pending").length,
+      approved: disputesWithLeads.filter((d) => d.status === "approved").length,
+      denied: disputesWithLeads.filter((d) => d.status === "denied").length,
     };
-    
+
     res.json({
       success: true,
       summary,
-      disputes: disputes
+      disputes: disputesWithLeads,
     });
-    
   } catch (error) {
-    console.error('Disputes fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch disputes' });
+    console.error("Disputes fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch disputes" });
   }
 });
 
 // Resolve a dispute (admin)
-app.patch('/api/admin/disputes/:id', adminAuth, async (req, res) => {
+app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
   try {
     const { status, resolution, resolutionNotes, creditAmount } = req.body;
-    
+
     if (!status || !resolution) {
-      return res.status(400).json({ error: 'Status and resolution required' });
+      return res.status(400).json({ error: "Status and resolution required" });
     }
-    
+
     const dispute = await prisma.dispute.update({
       where: { id: req.params.id },
       data: {
@@ -1012,56 +1098,59 @@ app.patch('/api/admin/disputes/:id', adminAuth, async (req, res) => {
         resolution: resolution,
         resolutionNotes: resolutionNotes || null,
         creditAmount: creditAmount || null,
-        resolvedAt: new Date()
+        resolvedAt: new Date(),
       },
       include: {
         contractor: true,
-        lead: true
-      }
+        lead: true,
+      },
     });
-    
+
     // If approved, update the billing record
-    if (status === 'approved' && resolution !== 'denied') {
+    if (status === "approved" && resolution !== "denied") {
       const billingRecord = await prisma.billingRecord.findFirst({
         where: {
           leadId: dispute.leadId,
-          contractorId: dispute.contractorId
-        }
+          contractorId: dispute.contractorId,
+        },
       });
-      
+
       if (billingRecord) {
-        if (resolution === 'full_credit') {
+        if (resolution === "full_credit") {
           // Mark billing as credited
           await prisma.billingRecord.update({
             where: { id: billingRecord.id },
-            data: { 
-              status: 'credited',
-              notes: `Dispute approved: ${resolutionNotes || 'Full credit issued'}`
-            }
+            data: {
+              status: "credited",
+              notes: `Dispute approved: ${
+                resolutionNotes || "Full credit issued"
+              }`,
+            },
           });
-        } else if (resolution === 'partial_credit' && creditAmount) {
+        } else if (resolution === "partial_credit" && creditAmount) {
           // Reduce the amount owed
           await prisma.billingRecord.update({
             where: { id: billingRecord.id },
-            data: { 
+            data: {
               amountOwed: creditAmount,
-              notes: `Dispute approved: Partial credit. ${resolutionNotes || ''}`
-            }
+              notes: `Dispute approved: Partial credit. ${
+                resolutionNotes || ""
+              }`,
+            },
           });
         }
       }
     }
-    
-    console.log('Dispute resolved:', dispute.id, status, resolution);
-    
+
+    console.log("Dispute resolved:", dispute.id, status, resolution);
+
     res.json({
       success: true,
-      dispute: dispute
+      dispute: dispute,
     });
-    
   } catch (error) {
-    console.error('Dispute resolution error:', error);
-    res.status(500).json({ error: 'Failed to resolve dispute' });
+    console.error("Dispute resolution error:", error);
+    res.status(500).json({ error: "Failed to resolve dispute" });
   }
 });
 

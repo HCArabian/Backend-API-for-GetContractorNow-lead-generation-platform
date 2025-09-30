@@ -354,6 +354,7 @@
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('leads')">My Leads</button>
                 <button class="tab" onclick="switchTab('billing')">Billing</button>
+                <button class="tab" onclick="switchTab('disputes')">Disputes</button>
                 <button class="tab" onclick="switchTab('profile')">Profile</button>
             </div>
 
@@ -397,6 +398,25 @@
                 </div>
 
                 <div id="billingContainer"></div>
+            </div>
+            <!-- Disputes Tab -->
+            <div id="disputesTab" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Disputes</div>
+                        <div class="stat-value" id="totalDisputes">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pending Review</div>
+                        <div class="stat-value" id="pendingDisputes">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Approved</div>
+                        <div class="stat-value" id="approvedDisputes">0</div>
+                    </div>
+                </div>
+
+                <div id="disputesContainer"></div>
             </div>
 
             <!-- Profile Tab -->
@@ -477,6 +497,7 @@
 
             if (tab === 'leads') loadLeads();
             if (tab === 'billing') loadBilling();
+            if (tab === 'disputes') loadDisputes();
             if (tab === 'profile') loadProfile();
         }
 
@@ -567,6 +588,12 @@
                                 <div class="info-value">${assignment.status}</div>
                             </div>
                         </div>
+                        ${assignment.status === 'assigned' || assignment.status === 'contacted' ? `
+                        <div style="margin-top: 15px;">
+                            <button onclick="showDisputeForm('${lead.id}')" style="background: #f59e0b; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                                Submit Dispute</button>
+                            </div>
+                        ` : ''}
                     </div>
                 `;
             }).join('');
@@ -778,6 +805,168 @@
                 errorDiv.style.display = 'block';
                 console.error('Network error:', error);
             }
+        }
+
+        async function loadDisputes() {
+            try {
+                const token = localStorage.getItem('contractorToken');
+                const response = await fetch(`${API_URL}/api/contractor/disputes`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderDisputes(data.disputes);
+                }
+            } catch (error) {
+                console.error('Failed to load disputes:', error);
+            }
+        }
+
+        function renderDisputes(disputes) {
+            const container = document.getElementById('disputesContainer');
+
+            // Update stats
+            document.getElementById('totalDisputes').textContent = disputes.length;
+            document.getElementById('pendingDisputes').textContent = disputes.filter(d => d.status === 'pending').length;
+            document.getElementById('approvedDisputes').textContent = disputes.filter(d => d.status === 'approved').length;
+
+            if (disputes.length === 0) {
+                container.innerHTML = '<div class="empty-state">No disputes submitted</div>';
+                return;
+            }
+
+            const html = disputes.map(dispute => {
+                const statusColor = {
+                    'pending': '#d97706',
+                    'approved': '#059669',
+                    'denied': '#dc2626'
+                }[dispute.status];
+
+                return `
+            <div class="lead-card">
+                <div class="lead-header">
+                    <div>
+                        <h3>${dispute.lead.customerFirstName} ${dispute.lead.customerLastName}</h3>
+                        <span class="lead-badge" style="background: ${statusColor}20; color: ${statusColor}">
+                            ${dispute.status.toUpperCase()}
+                        </span>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #718096;">
+                        Submitted: ${new Date(dispute.submittedAt).toLocaleDateString()}
+                    </div>
+                </div>
+                
+                <div class="lead-info">
+                    <div class="info-item">
+                        <div class="info-label">Reason</div>
+                        <div class="info-value">${dispute.reason.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Service Type</div>
+                        <div class="info-value">${dispute.lead.serviceType.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Lead Category</div>
+                        <div class="info-value">${dispute.lead.category}</div>
+                    </div>
+                </div>
+                
+                ${dispute.description ? `
+                <div style="margin-top: 15px;">
+                    <div class="info-label">Description</div>
+                    <div style="padding: 10px; background: #f7fafc; border-radius: 6px; margin-top: 5px;">
+                        ${dispute.description}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${dispute.status !== 'pending' ? `
+                <div style="margin-top: 15px; padding: 15px; background: #f7fafc; border-radius: 6px;">
+                    <strong>Resolution: ${dispute.resolution ? dispute.resolution.replace(/_/g, ' ').toUpperCase() : 'N/A'}</strong>
+                    ${dispute.resolutionNotes ? `<div style="margin-top: 10px;">${dispute.resolutionNotes}</div>` : ''}
+                    ${dispute.creditAmount ? `<div style="margin-top: 10px;">Credit Amount: $${dispute.creditAmount.toFixed(2)}</div>` : ''}
+                </div>
+                ` : ''}
+            </div>
+        `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        function showDisputeForm(leadId) {
+            const reasons = [
+                'invalid_phone',
+                'customer_no_contact',
+                'wrong_information',
+                'customer_not_interested',
+                'duplicate_lead',
+                'outside_service_area',
+                'other'
+            ];
+
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+
+            modal.innerHTML = `
+        <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%;">
+            <h2 style="margin-bottom: 20px;">Submit Dispute</h2>
+            <form id="disputeForm">
+                <div class="form-group">
+                    <label>Reason</label>
+                    <select id="disputeReason" required style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;">
+                        ${reasons.map(r => `<option value="${r}">${r.replace(/_/g, ' ').toUpperCase()}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description (explain the issue)</label>
+                    <textarea id="disputeDescription" rows="4" required style="width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;"></textarea>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn-primary">Submit Dispute</button>
+                    <button type="button" onclick="this.closest('div[style*=fixed]').remove()" style="padding: 12px 24px; background: #e2e8f0; border: none; border-radius: 6px; cursor: pointer;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+            document.body.appendChild(modal);
+
+            document.getElementById('disputeForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const reason = document.getElementById('disputeReason').value;
+                const description = document.getElementById('disputeDescription').value;
+
+                try {
+                    const token = localStorage.getItem('contractorToken');
+                    const response = await fetch(`${API_URL}/api/contractor/disputes`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            leadId: leadId,
+                            reason: reason,
+                            description: description
+                        })
+                    });
+
+                    if (response.ok) {
+                        modal.remove();
+                        alert('Dispute submitted successfully');
+                        loadLeads();
+                    } else {
+                        const data = await response.json();
+                        alert(data.error || 'Failed to submit dispute');
+                    }
+                } catch (error) {
+                    alert('Network error. Please try again.');
+                }
+            });
         }
     </script>
 </body>
