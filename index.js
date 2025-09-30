@@ -850,6 +850,221 @@ app.post('/api/contractor/change-password', contractorAuth, async (req, res) => 
   }
 });
 
+// Submit a dispute
+app.post('/api/contractor/disputes', contractorAuth, async (req, res) => {
+  try {
+    const { leadId, reason, description, evidence } = req.body;
+    
+    // Validate input
+    if (!leadId || !reason) {
+      return res.status(400).json({ error: 'Lead ID and reason required' });
+    }
+    
+    // Verify this lead was assigned to this contractor
+    const assignment = await prisma.leadAssignment.findFirst({
+      where: {
+        leadId: leadId,
+        contractorId: req.contractorId
+      }
+    });
+    
+    if (!assignment) {
+      return res.status(403).json({ error: 'You cannot dispute a lead that was not assigned to you' });
+    }
+    
+    // Check if dispute already exists for this lead
+    const existingDispute = await prisma.dispute.findFirst({
+      where: {
+        leadId: leadId,
+        contractorId: req.contractorId
+      }
+    });
+    
+    if (existingDispute) {
+      return res.status(400).json({ error: 'Dispute already submitted for this lead' });
+    }
+    
+    // Create dispute
+    const dispute = await prisma.dispute.create({
+      data: {
+        leadId: leadId,
+        contractorId: req.contractorId,
+        reason: reason,
+        description: description || null,
+        evidence: evidence || null,
+        status: 'pending'
+      }
+    });
+    
+    console.log('Dispute submitted:', dispute.id);
+    
+    res.json({
+      success: true,
+      dispute: dispute
+    });
+    
+  } catch (error) {
+    console.error('Dispute submission error:', error);
+    res.status(500).json({ error: 'Failed to submit dispute' });
+  }
+});
+
+// Get contractor's disputes
+app.get('/api/contractor/disputes', contractorAuth, async (req, res) => {
+  try {
+    const disputes = await prisma.dispute.findMany({
+      where: {
+        contractorId: req.contractorId
+      },
+      include: {
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            serviceType: true,
+            category: true
+          }
+        }
+      },
+      orderBy: {
+        submittedAt: 'desc'
+      }
+    });
+    
+    res.json({
+      success: true,
+      disputes: disputes
+    });
+    
+  } catch (error) {
+    console.error('Disputes fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch disputes' });
+  }
+});
+// Get all disputes (admin)
+app.get('/api/admin/disputes', adminAuth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    
+    const where = {};
+    if (status) where.status = status;
+    
+    const disputes = await prisma.dispute.findMany({
+      where,
+      include: {
+        contractor: {
+          select: {
+            businessName: true,
+            email: true,
+            phone: true
+          }
+        },
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            customerEmail: true,
+            serviceType: true,
+            category: true,
+            price: true
+          }
+        }
+      },
+      orderBy: {
+        submittedAt: 'desc'
+      }
+    });
+    
+    const summary = {
+      total: disputes.length,
+      pending: disputes.filter(d => d.status === 'pending').length,
+      approved: disputes.filter(d => d.status === 'approved').length,
+      denied: disputes.filter(d => d.status === 'denied').length
+    };
+    
+    res.json({
+      success: true,
+      summary,
+      disputes: disputes
+    });
+    
+  } catch (error) {
+    console.error('Disputes fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch disputes' });
+  }
+});
+
+// Resolve a dispute (admin)
+app.patch('/api/admin/disputes/:id', adminAuth, async (req, res) => {
+  try {
+    const { status, resolution, resolutionNotes, creditAmount } = req.body;
+    
+    if (!status || !resolution) {
+      return res.status(400).json({ error: 'Status and resolution required' });
+    }
+    
+    const dispute = await prisma.dispute.update({
+      where: { id: req.params.id },
+      data: {
+        status: status,
+        resolution: resolution,
+        resolutionNotes: resolutionNotes || null,
+        creditAmount: creditAmount || null,
+        resolvedAt: new Date()
+      },
+      include: {
+        contractor: true,
+        lead: true
+      }
+    });
+    
+    // If approved, update the billing record
+    if (status === 'approved' && resolution !== 'denied') {
+      const billingRecord = await prisma.billingRecord.findFirst({
+        where: {
+          leadId: dispute.leadId,
+          contractorId: dispute.contractorId
+        }
+      });
+      
+      if (billingRecord) {
+        if (resolution === 'full_credit') {
+          // Mark billing as credited
+          await prisma.billingRecord.update({
+            where: { id: billingRecord.id },
+            data: { 
+              status: 'credited',
+              notes: `Dispute approved: ${resolutionNotes || 'Full credit issued'}`
+            }
+          });
+        } else if (resolution === 'partial_credit' && creditAmount) {
+          // Reduce the amount owed
+          await prisma.billingRecord.update({
+            where: { id: billingRecord.id },
+            data: { 
+              amountOwed: creditAmount,
+              notes: `Dispute approved: Partial credit. ${resolutionNotes || ''}`
+            }
+          });
+        }
+      }
+    }
+    
+    console.log('Dispute resolved:', dispute.id, status, resolution);
+    
+    res.json({
+      success: true,
+      dispute: dispute
+    });
+    
+  } catch (error) {
+    console.error('Dispute resolution error:', error);
+    res.status(500).json({ error: 'Failed to resolve dispute' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
