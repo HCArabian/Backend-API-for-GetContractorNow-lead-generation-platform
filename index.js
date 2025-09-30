@@ -14,6 +14,12 @@ const {
 } = require("./auth");
 
 const app = express();
+const path = require('path');
+
+// Contractor portal route
+app.get('/contractor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // CORS - Allow requests from your Webflow site
 app.use(
@@ -30,6 +36,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
+
+// Serve static files from public folder
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -177,9 +186,6 @@ app.post("/api/leads/submit", async (req, res) => {
   }
 });
 
-// ============================================
-// TWILIO WEBHOOK - BILLING AUTOMATION
-// ============================================
 // ============================================
 // TWILIO WEBHOOK - BILLING AUTOMATION
 // ============================================
