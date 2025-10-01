@@ -1385,6 +1385,86 @@ app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
   }
 });
 
+// ============================================
+// CRON ENDPOINT - NUMBER RECYCLING
+// ============================================
+app.post('/api/cron/recycle-numbers', async (req, res) => {
+  // Verify cron secret to prevent unauthorized access
+  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    console.log('Unauthorized cron attempt');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('🔄 Cron triggered: Starting number recycling...');
+  console.log('Time:', new Date().toISOString());
+  
+  try {
+    const now = new Date();
+    
+    // Find expired assigned numbers
+    const expiredNumbers = await prisma.twilioNumberPool.findMany({
+      where: {
+        status: 'assigned',
+        expiresAt: { lte: now }
+      }
+    });
+
+    console.log(`📋 Found ${expiredNumbers.length} expired numbers to recycle`);
+
+    for (const number of expiredNumbers) {
+      await prisma.twilioNumberPool.update({
+        where: { id: number.id },
+        data: {
+          status: 'available',
+          currentLeadId: null,
+          assignedAt: null,
+          expiresAt: null
+        }
+      });
+      console.log(`✅ Released: ${number.phoneNumber}`);
+    }
+
+    // Get updated pool status
+    const available = await prisma.twilioNumberPool.count({
+      where: { status: 'available' }
+    });
+    const assigned = await prisma.twilioNumberPool.count({
+      where: { status: 'assigned' }
+    });
+    const total = await prisma.twilioNumberPool.count();
+
+    const status = {
+      recycled: expiredNumbers.length,
+      available,
+      assigned,
+      total,
+      utilization: ((assigned / total) * 100).toFixed(1) + '%'
+    };
+
+    console.log('📊 Pool Status:', status);
+
+    // Alert if running low
+    if (available < 5) {
+      console.log('⚠️ WARNING: Less than 5 numbers available!');
+    }
+
+    res.json({
+      success: true,
+      ...status
+    });
+
+  } catch (error) {
+    console.error('❌ Recycling error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to recycle numbers',
+      message: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
