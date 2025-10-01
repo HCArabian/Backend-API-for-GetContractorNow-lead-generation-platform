@@ -135,6 +135,7 @@ model Contractor {
   disputes          Dispute[]
   feedback          CustomerFeedback[]
   
+  @@index([phone])
   @@index([status])
   @@index([isAcceptingLeads])
   @@index([businessZip])
@@ -161,6 +162,7 @@ model LeadAssignment {
   @@index([contractorId])
   @@index([status])
   @@index([responseDeadline])
+  @@index([assignedAt])
 }
 
 model BillingRecord {

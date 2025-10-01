@@ -14,11 +14,11 @@ const {
 } = require("./auth");
 
 const app = express();
-const path = require('path');
+const path = require("path");
 
 // Contractor portal route
-app.get('/contractor', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get("/contractor", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // CORS - Allow requests from your Webflow site
@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhoo
 app.use(cookieParser());
 
 // Serve static files from public folder
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -187,11 +187,10 @@ app.post("/api/leads/submit", async (req, res) => {
 });
 
 // ============================================
-// TWILIO WEBHOOK - BILLING AUTOMATION
+// TWILIO WEBHOOK - CALLER ID ROUTING
 // ============================================
 app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   try {
-    // Get Twilio's call data (sent as form-urlencoded)
     const {
       CallSid: callSid,
       CallStatus: callStatus,
@@ -203,111 +202,152 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       RecordingSid: recordingSid,
     } = req.body;
 
-    console.log("📞 TWILIO WEBHOOK RECEIVED:", {
+    console.log("📞 TWILIO WEBHOOK:", {
       callSid,
       callStatus,
-      callDuration,
-      from,
-      to,
+      from: from,
+      to: to,
       direction,
     });
 
     // ============================================
-    // HANDLE INCOMING CALLS WITH TWIML
+    // HANDLE INCOMING CALLS WITH CALLER ID ROUTING
     // ============================================
 
-    // If this is the initial call (not a status callback), return TwiML
     if (
       !callStatus ||
       callStatus === "ringing" ||
       callStatus === "in-progress"
     ) {
-      console.log("📞 Handling incoming call with TwiML...");
+      console.log("📞 Incoming call - routing based on caller ID...");
 
-      // Find tracking number to get customer phone
-      const trackingRecord = await prisma.trackingNumber.findFirst({
+      // Normalize phone numbers (remove +1, spaces, etc.)
+      const normalizedFrom = from.replace(/\D/g, "").slice(-10);
+
+      // Find contractor by phone number
+      const contractor = await prisma.contractor.findFirst({
         where: {
-          twilioNumber: to,
-          status: "active",
+          phone: {
+            contains: normalizedFrom,
+          },
         },
       });
 
-      if (trackingRecord) {
-        // Forward call to customer and record it
+      if (!contractor) {
+        console.error("❌ Contractor not found for phone:", from);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">We could not identify your account. Please contact support.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      console.log("✅ Contractor identified:", contractor.businessName);
+
+      // Find the most recent ACTIVE lead assigned to this contractor
+      // Priority: assigned > contacted
+      const activeAssignment = await prisma.leadAssignment.findFirst({
+        where: {
+          contractorId: contractor.id,
+          status: {
+            in: ["assigned", "contacted"],
+          },
+        },
+        include: {
+          lead: true,
+        },
+        orderBy: [
+          { status: "asc" }, // 'assigned' before 'contacted'
+          { assignedAt: "desc" },
+        ],
+      });
+
+      if (!activeAssignment) {
+        console.error(
+          "❌ No active leads for contractor:",
+          contractor.businessName
+        );
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">You have no active leads assigned at this time.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      const customerPhone = activeAssignment.lead.customerPhone;
+      console.log(
+        "✅ Routing to customer:",
+        customerPhone,
+        "for lead:",
+        activeAssignment.leadId
+      );
+
+      // Forward call and record
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">Connecting your call, please wait.</Say>
   <Dial record="record-from-answer" recordingStatusCallback="${process.env.RAILWAY_URL}/api/webhooks/twilio/call-status">
-    ${trackingRecord.customerNumber}
+    ${customerPhone}
   </Dial>
 </Response>`;
 
-        console.log(
-          "✅ Forwarding call to customer:",
-          trackingRecord.customerNumber
-        );
-        return res.type("text/xml").send(twiml);
-      } else {
-        // No tracking number found - play error message
-        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, this number is not currently active. Please contact support.</Say>
-  <Hangup/>
-</Response>`;
-
-        return res.type("text/xml").send(twiml);
-      }
+      return res.type("text/xml").send(twiml);
     }
 
     // ============================================
     // HANDLE STATUS CALLBACKS (for billing)
     // ============================================
 
-    // Validate required fields
     if (!callSid) {
-      return res.status(400).json({ error: "Missing required Twilio fields" });
+      return res.status(400).json({ error: "Missing CallSid" });
     }
 
-    // STEP 1: Find the tracking number record
-    const trackingNumber = await prisma.trackingNumber.findFirst({
+    // Normalize caller phone number
+    const normalizedFrom = from.replace(/\D/g, "").slice(-10);
+
+    // Find contractor by phone
+    const contractor = await prisma.contractor.findFirst({
       where: {
-        twilioNumber: to,
-        status: "active",
+        phone: {
+          contains: normalizedFrom,
+        },
       },
     });
 
-    if (!trackingNumber) {
-      console.error("❌ Tracking number not found:", to);
-      return res.status(404).json({ error: "Tracking number not found" });
+    if (!contractor) {
+      console.error("❌ Contractor not found for billing:", from);
+      return res.json({ success: true, message: "Contractor not found" });
     }
 
-    // Get the lead separately
-    const lead = await prisma.lead.findUnique({
-      where: { id: trackingNumber.leadId },
+    // Find the active assignment for this contractor
+    const assignment = await prisma.leadAssignment.findFirst({
+      where: {
+        contractorId: contractor.id,
+        status: {
+          in: ["assigned", "contacted"],
+        },
+      },
       include: {
-        assignment: true,
+        lead: true,
       },
+      orderBy: [{ status: "asc" }, { assignedAt: "desc" }],
     });
 
-    if (!lead) {
-      console.error("❌ Lead not found:", trackingNumber.leadId);
-      return res.status(404).json({ error: "Lead not found" });
-    }
-
-    console.log("✅ Found tracking number for Lead ID:", trackingNumber.leadId);
-
-    // Get contractor ID from lead assignment
-    const contractorId = lead.assignment?.contractorId;
-
-    if (!contractorId) {
+    if (!assignment) {
       console.error(
-        "❌ No contractor assigned to lead:",
-        trackingNumber.leadId
+        "❌ No active assignment for contractor:",
+        contractor.businessName
       );
-      return res.status(400).json({ error: "No contractor assigned" });
+      return res.json({ success: true, message: "No active assignment" });
     }
 
-    // STEP 2: Create or update CallLog
+    const lead = assignment.lead;
+
+    console.log("✅ Processing call for lead:", lead.id);
+
+    // Create or update CallLog
     const callLog = await prisma.callLog.upsert({
       where: {
         callSid: callSid,
@@ -321,12 +361,9 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       },
       create: {
         callSid: callSid,
-        leadId: trackingNumber.leadId,
-        contractorId: contractorId,
-        callDirection:
-          direction === "inbound"
-            ? "customer_to_contractor"
-            : "contractor_to_customer",
+        leadId: lead.id,
+        contractorId: contractor.id,
+        callDirection: "contractor_to_customer",
         trackingNumber: to,
         callStartedAt: new Date(),
         callEndedAt: callStatus === "completed" ? new Date() : null,
@@ -337,86 +374,81 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       },
     });
 
-    console.log("✅ CallLog created/updated:", callLog.id);
+    console.log("✅ CallLog:", callLog.id, "Duration:", callDuration);
 
-    // STEP 3: BILLING LOGIC - THE CRITICAL PART!
+    // BILLING LOGIC
     if (
       callStatus === "completed" &&
       callDuration &&
       parseInt(callDuration) > 30
     ) {
-      console.log("💰 Call qualifies for billing (>30 seconds)");
+      console.log("💰 Call qualifies for billing");
 
-      // Check if billing record already exists (prevent double-billing)
+      // Check for existing billing
       const existingBilling = await prisma.billingRecord.findFirst({
         where: {
-          leadId: trackingNumber.leadId,
-          contractorId: contractorId,
+          leadId: lead.id,
+          contractorId: contractor.id,
         },
       });
 
       if (existingBilling) {
-        console.log("⚠️ Billing record already exists - skipping duplicate");
+        console.log("⚠️  Billing already exists");
         return res.json({
           success: true,
-          message: "Call logged - billing already exists",
+          message: "Call logged - billing exists",
           callLogId: callLog.id,
         });
       }
 
-      // CREATE BILLING RECORD
+      // Create billing record - use lead's actual price
       const billingRecord = await prisma.billingRecord.create({
         data: {
-          leadId: trackingNumber.leadId,
-          contractorId: contractorId,
-          amountOwed: 250.0,
+          leadId: lead.id,
+          contractorId: contractor.id,
+          amountOwed: lead.price, // Use dynamic pricing from lead
           status: "pending",
           dateIncurred: new Date(),
         },
       });
 
-      console.log("🎉 BILLING RECORD CREATED:", {
+      console.log("🎉 BILLING CREATED:", {
         billingId: billingRecord.id,
-        contractorId: contractorId,
-        leadId: trackingNumber.leadId,
-        amount: "$250.00",
+        amount: `$${lead.price}`,
+        lead: lead.id,
       });
 
-      // STEP 4: Update lead status to "contacted"
+      // Update lead status
       await prisma.lead.update({
-        where: { id: trackingNumber.leadId },
+        where: { id: lead.id },
+        data: {
+          status: "contacted",
+          firstContactAt: new Date(),
+        },
+      });
+
+      // Update assignment status
+      await prisma.leadAssignment.update({
+        where: { id: assignment.id },
         data: {
           status: "contacted",
         },
       });
-
-      // STEP 5: Update lead assignment status
-      if (lead.assignment) {
-        await prisma.leadAssignment.update({
-          where: { id: lead.assignment.id },
-          data: {
-            status: "contacted",
-          },
-        });
-      }
 
       return res.json({
         success: true,
         message: "Call logged and billing created",
         callLogId: callLog.id,
         billingRecordId: billingRecord.id,
-        amount: 250.0,
+        amount: lead.price,
       });
     }
 
-    // Call completed but didn't meet billing threshold
     return res.json({
       success: true,
-      message: "Call logged - did not meet billing criteria",
+      message: "Call logged - no billing",
       callLogId: callLog.id,
-      reason: callDuration
-        ? `Duration too short (${callDuration}s < 30s)`
-        : "No duration recorded",
+      reason: callDuration ? `Duration: ${callDuration}s` : "No duration",
     });
   } catch (error) {
     console.error("❌ WEBHOOK ERROR:", error);
@@ -1168,33 +1200,44 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
 });
 
 // Submit customer feedback (public endpoint - no auth required)
-app.post('/api/feedback/submit', async (req, res) => {
+app.post("/api/feedback/submit", async (req, res) => {
   try {
-    const { leadId, contractorCalled, outcome, rating, feedbackText, wouldRecommend } = req.body;
-    
+    const {
+      leadId,
+      contractorCalled,
+      outcome,
+      rating,
+      feedbackText,
+      wouldRecommend,
+    } = req.body;
+
     // Validate lead exists
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
-      include: { assignment: true }
+      include: { assignment: true },
     });
-    
+
     if (!lead) {
-      return res.status(404).json({ error: 'Lead not found' });
+      return res.status(404).json({ error: "Lead not found" });
     }
-    
+
     if (!lead.assignment) {
-      return res.status(400).json({ error: 'No contractor assigned to this lead' });
+      return res
+        .status(400)
+        .json({ error: "No contractor assigned to this lead" });
     }
-    
+
     // Check if feedback already exists
     const existingFeedback = await prisma.customerFeedback.findFirst({
-      where: { leadId: leadId }
+      where: { leadId: leadId },
     });
-    
+
     if (existingFeedback) {
-      return res.status(400).json({ error: 'Feedback already submitted for this lead' });
+      return res
+        .status(400)
+        .json({ error: "Feedback already submitted for this lead" });
     }
-    
+
     // Create feedback
     const feedback = await prisma.customerFeedback.create({
       data: {
@@ -1204,52 +1247,55 @@ app.post('/api/feedback/submit', async (req, res) => {
         outcome: outcome || null,
         rating: rating || null,
         feedbackText: feedbackText || null,
-        wouldRecommend: wouldRecommend || null
-      }
+        wouldRecommend: wouldRecommend || null,
+      },
     });
-    
-    console.log('Customer feedback received:', feedback.id);
-    
+
+    console.log("Customer feedback received:", feedback.id);
+
     // If customer says contractor never called, flag for review
     if (contractorCalled === false) {
-      console.log('WARNING: Customer reports no contact from contractor for lead:', leadId);
+      console.log(
+        "WARNING: Customer reports no contact from contractor for lead:",
+        leadId
+      );
     }
-    
+
     res.json({
       success: true,
-      message: 'Thank you for your feedback!'
+      message: "Thank you for your feedback!",
     });
-    
   } catch (error) {
-    console.error('Feedback submission error:', error);
-    res.status(500).json({ error: 'Failed to submit feedback' });
+    console.error("Feedback submission error:", error);
+    res.status(500).json({ error: "Failed to submit feedback" });
   }
 });
 
 // Get feedback for admin
-app.get('/api/admin/feedback', adminAuth, async (req, res) => {
+app.get("/api/admin/feedback", adminAuth, async (req, res) => {
   try {
     const { contractorId, contractorCalled } = req.query;
-    
+
     const where = {};
     if (contractorId) where.contractorId = contractorId;
-    if (contractorCalled !== undefined) where.contractorCalled = contractorCalled === 'true';
-    
+    if (contractorCalled !== undefined)
+      where.contractorCalled = contractorCalled === "true";
+
     const feedback = await prisma.customerFeedback.findMany({
       where,
       include: {
         contractor: {
           select: {
             businessName: true,
-            email: true
-          }
-        }
+            email: true,
+          },
+        },
       },
       orderBy: {
-        submittedAt: 'desc'
-      }
+        submittedAt: "desc",
+      },
     });
-    
+
     // Get lead details separately
     const feedbackWithLeads = await Promise.all(
       feedback.map(async (fb) => {
@@ -1260,50 +1306,57 @@ app.get('/api/admin/feedback', adminAuth, async (req, res) => {
             customerLastName: true,
             customerPhone: true,
             serviceType: true,
-            category: true
-          }
+            category: true,
+          },
         });
-        
+
         return {
           ...fb,
-          lead
+          lead,
         };
       })
     );
-    
+
     const summary = {
       total: feedbackWithLeads.length,
-      contractorCalled: feedbackWithLeads.filter(f => f.contractorCalled === true).length,
-      contractorDidNotCall: feedbackWithLeads.filter(f => f.contractorCalled === false).length,
-      avgRating: feedbackWithLeads.filter(f => f.rating).length > 0
-        ? (feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) / feedbackWithLeads.filter(f => f.rating).length).toFixed(1)
-        : 'N/A'
+      contractorCalled: feedbackWithLeads.filter(
+        (f) => f.contractorCalled === true
+      ).length,
+      contractorDidNotCall: feedbackWithLeads.filter(
+        (f) => f.contractorCalled === false
+      ).length,
+      avgRating:
+        feedbackWithLeads.filter((f) => f.rating).length > 0
+          ? (
+              feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) /
+              feedbackWithLeads.filter((f) => f.rating).length
+            ).toFixed(1)
+          : "N/A",
     };
-    
+
     res.json({
       success: true,
       summary,
-      feedback: feedbackWithLeads
+      feedback: feedbackWithLeads,
     });
-    
   } catch (error) {
-    console.error('Feedback fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch feedback' });
+    console.error("Feedback fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch feedback" });
   }
 });
 
 // Get contractor's feedback (for their portal)
-app.get('/api/contractor/feedback', contractorAuth, async (req, res) => {
+app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
   try {
     const feedback = await prisma.customerFeedback.findMany({
       where: {
-        contractorId: req.contractorId
+        contractorId: req.contractorId,
       },
       orderBy: {
-        submittedAt: 'desc'
-      }
+        submittedAt: "desc",
+      },
     });
-    
+
     // Get lead details separately
     const feedbackWithLeads = await Promise.all(
       feedback.map(async (fb) => {
@@ -1313,34 +1366,38 @@ app.get('/api/contractor/feedback', contractorAuth, async (req, res) => {
             customerFirstName: true,
             customerLastName: true,
             serviceType: true,
-            category: true
-          }
+            category: true,
+          },
         });
-        
+
         return {
           ...fb,
-          lead
+          lead,
         };
       })
     );
-    
+
     const summary = {
       total: feedbackWithLeads.length,
-      avgRating: feedbackWithLeads.filter(f => f.rating).length > 0
-        ? (feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) / feedbackWithLeads.filter(f => f.rating).length).toFixed(1)
-        : 'N/A',
-      wouldRecommend: feedbackWithLeads.filter(f => f.wouldRecommend === true).length
+      avgRating:
+        feedbackWithLeads.filter((f) => f.rating).length > 0
+          ? (
+              feedbackWithLeads.reduce((sum, f) => sum + (f.rating || 0), 0) /
+              feedbackWithLeads.filter((f) => f.rating).length
+            ).toFixed(1)
+          : "N/A",
+      wouldRecommend: feedbackWithLeads.filter((f) => f.wouldRecommend === true)
+        .length,
     };
-    
+
     res.json({
       success: true,
       summary,
-      feedback: feedbackWithLeads
+      feedback: feedbackWithLeads,
     });
-    
   } catch (error) {
-    console.error('Feedback fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch feedback' });
+    console.error("Feedback fetch error:", error);
+    res.status(500).json({ error: "Failed to fetch feedback" });
   }
 });
 
