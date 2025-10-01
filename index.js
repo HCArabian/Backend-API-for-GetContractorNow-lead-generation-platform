@@ -4,7 +4,7 @@ require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { calculateLeadScore } = require("./scoring");
-const { assignContractorToLead } = require("./assignment");
+const { assignContractor } = require("./assignment");
 const cookieParser = require("cookie-parser");
 const {
   hashPassword,
@@ -139,7 +139,7 @@ app.post("/api/leads/submit", async (req, res) => {
 
     console.log("\n🔄 Starting contractor assignment...");
 
-    const assignmentResult = await assignContractorToLead(savedLead.id, prisma);
+    const assignmentResult = await assignContractor(savedLead.id, prisma);
 
     if (assignmentResult.success && assignmentResult.assigned) {
       console.log(
