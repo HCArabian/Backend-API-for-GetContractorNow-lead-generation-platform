@@ -768,31 +768,15 @@
                 return new Date(b.assignedAt) - new Date(a.assignedAt);
             });
 
-            // Get the tracking number from any lead (they all share the same one)
-            const trackingNumber = leads.find(l => l.trackingNumber)?.trackingNumber;
-
-            // Show info banner if there's a tracking number
-            const infoBanner = trackingNumber ? `
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin-bottom: 24px; color: white;">
-            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                <span style="font-size: 24px;">📞</span>
-                <div>
-                    <div style="font-size: 14px; opacity: 0.9; font-weight: 500;">YOUR CALL NUMBER</div>
-                    <div style="font-size: 24px; font-weight: 700; letter-spacing: 1px;">${trackingNumber}</div>
-                </div>
-            </div>
-            <div style="font-size: 13px; opacity: 0.85; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                💡 <strong>How it works:</strong> Call this number for any lead below. Our system automatically connects you to the right customer based on priority order.
-            </div>
-        </div>
-    ` : '';
+            // Get any tracking number from the leads (they now each have unique ones)
+            const activeLeads = sortedLeads.filter(l => l.status === 'assigned');
 
             const html = sortedLeads.map((assignment, index) => {
                 const lead = assignment.lead;
                 const deadline = new Date(assignment.responseDeadline);
                 const isUrgent = deadline < new Date(Date.now() + 60 * 60 * 1000);
                 const isActive = assignment.status === 'assigned';
-                const priorityNumber = isActive ? sortedLeads.filter(a => a.status === 'assigned').indexOf(assignment) + 1 : null;
+                const priorityNumber = isActive ? activeLeads.indexOf(assignment) + 1 : null;
 
                 return `
             <div class="lead-card" style="${priorityNumber === 1 ? 'border: 2px solid #667eea;' : ''}">
@@ -818,11 +802,11 @@
                     </div>
                 </div>
 
-                ${trackingNumber && isActive ? `
+                ${assignment.trackingNumber && isActive ? `
                 <div class="tracking-box">
                     <div class="tracking-label">${priorityNumber === 1 ? '🔥 PRIORITY - Call Now' : `Position #${priorityNumber} in Queue`}</div>
-                    <div class="tracking-number">${trackingNumber}</div>
-                    <a href="tel:${trackingNumber}" class="btn-call">
+                    <div class="tracking-number">${assignment.trackingNumber}</div>
+                    <a href="tel:${assignment.trackingNumber}" class="btn-call">
                         <span>📞</span> Call Customer
                     </a>
                 </div>
@@ -868,7 +852,7 @@
         `;
             }).join('');
 
-            container.innerHTML = infoBanner + html;
+            container.innerHTML = html;
         }
 
         async function loadBilling() {

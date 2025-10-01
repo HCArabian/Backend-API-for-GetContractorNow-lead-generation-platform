@@ -787,22 +787,10 @@ app.get("/api/contractor/leads", contractorAuth, async (req, res) => {
       },
     });
 
-    // Get tracking numbers for each lead
-    const leadsWithTracking = await Promise.all(
-      assignments.map(async (assignment) => {
-        const trackingNumber = await prisma.trackingNumber.findFirst({
-          where: {
-            leadId: assignment.leadId,
-            status: "active",
-          },
-        });
-
-        return {
-          ...assignment,
-          trackingNumber: trackingNumber?.twilioNumber || null,
-        };
-      })
-    );
+    res.json({
+  success: true,
+  leads: assignments,
+});
 
     res.json({
       success: true,
