@@ -34,7 +34,6 @@ app.use(
   })
 );
 
-app.use("/api/", apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
