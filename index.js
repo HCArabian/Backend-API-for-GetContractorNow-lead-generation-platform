@@ -16,6 +16,15 @@ const {
 const app = express();
 const path = require("path");
 
+const rateLimit = require('express-rate-limit');
+
+// Rate limiter for all API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests, please try again later.'
+});
+
 // Contractor portal route
 app.get("/contractor", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -33,6 +42,7 @@ app.use(
   })
 );
 
+app.use('/api/', apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
