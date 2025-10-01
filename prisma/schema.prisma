@@ -147,22 +147,17 @@ model LeadAssignment {
   leadId           String   @unique
   contractorId     String
   
-  // Assignment Details
+  trackingNumber   String?  // Now from the pool
   assignedAt       DateTime @default(now())
   responseDeadline DateTime
-  status           String   @default("assigned") // assigned, contacted, completed, expired
+  status           String   @default("assigned")
   
-  // Tracking
-  responseTime     Int?     // Actual minutes to first contact
-  
-  // Relations
   lead             Lead      @relation(fields: [leadId], references: [id])
   contractor       Contractor @relation(fields: [contractorId], references: [id])
   
   @@index([contractorId])
   @@index([status])
-  @@index([responseDeadline])
-  @@index([assignedAt])
+  @@index([trackingNumber])
 }
 
 model BillingRecord {
@@ -364,4 +359,18 @@ model NotificationLog {
   @@index([contractorId])
   @@index([sentAt])
   @@index([type])
+}
+
+model TwilioNumberPool {
+  id            String    @id @default(uuid())
+  phoneNumber   String    @unique
+  status        String    @default("available")
+  currentLeadId String?
+  assignedAt    DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  
+  @@index([status])
+  @@index([phoneNumber])
+  @@index([expiresAt])
 }
