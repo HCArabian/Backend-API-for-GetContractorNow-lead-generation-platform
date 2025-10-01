@@ -1,4 +1,5 @@
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
@@ -15,15 +16,6 @@ const {
 
 const app = express();
 const path = require("path");
-
-const rateLimit = require('express-rate-limit');
-
-// Rate limiter for all API endpoints
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests, please try again later.'
-});
 
 // Contractor portal route
 app.get("/contractor", (req, res) => {
@@ -42,10 +34,32 @@ app.use(
   })
 );
 
-app.use('/api/', apiLimiter);
+app.use("/api/", apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
+
+// Rate limiting for API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per 15 minutes
+  message: { error: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to all API routes
+app.use("/api/", apiLimiter);
+
+// Stricter rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // only 5 login attempts per 15 minutes
+  message: { error: "Too many login attempts, please try again later." },
+});
+
+app.use("/api/contractor/login", authLimiter);
+app.use("/api/admin/", authLimiter);
 
 // Serve static files from public folder
 app.use(express.static(path.join(__dirname, "public")));
@@ -1398,29 +1412,29 @@ app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
 // ============================================
 // CRON ENDPOINT - NUMBER RECYCLING
 // ============================================
-app.post('/api/cron/recycle-numbers', async (req, res) => {
-  const cronSecret = req.headers['CRON_SECRET'] || req.query.secret;
-  
-  console.log('Expected:', process.env.CRON_SECRET);
-  console.log('Received:', cronSecret);
-  
+app.post("/api/cron/recycle-numbers", async (req, res) => {
+  const cronSecret = req.headers["CRON_SECRET"] || req.query.secret;
+
+  console.log("Expected:", process.env.CRON_SECRET);
+  console.log("Received:", cronSecret);
+
   if (cronSecret !== process.env.CRON_SECRET) {
-    console.log('Unauthorized cron attempt');
-    return res.status(401).json({ error: 'Unauthorized' });
+    console.log("Unauthorized cron attempt");
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  console.log('🔄 Cron triggered: Starting number recycling...');
-  console.log('Time:', new Date().toISOString());
-  
+  console.log("🔄 Cron triggered: Starting number recycling...");
+  console.log("Time:", new Date().toISOString());
+
   try {
     const now = new Date();
-    
+
     // Find expired assigned numbers
     const expiredNumbers = await prisma.twilioNumberPool.findMany({
       where: {
-        status: 'assigned',
-        expiresAt: { lte: now }
-      }
+        status: "assigned",
+        expiresAt: { lte: now },
+      },
     });
 
     console.log(`📋 Found ${expiredNumbers.length} expired numbers to recycle`);
@@ -1429,21 +1443,21 @@ app.post('/api/cron/recycle-numbers', async (req, res) => {
       await prisma.twilioNumberPool.update({
         where: { id: number.id },
         data: {
-          status: 'available',
+          status: "available",
           currentLeadId: null,
           assignedAt: null,
-          expiresAt: null
-        }
+          expiresAt: null,
+        },
       });
       console.log(`✅ Released: ${number.phoneNumber}`);
     }
 
     // Get updated pool status
     const available = await prisma.twilioNumberPool.count({
-      where: { status: 'available' }
+      where: { status: "available" },
     });
     const assigned = await prisma.twilioNumberPool.count({
-      where: { status: 'assigned' }
+      where: { status: "assigned" },
     });
     const total = await prisma.twilioNumberPool.count();
 
@@ -1452,27 +1466,26 @@ app.post('/api/cron/recycle-numbers', async (req, res) => {
       available,
       assigned,
       total,
-      utilization: ((assigned / total) * 100).toFixed(1) + '%'
+      utilization: ((assigned / total) * 100).toFixed(1) + "%",
     };
 
-    console.log('📊 Pool Status:', status);
+    console.log("📊 Pool Status:", status);
 
     // Alert if running low
     if (available < 5) {
-      console.log('⚠️ WARNING: Less than 5 numbers available!');
+      console.log("⚠️ WARNING: Less than 5 numbers available!");
     }
 
     res.json({
       success: true,
-      ...status
+      ...status,
     });
-
   } catch (error) {
-    console.error('❌ Recycling error:', error);
-    res.status(500).json({ 
+    console.error("❌ Recycling error:", error);
+    res.status(500).json({
       success: false,
-      error: 'Failed to recycle numbers',
-      message: error.message
+      error: "Failed to recycle numbers",
+      message: error.message,
     });
   }
 });
