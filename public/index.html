@@ -761,73 +761,114 @@
             document.getElementById('pendingLeads').textContent = leads.filter(l => l.status === 'assigned').length;
             document.getElementById('contactedLeads').textContent = leads.filter(l => l.status === 'contacted').length;
 
-            const html = leads.map(assignment => {
+            // Sort leads by priority: assigned first (by date), then contacted
+            const sortedLeads = [...leads].sort((a, b) => {
+                if (a.status === 'assigned' && b.status !== 'assigned') return -1;
+                if (a.status !== 'assigned' && b.status === 'assigned') return 1;
+                return new Date(b.assignedAt) - new Date(a.assignedAt);
+            });
+
+            // Get the tracking number from any lead (they all share the same one)
+            const trackingNumber = leads.find(l => l.trackingNumber)?.trackingNumber;
+
+            // Show info banner if there's a tracking number
+            const infoBanner = trackingNumber ? `
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin-bottom: 24px; color: white;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <span style="font-size: 24px;">📞</span>
+                <div>
+                    <div style="font-size: 14px; opacity: 0.9; font-weight: 500;">YOUR CALL NUMBER</div>
+                    <div style="font-size: 24px; font-weight: 700; letter-spacing: 1px;">${trackingNumber}</div>
+                </div>
+            </div>
+            <div style="font-size: 13px; opacity: 0.85; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                💡 <strong>How it works:</strong> Call this number for any lead below. Our system automatically connects you to the right customer based on priority order.
+            </div>
+        </div>
+    ` : '';
+
+            const html = sortedLeads.map((assignment, index) => {
                 const lead = assignment.lead;
                 const deadline = new Date(assignment.responseDeadline);
                 const isUrgent = deadline < new Date(Date.now() + 60 * 60 * 1000);
+                const isActive = assignment.status === 'assigned';
+                const priorityNumber = isActive ? sortedLeads.filter(a => a.status === 'assigned').indexOf(assignment) + 1 : null;
 
                 return `
-                    <div class="lead-card">
-                        <div class="lead-header">
-                            <div>
-                                <div class="lead-title">${lead.customerFirstName} ${lead.customerLastName}</div>
-                                <span class="lead-badge badge-${lead.category.toLowerCase()}">${lead.category}</span>
-                            </div>
-                            <div style="text-align: right; font-size: 12px; color: var(--gray-600);">
-                                <div>Assigned</div>
-                                <div style="font-weight: 600;">${new Date(assignment.assignedAt).toLocaleDateString()}</div>
-                            </div>
-                        </div>
-
-                        ${assignment.trackingNumber ? `
-                        <div class="tracking-box">
-                            <div class="tracking-label">Call Customer At:</div>
-                            <div class="tracking-number">${assignment.trackingNumber}</div>
-                            <a href="tel:${assignment.trackingNumber}" class="btn-call">
-                                <span>📞</span> Call Now
-                            </a>
-                        </div>
-                        ` : ''}
-
-                        <div class="lead-info">
-                            <div class="info-item">
-                                <div class="info-label">Service</div>
-                                <div class="info-value">${lead.serviceType.replace(/_/g, ' ')}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Timeline</div>
-                                <div class="info-value">${lead.timeline.replace(/_/g, ' ')}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Budget</div>
-                                <div class="info-value">${lead.budgetRange.replace(/_/g, ' ')}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Location</div>
-                                <div class="info-value">${lead.customerCity}, ${lead.customerState}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Response By</div>
-                                <div class="info-value" style="color: ${isUrgent ? 'var(--danger)' : 'var(--gray-900)'}">
-                                    ${deadline.toLocaleString()}
+            <div class="lead-card" style="${priorityNumber === 1 ? 'border: 2px solid #667eea;' : ''}">
+                <div class="lead-header">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                            ${priorityNumber ? `
+                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px;">
+                                    ${priorityNumber}
                                 </div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Status</div>
-                                <div class="info-value">${assignment.status}</div>
-                            </div>
+                            ` : ''}
+                            <div class="lead-title">${lead.customerFirstName} ${lead.customerLastName}</div>
                         </div>
-
-                        ${assignment.status === 'assigned' || assignment.status === 'contacted' ? `
-                            <button onclick="showDisputeForm('${lead.id}')" class="btn-dispute">
-                                Submit Dispute
-                            </button>
-                        ` : ''}
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <span class="lead-badge badge-${lead.category.toLowerCase()}">${lead.category}</span>
+                            ${priorityNumber === 1 ? '<span class="lead-badge" style="background: #667eea; color: white;">CALL FIRST</span>' : ''}
+                            ${assignment.status === 'contacted' ? '<span class="lead-badge" style="background: #10b981; color: white;">CONTACTED</span>' : ''}
+                        </div>
                     </div>
-                `;
+                    <div style="text-align: right; font-size: 12px; color: var(--gray-600);">
+                        <div>Assigned</div>
+                        <div style="font-weight: 600;">${new Date(assignment.assignedAt).toLocaleDateString()}</div>
+                    </div>
+                </div>
+
+                ${trackingNumber && isActive ? `
+                <div class="tracking-box">
+                    <div class="tracking-label">${priorityNumber === 1 ? '🔥 PRIORITY - Call Now' : `Position #${priorityNumber} in Queue`}</div>
+                    <div class="tracking-number">${trackingNumber}</div>
+                    <a href="tel:${trackingNumber}" class="btn-call">
+                        <span>📞</span> Call Customer
+                    </a>
+                </div>
+                ` : ''}
+
+                <div class="lead-info">
+                    <div class="info-item">
+                        <div class="info-label">Service</div>
+                        <div class="info-value">${lead.serviceType.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Timeline</div>
+                        <div class="info-value">${lead.timeline.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Budget</div>
+                        <div class="info-value">${lead.budgetRange.replace(/_/g, ' ')}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Location</div>
+                        <div class="info-value">${lead.customerCity}, ${lead.customerState}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Response By</div>
+                        <div class="info-value" style="color: ${isUrgent ? 'var(--danger)' : 'var(--gray-900)'}">
+                            ${deadline.toLocaleString()}
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Status</div>
+                        <div class="info-value" style="color: ${assignment.status === 'contacted' ? 'var(--success)' : 'var(--warning)'}">
+                            ${assignment.status.toUpperCase()}
+                        </div>
+                    </div>
+                </div>
+
+                ${assignment.status === 'assigned' || assignment.status === 'contacted' ? `
+                    <button onclick="showDisputeForm('${lead.id}')" class="btn-dispute">
+                        Submit Dispute
+                    </button>
+                ` : ''}
+            </div>
+        `;
             }).join('');
 
-            container.innerHTML = html;
+            container.innerHTML = infoBanner + html;
         }
 
         async function loadBilling() {
@@ -1276,4 +1317,5 @@
         }
     </script>
 </body>
+
 </html>
