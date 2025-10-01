@@ -811,11 +811,6 @@ app.get("/api/contractor/leads", contractorAuth, async (req, res) => {
       success: true,
       leads: assignments,
     });
-
-    res.json({
-      success: true,
-      leads: leadsWithTracking,
-    });
   } catch (error) {
     console.error("Leads fetch error:", error);
     res.status(500).json({ error: "Failed to fetch leads" });
