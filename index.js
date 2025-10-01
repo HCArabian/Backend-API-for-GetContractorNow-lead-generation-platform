@@ -1389,7 +1389,7 @@ app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
 // CRON ENDPOINT - NUMBER RECYCLING
 // ============================================
 app.post('/api/cron/recycle-numbers', async (req, res) => {
-  const cronSecret = req.headers['4979ea942dbc5716415fcf517b7dcd20d3c69ea091cc413bc75f514be2116033'] || req.query.secret;
+  const cronSecret = req.headers['CRON_SECRET'] || req.query.secret;
   
   console.log('Expected:', process.env.CRON_SECRET);
   console.log('Received:', cronSecret);
