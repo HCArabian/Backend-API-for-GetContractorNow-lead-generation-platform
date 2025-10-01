@@ -139,7 +139,7 @@ app.post("/api/leads/submit", async (req, res) => {
 
     console.log("\n🔄 Starting contractor assignment...");
 
-    const assignmentResult = await assignContractor(savedLead.id, prisma);
+    const assignmentResult = await assignContractor(savedLead);
 
     if (assignmentResult.success && assignmentResult.assigned) {
       console.log(
