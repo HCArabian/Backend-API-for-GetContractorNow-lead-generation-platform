@@ -15,7 +15,11 @@ const {
 } = require("./auth");
 
 const app = express();
-const path = require("path");
+
+// Trust Railway proxy
+app.set('trust proxy', 1);
+
+const path = require('path');
 
 // Contractor portal route
 app.get("/contractor", (req, res) => {
