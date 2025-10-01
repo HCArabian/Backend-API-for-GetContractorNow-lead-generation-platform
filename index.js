@@ -1389,8 +1389,10 @@ app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
 // CRON ENDPOINT - NUMBER RECYCLING
 // ============================================
 app.post('/api/cron/recycle-numbers', async (req, res) => {
-  // Verify cron secret to prevent unauthorized access
   const cronSecret = req.headers['CRON_SECRET'] || req.query.secret;
+  
+  console.log('Expected:', process.env.CRON_SECRET);
+  console.log('Received:', cronSecret);
   
   if (cronSecret !== process.env.CRON_SECRET) {
     console.log('Unauthorized cron attempt');
