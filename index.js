@@ -379,7 +379,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       if (existingBilling) {
         console.log("⚠️  Billing already exists");
 
-        // Release tracking number back to pool (contacted successfully)
+        // Release tracking number back to pool
         await prisma.twilioNumberPool.updateMany({
           where: {
             phoneNumber: to,
@@ -422,18 +422,31 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       // Auto-charge contractor via Stripe
       const { chargeContractorForLead } = require("./stripe-payments");
 
+      console.log("💳 Attempting to charge contractor via Stripe...");
+
       const chargeResult = await chargeContractorForLead(
         contractor.id,
         lead.id,
         lead.price,
-        `${lead.category} Lead - ${lead.serviceType} in ${lead.customerCity}`
+        `${lead.category} Lead - ${lead.serviceType.replace(/_/g, " ")} in ${
+          lead.customerCity
+        }, ${lead.customerState}`
       );
 
       if (chargeResult.success) {
-        console.log("Contractor auto-charged successfully");
+        console.log(
+          "✅ Contractor charged successfully:",
+          chargeResult.paymentIntentId
+        );
       } else {
-        console.error("Auto-charge failed:", chargeResult.error);
-        // Billing record already marked as failed in chargeContractorForLead
+        console.error("❌ Auto-charge failed:", chargeResult.error);
+        console.error("⚠️  Billing record marked as failed in database");
+
+        // Optionally: Disable contractor if payment fails
+        // await prisma.contractor.update({
+        //   where: { id: contractor.id },
+        //   data: { isAcceptingLeads: false }
+        // });
       }
 
       // Update lead status
@@ -471,9 +484,10 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
 
       return res.json({
         success: true,
-        message: "Call logged and billing created",
+        message: "Call logged, billing created, and payment processed",
         callLogId: callLog.id,
         billingRecordId: billingRecord.id,
+        paymentStatus: chargeResult.success ? "charged" : "failed",
         amount: lead.price,
       });
     }
@@ -1566,6 +1580,64 @@ app.get("/api/contractor/payment/status", contractorAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to check payment status" });
   }
 });
+
+// Stripe webhook handler
+app.post(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+      console.error("Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        const paymentIntent = event.data.object;
+        console.log("Payment succeeded:", paymentIntent.id);
+
+        // Update billing record
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: paymentIntent.id },
+          data: {
+            status: "paid",
+            paidAt: new Date(),
+          },
+        });
+        break;
+
+      case "payment_intent.payment_failed":
+        const failedPayment = event.data.object;
+        console.log("Payment failed:", failedPayment.id);
+
+        // Mark billing as failed
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: failedPayment.id },
+          data: {
+            status: "failed",
+            notes: `Payment failed: ${
+              failedPayment.last_payment_error?.message || "Unknown error"
+            }`,
+          },
+        });
+        break;
+
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    res.json({ received: true });
+  }
+);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
