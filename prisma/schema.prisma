@@ -82,6 +82,7 @@ model Lead {
 
 model Contractor {
   id                String   @id @default(uuid())
+   @@map("Contractor")
   
   // Business Info
   businessName      String
