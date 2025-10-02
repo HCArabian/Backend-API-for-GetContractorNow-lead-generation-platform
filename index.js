@@ -17,21 +17,21 @@ const {
 const app = express();
 
 // Trust Railway proxy
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
-const path = require('path');
+const path = require("path");
 
 // Contractor portal route
 app.get("/contractor", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.get('/api/debug/check-env', (req, res) => {
+app.get("/api/debug/check-env", (req, res) => {
   res.json({
     hasAdminPassword: !!process.env.ADMIN_PASSWORD,
     adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
     hasJwtSecret: !!process.env.JWT_SECRET,
-    jwtSecretLength: process.env.JWT_SECRET?.length || 0
+    jwtSecretLength: process.env.JWT_SECRET?.length || 0,
   });
 });
 
@@ -177,39 +177,28 @@ app.post("/api/leads/submit", async (req, res) => {
 
     const assignmentResult = await assignContractor(savedLead);
 
-    if (assignmentResult.success && assignmentResult.assigned) {
+    if (assignmentResult && assignmentResult.contractor) {
       console.log(
         "✅ Lead assigned to contractor:",
         assignmentResult.contractor.businessName
       );
 
-      // Return success with assignment details
       return res.json({
         success: true,
         message: "Lead received, approved, and assigned to contractor",
         leadId: savedLead.id,
         category: savedLead.category,
         score: savedLead.score,
-        assignment: {
-          contractor: assignmentResult.contractor.businessName,
-          responseDeadline: assignmentResult.assignment.responseDeadline,
-        },
       });
     } else {
-      console.log(
-        "⚠️  Lead saved but not assigned:",
-        assignmentResult.error || "No contractors available"
-      );
+      console.log("⚠️ Lead saved but not assigned");
 
-      // Lead saved but couldn't assign
       return res.json({
         success: true,
         message: "Lead received and approved, but no contractors available",
         leadId: savedLead.id,
         category: savedLead.category,
         score: savedLead.score,
-        warning:
-          assignmentResult.error || "No contractors available in this area",
       });
     }
   } catch (error) {

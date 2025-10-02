@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const { sendLeadNotificationEmail } = require("./notifications");
+const { sendNewLeadEmail } = require("./notifications");
 const { notifyContractorSMS } = require("./sms-notifications");
 
 async function assignContractor(lead) {
@@ -91,12 +91,13 @@ async function assignContractor(lead) {
     // Send email notification to contractor
     console.log("📧 Sending email notification...");
     try {
-      await sendLeadNotificationEmail(
+      await sendNewLeadEmail(
         selectedContractor,
         lead,
         trackingNumber,
         responseDeadline
       );
+
       console.log("✅ Email notification sent");
     } catch (emailError) {
       console.error("⚠️ Email notification failed:", emailError.message);
