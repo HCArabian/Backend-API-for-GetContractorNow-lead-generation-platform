@@ -418,6 +418,23 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         lead: lead.id,
       });
 
+      // Auto-charge contractor via Stripe
+      const { chargeContractorForLead } = require("./stripe-payments");
+
+      const chargeResult = await chargeContractorForLead(
+        contractor.id,
+        lead.id,
+        lead.price,
+        `${lead.category} Lead - ${lead.serviceType} in ${lead.customerCity}`
+      );
+
+      if (chargeResult.success) {
+        console.log("Contractor auto-charged successfully");
+      } else {
+        console.error("Auto-charge failed:", chargeResult.error);
+        // Billing record already marked as failed in chargeContractorForLead
+      }
+
       // Update lead status
       await prisma.lead.update({
         where: { id: lead.id },

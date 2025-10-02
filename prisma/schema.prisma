@@ -93,6 +93,8 @@ model Contractor {
   businessCity      String?
   businessState     String?
   businessZip       String?
+  stripeCustomerId      String?
+  stripePaymentMethodId String?
   
   // Licenses & Insurance
   licenseNumber     String?
@@ -170,6 +172,8 @@ model BillingRecord {
   status        String   @default("pending") // pending, invoiced, paid, credited
   notes         String?
   invoiceNumber String?  // Your invoice number when sent
+  stripePaymentId String?
+
   
   // Timestamps
   dateIncurred  DateTime @default(now())
