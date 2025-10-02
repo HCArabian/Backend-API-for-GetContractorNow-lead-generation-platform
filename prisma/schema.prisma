@@ -82,7 +82,6 @@ model Lead {
 
 model Contractor {
   id                String   @id @default(uuid())
-   @@map("Contractor")
   
   // Business Info
   businessName      String
@@ -140,6 +139,7 @@ model Contractor {
   disputes          Dispute[]
   feedback          CustomerFeedback[]
   
+  @@map("Contractor")
   @@index([phone])
   @@index([status])
   @@index([isAcceptingLeads])

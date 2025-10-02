@@ -415,6 +415,33 @@
                 </div>
             </div>
 
+            <div id="contractorsTab" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Contractors</div>
+                        <div class="stat-value" id="totalContractors">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Active</div>
+                        <div class="stat-value" id="activeContractors">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pending Approval</div>
+                        <div class="stat-value" id="pendingContractors">0</div>
+                    </div>
+                </div>
+
+                <div id="contractorsContainer"></div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+                <button class="tab" onclick="switchTab('billing')">Billing</button>
+                <button class="tab" onclick="switchTab('disputes')">Disputes</button>
+                <button class="tab" onclick="switchTab('feedback')">Feedback</button>
+                <button class="tab" onclick="switchTab('contractors')">Contractors</button> <!-- NEW -->
+            </div>
+
             <!-- Filters -->
             <div class="filters">
                 <div class="filter-group">
@@ -1037,6 +1064,154 @@
             }).join('');
 
             container.innerHTML = html;
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(`${tab}Tab`).classList.add('active');
+
+            if (tab === 'dashboard') loadDashboard();
+            if (tab === 'billing') loadBilling();
+            if (tab === 'disputes') loadDisputes();
+            if (tab === 'feedback') loadFeedback();
+            if (tab === 'contractors') loadContractors(); // NEW
+        }
+
+        async function loadContractors() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/contractors`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderContractors(data.contractors);
+                }
+            } catch (error) {
+                console.error('Failed to load contractors:', error);
+            }
+        }
+
+        function renderContractors(contractors) {
+            const container = document.getElementById('contractorsContainer');
+
+            document.getElementById('totalContractors').textContent = contractors.length;
+            document.getElementById('activeContractors').textContent = contractors.filter(c => c.status === 'active').length;
+            document.getElementById('pendingContractors').textContent = contractors.filter(c => !c.isVerified).length;
+
+            if (contractors.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">👷</div><div>No contractors yet</div></div>';
+                return;
+            }
+
+            const html = contractors.map(contractor => {
+                const statusColor = {
+                    'active': '#10b981',
+                    'inactive': '#6b7280',
+                    'suspended': '#ef4444'
+                }[contractor.status];
+
+                return `
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h3>${contractor.businessName}</h3>
+                        <div style="display: flex; gap: 8px; margin-top: 8px;">
+                            <span class="badge" style="background: ${statusColor}20; color: ${statusColor}">
+                                ${contractor.status.toUpperCase()}
+                            </span>
+                            ${!contractor.isVerified ? `
+                                <span class="badge" style="background: #f59e0b20; color: #f59e0b">
+                                    PENDING APPROVAL
+                                </span>
+                            ` : ''}
+                            ${contractor.stripePaymentMethodId ? `
+                                <span class="badge" style="background: #10b98120; color: #10b981">
+                                    PAYMENT METHOD ADDED
+                                </span>
+                            ` : `
+                                <span class="badge" style="background: #ef444420; color: #ef4444">
+                                    NO PAYMENT METHOD
+                                </span>
+                            `}
+                        </div>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #666;">
+                        Joined: ${new Date(contractor.createdAt).toLocaleDateString()}
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Email</div>
+                        <div class="info-value">${contractor.email}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Phone</div>
+                        <div class="info-value">${contractor.phone}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Total Leads Received</div>
+                        <div class="info-value">${contractor.totalLeadsReceived || 0}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Accepting Leads</div>
+                        <div class="info-value" style="color: ${contractor.isAcceptingLeads ? '#10b981' : '#ef4444'}">
+                            ${contractor.isAcceptingLeads ? 'Yes' : 'No'}
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <strong style="font-size: 14px;">Service ZIP Codes:</strong>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
+                        ${contractor.serviceZipCodes.map(zip => `
+                            <span style="background: #f3f4f6; padding: 4px 12px; border-radius: 4px; font-size: 13px;">${zip}</span>
+                        `).join('')}
+                    </div>
+                </div>
+
+                ${!contractor.isVerified ? `
+                    <button onclick="approveContractor('${contractor.id}')" class="btn-primary" style="margin-top: 20px;">
+                        Approve & Send Login Credentials
+                    </button>
+                ` : ''}
+            </div>
+        `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async function approveContractor(contractorId) {
+            if (!confirm('Approve this contractor? They will receive an email with login credentials.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/contractors/${contractorId}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Contractor approved! Onboarding email sent with login credentials.');
+                    loadContractors(); // Reload list
+                } else {
+                    alert(data.error || 'Failed to approve contractor');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+            }
         }
     </script>
     <!-- Disputes Modal -->

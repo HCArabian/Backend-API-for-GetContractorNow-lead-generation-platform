@@ -8,9 +8,9 @@ const { calculateLeadScore } = require("./scoring");
 const { assignContractor } = require("./assignment");
 const { createSetupIntent, savePaymentMethod } = require("./stripe-payments");
 const cookieParser = require("cookie-parser");
-const { sendFeedbackRequestEmail } = require('./notifications');
-const crypto = require('crypto');
-const { sendContractorOnboardingEmail } = require('./notifications');
+const { sendFeedbackRequestEmail } = require("./notifications");
+const crypto = require("crypto");
+const { sendContractorOnboardingEmail } = require("./notifications");
 
 const {
   hashPassword,
@@ -672,14 +672,24 @@ app.get("/api/admin/contractors", adminAuth, async (req, res) => {
         id: true,
         businessName: true,
         email: true,
+        phone: true,
         status: true,
+        isVerified: true,
+        isAcceptingLeads: true,
+        stripePaymentMethodId: true,
+        serviceZipCodes: true,
+        totalLeadsReceived: true,
+        createdAt: true,
       },
       orderBy: {
-        businessName: "asc",
+        createdAt: "desc",
       },
     });
 
-    res.json({ success: true, contractors });
+    res.json({
+      success: true,
+      contractors,
+    });
   } catch (error) {
     console.error("Error fetching contractors:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -744,14 +754,19 @@ app.post("/api/contractor/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    const isValidPassword = await comparePassword(password, contractor.passwordHash);
+    const isValidPassword = await comparePassword(
+      password,
+      contractor.passwordHash
+    );
 
     if (!isValidPassword) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
     if (contractor.status !== "active") {
-      return res.status(403).json({ error: "Account is suspended or inactive" });
+      return res
+        .status(403)
+        .json({ error: "Account is suspended or inactive" });
     }
 
     const token = generateToken(contractor.id);
@@ -761,7 +776,7 @@ app.post("/api/contractor/login", async (req, res) => {
       data: { lastActiveAt: new Date() },
     });
 
-    console.log('Contractor logged in:', contractor.businessName);
+    console.log("Contractor logged in:", contractor.businessName);
 
     res.json({
       success: true,
@@ -921,53 +936,64 @@ app.get("/api/contractor/billing", contractorAuth, async (req, res) => {
 });
 
 // Change contractor password
-app.post("/api/contractor/change-password", contractorAuth, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
+app.post(
+  "/api/contractor/change-password",
+  contractorAuth,
+  async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Current and new password required" });
+      if (!currentPassword || !newPassword) {
+        return res
+          .status(400)
+          .json({ error: "Current and new password required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res
+          .status(400)
+          .json({ error: "New password must be at least 8 characters" });
+      }
+
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.contractorId },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      const isValidPassword = await comparePassword(
+        currentPassword,
+        contractor.passwordHash
+      );
+
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      const newPasswordHash = await hashPassword(newPassword);
+
+      await prisma.contractor.update({
+        where: { id: req.contractorId },
+        data: {
+          passwordHash: newPasswordHash,
+          requirePasswordChange: false, // Clear flag after password change
+        },
+      });
+
+      console.log("Password changed for contractor:", contractor.businessName);
+
+      res.json({
+        success: true,
+        message: "Password changed successfully",
+      });
+    } catch (error) {
+      console.error("Password change error:", error);
+      res.status(500).json({ error: "Failed to change password" });
     }
-
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: "New password must be at least 8 characters" });
-    }
-
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractorId },
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: "Contractor not found" });
-    }
-
-    const isValidPassword = await comparePassword(currentPassword, contractor.passwordHash);
-
-    if (!isValidPassword) {
-      return res.status(401).json({ error: "Current password is incorrect" });
-    }
-
-    const newPasswordHash = await hashPassword(newPassword);
-
-    await prisma.contractor.update({
-      where: { id: req.contractorId },
-      data: { 
-        passwordHash: newPasswordHash,
-        requirePasswordChange: false // Clear flag after password change
-      },
-    });
-
-    console.log('Password changed for contractor:', contractor.businessName);
-
-    res.json({
-      success: true,
-      message: "Password changed successfully",
-    });
-  } catch (error) {
-    console.error("Password change error:", error);
-    res.status(500).json({ error: "Failed to change password" });
   }
-});
+);
 
 // Submit a dispute
 app.post("/api/contractor/disputes", contractorAuth, async (req, res) => {
@@ -1649,14 +1675,14 @@ app.post(
 );
 
 // Cron endpoint to send feedback emails
-app.post('/api/cron/send-feedback-emails', async (req, res) => {
-  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
-  
+app.post("/api/cron/send-feedback-emails", async (req, res) => {
+  const cronSecret = req.headers["x-cron-secret"] || req.query.secret;
+
   if (cronSecret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  console.log('📧 Cron: Sending feedback request emails...');
+  console.log("📧 Cron: Sending feedback request emails...");
 
   try {
     // Find leads contacted 24 hours ago that haven't received feedback
@@ -1665,15 +1691,15 @@ app.post('/api/cron/send-feedback-emails', async (req, res) => {
 
     const leads = await prisma.lead.findMany({
       where: {
-        status: 'contacted',
+        status: "contacted",
         firstContactAt: {
           gte: new Date(oneDayAgo.getTime() - 60 * 60 * 1000), // 23-24 hours ago
-          lte: oneDayAgo
+          lte: oneDayAgo,
         },
         CustomerFeedback: {
-          none: {} // No feedback submitted yet
-        }
-      }
+          none: {}, // No feedback submitted yet
+        },
+      },
     });
 
     console.log(`Found ${leads.length} leads eligible for feedback emails`);
@@ -1687,56 +1713,54 @@ app.post('/api/cron/send-feedback-emails', async (req, res) => {
     res.json({
       success: true,
       totalEligible: leads.length,
-      sent: sent
+      sent: sent,
     });
-
   } catch (error) {
-    console.error('Feedback email cron error:', error);
-    res.status(500).json({ error: 'Failed to send feedback emails' });
+    console.error("Feedback email cron error:", error);
+    res.status(500).json({ error: "Failed to send feedback emails" });
   }
 });
 
 // Approve contractor and send onboarding email
-app.post('/api/admin/contractors/:id/approve', adminAuth, async (req, res) => {
+app.post("/api/admin/contractors/:id/approve", adminAuth, async (req, res) => {
   try {
     const contractorId = req.params.id;
-    
+
     const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId }
+      where: { id: contractorId },
     });
-    
+
     if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
+      return res.status(404).json({ error: "Contractor not found" });
     }
-    
+
     // Generate temporary password
-    const tempPassword = crypto.randomBytes(8).toString('hex');
+    const tempPassword = crypto.randomBytes(8).toString("hex");
     const hashedPassword = await hashPassword(tempPassword);
-    
+
     // Update contractor
     await prisma.contractor.update({
       where: { id: contractorId },
       data: {
-        status: 'active',
+        status: "active",
         isVerified: true,
         passwordHash: hashedPassword,
-        requirePasswordChange: true
-      }
+        requirePasswordChange: true,
+      },
     });
-    
+
     // Send onboarding email
     await sendContractorOnboardingEmail(contractor, tempPassword);
-    
-    console.log('Contractor approved and onboarded:', contractor.businessName);
-    
+
+    console.log("Contractor approved and onboarded:", contractor.businessName);
+
     res.json({
       success: true,
-      message: 'Contractor approved and onboarding email sent'
+      message: "Contractor approved and onboarding email sent",
     });
-    
   } catch (error) {
-    console.error('Contractor approval error:', error);
-    res.status(500).json({ error: 'Failed to approve contractor' });
+    console.error("Contractor approval error:", error);
+    res.status(500).json({ error: "Failed to approve contractor" });
   }
 });
 
