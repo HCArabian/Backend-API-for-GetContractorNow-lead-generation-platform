@@ -52,35 +52,27 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
 
-// Rate limiting for API endpoints
+// Rate limiter for most API endpoints
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per 15 minutes
-  message: { error: "Too many requests, please try again later." },
+  max: 100,
+  message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Apply rate limiting to most API routes, but exclude admin
-app.use('/api/', (req, res, next) => {
-  if (req.path.startsWith('api/admin/')) {
-    return next(); // Skip rate limiting for admin
-  }
-  apiLimiter(req, res, next);
-});
-
-// Apply rate limiting to all API routes
-app.use("/api/", apiLimiter);
-
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5, // only 5 login attempts per 15 minutes
-  message: { error: "Too many login attempts, please try again later." },
+  max: 5,
+  message: { error: 'Too many login attempts, please try again later.' },
 });
 
-app.use("/api/contractor/login", authLimiter);
-app.use("/api/admin/", authLimiter);
+// Apply rate limiting ONLY to public-facing endpoints
+app.use('/api/leads/', apiLimiter);
+app.use('/api/contractor/login', authLimiter);
+
+// DO NOT apply rate limiting to admin or contractor authenticated routes
 
 // Serve static files from public folder
 app.use(express.static(path.join(__dirname, "public")));
