@@ -11,7 +11,6 @@ const cookieParser = require("cookie-parser");
 const { sendFeedbackRequestEmail } = require('./notifications');
 const crypto = require('crypto');
 const { sendContractorOnboardingEmail } = require('./notifications');
-const { hashPassword } = require('./auth');
 
 const {
   hashPassword,
