@@ -91,12 +91,8 @@ async function assignContractor(lead) {
     // Send email notification to contractor
     console.log("📧 Sending email notification...");
     try {
-      await sendNewLeadEmail(
-        selectedContractor,
-        lead,
-        trackingNumber,
-        responseDeadline
-      );
+      await sendNewLeadEmail(selectedContractor, lead, assignment, trackingNumber);
+
 
       console.log("✅ Email notification sent");
     } catch (emailError) {
