@@ -63,7 +63,7 @@ const apiLimiter = rateLimit({
 
 // Apply rate limiting to most API routes, but exclude admin
 app.use('/api/', (req, res, next) => {
-  if (req.path.startsWith('/admin/')) {
+  if (req.path.startsWith('api/admin/')) {
     return next(); // Skip rate limiting for admin
   }
   apiLimiter(req, res, next);
