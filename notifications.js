@@ -1,6 +1,8 @@
 // notifications.js - Email Notification System
 
 const sgMail = require('@sendgrid/mail');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -10,6 +12,8 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // ============================================
 
 async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
+  const emailSubject = `🎯 New ${lead.category} Lead - ${lead.serviceType.replace(/_/g, ' ')} in ${lead.customerCity}`;
+  
   try {
     console.log(`\n📧 Sending new lead email to ${contractor.businessName}...`);
     
@@ -142,15 +146,34 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     const msg = {
       to: contractor.email,
       from: process.env.SENDGRID_FROM_EMAIL,
-      subject: `🎯 New ${lead.category} Lead - ${lead.serviceType.replace(/_/g, ' ')} in ${lead.customerCity}`,
+      subject: emailSubject,
       html: emailHtml
     };
     
     await sgMail.send(msg);
     
     console.log(`✅ Email sent successfully to ${contractor.email}`);
+
+    // Log successful email to database
+    await prisma.notificationLog.create({
+      data: {
+        type: 'email',
+        recipient: contractor.email,
+        subject: emailSubject,
+        body: emailHtml,
+        status: 'sent',
+        sentAt: new Date(),
+        metadata: {
+          leadId: lead.id,
+          contractorId: contractor.id,
+          category: lead.category,
+          trackingNumber: trackingNumber
+        }
+      }
+    });
+
+    console.log('✅ Email logged to database');
     
-    // Log the notification
     return {
       success: true,
       sentTo: contractor.email,
@@ -159,6 +182,28 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     
   } catch (error) {
     console.error('❌ Error sending email:', error);
+
+    // Log failed email to database
+    try {
+      await prisma.notificationLog.create({
+        data: {
+          type: 'email',
+          recipient: contractor.email,
+          subject: emailSubject,
+          status: 'failed',
+          sentAt: new Date(),
+          metadata: {
+            leadId: lead.id,
+            contractorId: contractor.id,
+            error: error.message
+          }
+        }
+      });
+      console.log('✅ Email failure logged to database');
+    } catch (logError) {
+      console.error('Failed to log email error:', logError.message);
+    }
+    
     return {
       success: false,
       error: error.message

@@ -337,28 +337,18 @@ model CustomerFeedback {
 }
 
 model NotificationLog {
-  id              String   @id @default(uuid())
-  leadId          String?
-  contractorId    String?
-  recipientEmail  String?
-  recipientPhone  String?
+  id          String   @id @default(uuid())
+  type        String   // email, sms, push
+  recipient   String
+  subject     String?
+  body        String?
+  status      String   // sent, failed, pending
+  sentAt      DateTime @default(now())
+  metadata    Json?    // Store leadId, contractorId, etc.
   
-  // Notification Details
-  type            String   // sms, email, push, voice
-  channel         String   // lead_alert, customer_confirmation, reminder, etc.
-  subject         String?
-  body            String
-  
-  // Status
-  status          String   // sent, delivered, failed, bounced
-  sentAt          DateTime @default(now())
-  deliveredAt     DateTime?
-  errorMessage    String?
-  
-  @@index([leadId])
-  @@index([contractorId])
-  @@index([sentAt])
   @@index([type])
+  @@index([status])
+  @@index([sentAt])
 }
 
 model TwilioNumberPool {
