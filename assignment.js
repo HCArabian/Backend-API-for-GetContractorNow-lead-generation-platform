@@ -16,21 +16,22 @@ async function assignContractor(lead) {
     // Find eligible contractors
     console.log("🔎 Searching for eligible contractors...");
     const contractors = await prisma.contractor.findMany({
-      where: {
-        status: "active",
-        isAcceptingLeads: true,
-        isVerified: true,
-        serviceZipCodes: {
-          has: lead.customerZip,
-        },
-        specializations: {
-          has: lead.serviceType,
-        },
-      },
-      orderBy: {
-        totalLeadsReceived: "asc",
-      },
-    });
+  where: {
+    status: 'active',
+    isAcceptingLeads: true,
+    isVerified: true,
+    stripePaymentMethodId: { not: null }, // Only contractors with payment methods
+    serviceZipCodes: {
+      has: lead.customerZip
+    },
+    specializations: {
+      has: lead.serviceType
+    }
+  },
+  orderBy: {
+    totalLeadsReceived: 'asc'
+  }
+});
 
     console.log(`📊 Found ${contractors.length} eligible contractors`);
 
@@ -91,8 +92,12 @@ async function assignContractor(lead) {
     // Send email notification to contractor
     console.log("📧 Sending email notification...");
     try {
-      await sendNewLeadEmail(selectedContractor, lead, assignment, trackingNumber);
-
+      await sendNewLeadEmail(
+        selectedContractor,
+        lead,
+        assignment,
+        trackingNumber
+      );
 
       console.log("✅ Email notification sent");
     } catch (emailError) {

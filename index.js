@@ -6,6 +6,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { calculateLeadScore } = require("./scoring");
 const { assignContractor } = require("./assignment");
+const { createSetupIntent, savePaymentMethod } = require("./stripe-payments");
 const cookieParser = require("cookie-parser");
 const {
   hashPassword,
@@ -1505,6 +1506,64 @@ app.post("/api/cron/recycle-numbers", async (req, res) => {
       error: "Failed to recycle numbers",
       message: error.message,
     });
+  }
+});
+
+// Create setup intent for adding payment method
+app.post(
+  "/api/contractor/payment/setup-intent",
+  contractorAuth,
+  async (req, res) => {
+    try {
+      const setupIntent = await createSetupIntent(req.contractorId);
+
+      res.json({
+        success: true,
+        clientSecret: setupIntent.client_secret,
+      });
+    } catch (error) {
+      console.error("Setup intent error:", error);
+      res.status(500).json({ error: "Failed to create setup intent" });
+    }
+  }
+);
+
+// Save payment method after contractor adds it
+app.post(
+  "/api/contractor/payment/save-method",
+  contractorAuth,
+  async (req, res) => {
+    try {
+      const { paymentMethodId } = req.body;
+
+      await savePaymentMethod(req.contractorId, paymentMethodId);
+
+      res.json({
+        success: true,
+        message: "Payment method saved successfully",
+      });
+    } catch (error) {
+      console.error("Save payment method error:", error);
+      res.status(500).json({ error: "Failed to save payment method" });
+    }
+  }
+);
+
+// Get contractor payment status
+app.get("/api/contractor/payment/status", contractorAuth, async (req, res) => {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractorId },
+      select: { stripePaymentMethodId: true },
+    });
+
+    res.json({
+      success: true,
+      hasPaymentMethod: !!contractor.stripePaymentMethodId,
+    });
+  } catch (error) {
+    console.error("Payment status error:", error);
+    res.status(500).json({ error: "Failed to check payment status" });
   }
 });
 
