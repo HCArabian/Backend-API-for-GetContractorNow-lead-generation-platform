@@ -1,0 +1,14 @@
+name: Send Feedback Emails
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # Daily at noon UTC
+  workflow_dispatch:
+
+jobs:
+  send-feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Feedback Email Endpoint
+        run: |
+          curl -X POST "https://backend-api-for-getcontractornow-lead-generation-production.up.railway.app/api/cron/send-feedback-emails?secret=${{ secrets.CRON_SECRET }}"

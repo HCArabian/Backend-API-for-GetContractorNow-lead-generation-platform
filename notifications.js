@@ -215,7 +215,76 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     };
   }
 }
+async function sendFeedbackRequestEmail(lead) {
+  const feedbackUrl = `${process.env.RAILWAY_URL}/feedback?leadId=${lead.id}`;
+  
+  const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px; background: #f9fafb; }
+    .button { display: inline-block; background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>How was your service?</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${lead.customerFirstName},</p>
+      <p>We hope the contractor we connected you with provided excellent service!</p>
+      <p>Your feedback helps us maintain quality and improve our service. It only takes 1 minute.</p>
+      <div style="text-align: center;">
+        <a href="${feedbackUrl}" class="button">Leave Feedback</a>
+      </div>
+      <p style="font-size: 12px; color: #666; margin-top: 30px;">
+        If you have any concerns, please contact us at support@getcontractornow.com
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    await sgMail.send({
+      to: lead.customerEmail,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: 'How was your contractor experience?',
+      html: emailHtml
+    });
+
+    console.log('Feedback request email sent to:', lead.customerEmail);
+
+    // Log to database
+    await prisma.notificationLog.create({
+      data: {
+        type: 'email',
+        recipient: lead.customerEmail,
+        subject: 'How was your contractor experience?',
+        body: emailHtml,
+        status: 'sent',
+        sentAt: new Date(),
+        metadata: {
+          leadId: lead.id,
+          purpose: 'feedback_request'
+        }
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Feedback email error:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 module.exports = {
-  sendNewLeadEmail
+  sendNewLeadEmail,
+  sendFeedbackRequestEmail
 };

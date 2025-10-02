@@ -8,6 +8,8 @@ const { calculateLeadScore } = require("./scoring");
 const { assignContractor } = require("./assignment");
 const { createSetupIntent, savePaymentMethod } = require("./stripe-payments");
 const cookieParser = require("cookie-parser");
+const { sendFeedbackRequestEmail } = require('./notifications');
+
 const {
   hashPassword,
   comparePassword,
@@ -1668,6 +1670,54 @@ app.post(
     res.json({ received: true });
   }
 );
+
+// Cron endpoint to send feedback emails
+app.post('/api/cron/send-feedback-emails', async (req, res) => {
+  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
+  
+  if (cronSecret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('📧 Cron: Sending feedback request emails...');
+
+  try {
+    // Find leads contacted 24 hours ago that haven't received feedback
+    const oneDayAgo = new Date();
+    oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+
+    const leads = await prisma.lead.findMany({
+      where: {
+        status: 'contacted',
+        firstContactAt: {
+          gte: new Date(oneDayAgo.getTime() - 60 * 60 * 1000), // 23-24 hours ago
+          lte: oneDayAgo
+        },
+        CustomerFeedback: {
+          none: {} // No feedback submitted yet
+        }
+      }
+    });
+
+    console.log(`Found ${leads.length} leads eligible for feedback emails`);
+
+    let sent = 0;
+    for (const lead of leads) {
+      const result = await sendFeedbackRequestEmail(lead);
+      if (result.success) sent++;
+    }
+
+    res.json({
+      success: true,
+      totalEligible: leads.length,
+      sent: sent
+    });
+
+  } catch (error) {
+    console.error('Feedback email cron error:', error);
+    res.status(500).json({ error: 'Failed to send feedback emails' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
