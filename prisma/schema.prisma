@@ -188,6 +188,8 @@ model BillingRecord {
   @@index([status])
   @@index([dateIncurred])
   @@index([invoicedAt])
+  @@unique([leadId, contractorId])  // ADD THIS LINE
+
 }
 
 model TrackingNumber {
