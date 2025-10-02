@@ -284,7 +284,80 @@ async function sendFeedbackRequestEmail(lead) {
   }
 }
 
+async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
+  const portalUrl = `${process.env.RAILWAY_URL}/contractor`;
+  
+  const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px; background: #f9fafb; border: 1px solid #e5e7eb; }
+    .credentials-box { background: #dbeafe; border: 2px solid #2563eb; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .button { display: inline-block; background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to GetContractorNow!</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${contractor.businessName},</p>
+      <p>Your contractor account has been approved! You can now start receiving qualified leads in your service area.</p>
+      
+      <div class="credentials-box">
+        <h3>Your Login Credentials</h3>
+        <p><strong>Portal URL:</strong> <a href="${portalUrl}">${portalUrl}</a></p>
+        <p><strong>Email:</strong> ${contractor.email}</p>
+        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px;">${temporaryPassword}</code></p>
+      </div>
+      
+      <p style="color: #dc2626; font-weight: bold;">⚠️ IMPORTANT: You must change your password on first login.</p>
+      
+      <div style="text-align: center;">
+        <a href="${portalUrl}" class="button">Access Contractor Portal</a>
+      </div>
+      
+      <h3>Next Steps:</h3>
+      <ol>
+        <li>Login with your temporary password</li>
+        <li>Change your password immediately</li>
+        <li>Add payment method (required to receive leads)</li>
+        <li>Review your profile and service areas</li>
+        <li>Start receiving leads!</li>
+      </ol>
+      
+      <p style="font-size: 12px; color: #666; margin-top: 30px;">
+        Questions? Contact support@getcontractornow.com
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    await sgMail.send({
+      to: contractor.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: 'Welcome to GetContractorNow - Your Account is Approved',
+      html: emailHtml
+    });
+
+    console.log('Onboarding email sent to:', contractor.email);
+    return { success: true };
+  } catch (error) {
+    console.error('Onboarding email error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendNewLeadEmail,
-  sendFeedbackRequestEmail
+  sendFeedbackRequestEmail,
+  sendContractorOnboardingEmail
 };

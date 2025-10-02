@@ -95,6 +95,8 @@ model Contractor {
   businessZip       String?
   stripeCustomerId      String?
   stripePaymentMethodId String?
+  requirePasswordChange Boolean @default(false)
+
   
   // Licenses & Insurance
   licenseNumber     String?
