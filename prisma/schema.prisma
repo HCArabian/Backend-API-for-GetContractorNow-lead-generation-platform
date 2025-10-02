@@ -337,14 +337,14 @@ model CustomerFeedback {
 }
 
 model NotificationLog {
-  id          String   @id @default(uuid())
-  type        String   // email, sms, push
-  recipient   String
-  subject     String?
-  body        String?
-  status      String   // sent, failed, pending
-  sentAt      DateTime @default(now())
-  metadata    Json?    // Store leadId, contractorId, etc.
+  id        String   @id @default(uuid())
+  type      String   // email, sms
+  recipient String
+  subject   String?
+  body      String?
+  status    String   // sent, failed
+  sentAt    DateTime @default(now())
+  metadata  Json?    // Store leadId, contractorId, etc.
   
   @@index([type])
   @@index([status])

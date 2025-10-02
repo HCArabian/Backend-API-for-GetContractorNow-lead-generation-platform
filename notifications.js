@@ -83,8 +83,13 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
       </div>
       
       <div class="info-section">
-        <div class="info-label">Phone Number</div>
-        <div class="info-value">${lead.customerPhone}</div>
+        <div class="info-label">Call Customer Using Tracking Number</div>
+        <div class="info-value">
+            <a href="tel:${trackingNumber}" style="color: #2563eb; text-decoration: none; font-size: 20px;">📞 ${trackingNumber}</a>
+        </div>
+        <div style="font-size: 12px; color: #6b7280; margin-top: 5px;">
+            Click to call directly (calls are tracked for billing)
+        </div>
       </div>
       
       <div class="info-section">
