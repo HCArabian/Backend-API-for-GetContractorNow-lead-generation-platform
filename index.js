@@ -56,7 +56,7 @@ app.use(cookieParser());
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { error: "Too many requests, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -65,12 +65,12 @@ const apiLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  message: { error: 'Too many login attempts, please try again later.' },
+  message: { error: "Too many login attempts, please try again later." },
 });
 
 // Apply rate limiting ONLY to public-facing endpoints
-app.use('/api/leads/', apiLimiter);
-app.use('/api/contractor/login', authLimiter);
+app.use("/api/leads/", apiLimiter);
+app.use("/api/contractor/login", authLimiter);
 
 // DO NOT apply rate limiting to admin or contractor authenticated routes
 
@@ -1190,7 +1190,6 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
       },
     });
 
-    // Get lead details separately
     const lead = await prisma.lead.findUnique({
       where: { id: dispute.leadId },
     });
@@ -1206,7 +1205,6 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
 
       if (billingRecord) {
         if (resolution === "full_credit") {
-          // Mark billing as credited
           await prisma.billingRecord.update({
             where: { id: billingRecord.id },
             data: {
@@ -1217,7 +1215,6 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
             },
           });
         } else if (resolution === "partial_credit" && creditAmount) {
-          // Reduce the amount owed
           await prisma.billingRecord.update({
             where: { id: billingRecord.id },
             data: {
@@ -1228,6 +1225,33 @@ app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
             },
           });
         }
+      }
+
+      // Release tracking number back to pool
+      const assignment = await prisma.leadAssignment.findFirst({
+        where: {
+          leadId: dispute.leadId,
+          contractorId: dispute.contractorId,
+        },
+      });
+
+      if (assignment && assignment.trackingNumber) {
+        await prisma.twilioNumberPool.updateMany({
+          where: {
+            phoneNumber: assignment.trackingNumber,
+            status: "assigned",
+          },
+          data: {
+            status: "available",
+            currentLeadId: null,
+            assignedAt: null,
+            expiresAt: null,
+          },
+        });
+
+        console.log(
+          `Released tracking number ${assignment.trackingNumber} back to pool after dispute resolution`
+        );
       }
     }
 
