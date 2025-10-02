@@ -605,6 +605,8 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
 });
 
+app.use(express.static(path.join(__dirname, "public")));
+
 // Get single billing record
 app.get("/api/admin/billing/:id", adminAuth, async (req, res) => {
   try {
