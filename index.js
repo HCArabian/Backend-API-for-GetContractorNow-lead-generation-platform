@@ -61,6 +61,14 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Apply rate limiting to most API routes, but exclude admin
+app.use('/api/', (req, res, next) => {
+  if (req.path.startsWith('/admin/')) {
+    return next(); // Skip rate limiting for admin
+  }
+  apiLimiter(req, res, next);
+});
+
 // Apply rate limiting to all API routes
 app.use("/api/", apiLimiter);
 
@@ -591,6 +599,10 @@ app.get("/api/admin/billing", adminAuth, async (req, res) => {
     console.error("Error fetching billing records:", error);
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
 });
 
 // Get single billing record
