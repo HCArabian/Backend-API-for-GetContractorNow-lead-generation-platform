@@ -7,6 +7,10 @@ Sentry.init({
   tracesSampleRate: 1.0
 });
 
+// Sentry error handler MUST be before other error handlers
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -35,6 +39,7 @@ const app = express();
 app.set("trust proxy", 1);
 
 const path = require("path");
+app.use(Sentry.Handlers.errorHandler());
 
 // Contractor portal route
 app.get("/contractor", (req, res) => {
@@ -2111,10 +2116,7 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
   }
 });
 
-// Sentry error handler MUST be before other error handlers
-app.use(Sentry.Handlers.requestHandler());
-app.use(Sentry.Handlers.tracingHandler());
-app.use(Sentry.Handlers.errorHandler());
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
