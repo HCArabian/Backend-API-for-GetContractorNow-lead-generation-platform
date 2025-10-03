@@ -1217,6 +1217,11 @@
                             <button onclick="suspendContractor('${contractor.id}', '${contractor.businessName}')" class="action-btn" style="background: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 10px;">
                                 Suspend Contractor
                             </button>
+                        ` : ''}
+                        ${contractor.status === 'suspended' ? `
+                            <button onclick="reactivateContractor('${contractor.id}', '${contractor.businessName}')" class="action-btn" style="background: #10b981; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 10px;">
+                                Reactivate Contractor
+                            </button>
                         ` : ''} 
                     </div>
                 `;
@@ -1282,6 +1287,33 @@
                     fetchStats();
                 } else {
                     alert(data.error || 'Failed to suspend contractor');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+            }
+        }
+        async function reactivateContractor(contractorId, contractorName) {
+            if (!confirm(`Reactivate ${contractorName}? They will receive an email notification and start receiving leads again.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/contractors/${contractorId}/reactivate`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Contractor reactivated. Notification email sent.');
+                    fetchContractorsForModal();
+                    fetchStats();
+                } else {
+                    alert(data.error || 'Failed to reactivate contractor');
                 }
             } catch (error) {
                 alert('Network error. Please try again.');

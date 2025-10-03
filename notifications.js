@@ -459,9 +459,92 @@ async function sendContractorSuspensionEmail(contractor, reason) {
   }
 }
 
+async function sendContractorReactivationEmail(contractor) {
+  const portalUrl = `${process.env.RAILWAY_URL}/contractor`;
+  
+  const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #10b981; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px; background: #f9fafb; border: 1px solid #e5e7eb; }
+    .success-box { background: #d1fae5; border: 2px solid #10b981; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .button { display: inline-block; background: #10b981; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Account Reactivated</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${contractor.businessName},</p>
+      
+      <div class="success-box">
+        <strong>Good news! Your GetContractorNow account has been reactivated.</strong>
+      </div>
+      
+      <p><strong>What this means:</strong></p>
+      <ul>
+        <li>You can now receive new leads again</li>
+        <li>Your account access has been restored</li>
+        <li>You will be charged for qualified leads as normal</li>
+      </ul>
+      
+      <div style="text-align: center;">
+        <a href="${portalUrl}" class="button" style="color: white;">Access Contractor Portal</a>
+      </div>
+      
+      <p style="margin-top: 30px;">Thank you for being part of GetContractorNow. We look forward to continuing to send you quality leads!</p>
+      
+      <p style="margin-top: 30px; font-size: 12px; color: #666;">
+        Questions? Contact support@getcontractornow.com
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    await sgMail.send({
+      to: contractor.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: 'Account Reactivated - GetContractorNow',
+      html: emailHtml
+    });
+
+    console.log('Reactivation email sent to:', contractor.email);
+
+    await prisma.notificationLog.create({
+      data: {
+        type: 'email',
+        recipient: contractor.email,
+        subject: 'Account Reactivated - GetContractorNow',
+        body: emailHtml,
+        status: 'sent',
+        sentAt: new Date(),
+        metadata: {
+          contractorId: contractor.id,
+          purpose: 'reactivation'
+        }
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Reactivation email error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendNewLeadEmail,
   sendFeedbackRequestEmail,
   sendContractorOnboardingEmail,
-  sendContractorSuspensionEmail, // ADD THIS
+  sendContractorSuspensionEmail,
+  sendContractorReactivationEmail  // ADD THIS
 };
