@@ -7,6 +7,35 @@ const prisma = new PrismaClient();
 // Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+// Add this helper function at the top of notifications.js
+async function shouldSendEmail(email) {
+  // Check if contractor email is bounced
+  const contractor = await prisma.contractor.findUnique({
+    where: { email: email.toLowerCase() },
+    select: { emailBounced: true, emailBounceReason: true },
+  });
+
+  if (contractor?.emailBounced) {
+    console.log(
+      `⚠️ Skipping email to bounced address: ${email} (${contractor.emailBounceReason})`
+    );
+    return false;
+  }
+
+  // Check if customer email is bounced
+  const lead = await prisma.lead.findFirst({
+    where: { customerEmail: email.toLowerCase() },
+    select: { customerEmailBounced: true },
+  });
+
+  if (lead?.customerEmailBounced) {
+    console.log(`⚠️ Skipping email to bounced customer address: ${email}`);
+    return false;
+  }
+
+  return true;
+}
+
 // ============================================
 // SEND NEW LEAD EMAIL TO CONTRACTOR
 // ============================================
@@ -240,6 +269,10 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
   }
 }
 async function sendFeedbackRequestEmail(lead) {
+  // Check bounce status first
+  if (!(await shouldSendEmail(lead.customerEmail))) {
+    return { success: false, error: "Email address bounced" };
+  }
   const feedbackUrl = `${process.env.RAILWAY_URL}/feedback?leadId=${lead.id}`;
 
   const emailHtml = `
@@ -309,6 +342,10 @@ async function sendFeedbackRequestEmail(lead) {
 }
 
 async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
+  // Check bounce status first
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: "Email address bounced" };
+  }
   const portalUrl = `https://app.getcontractornow.com/contractor`;
 
   const emailHtml = `
@@ -380,6 +417,10 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
   }
 }
 async function sendContractorSuspensionEmail(contractor, reason) {
+  // Check bounce status first
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: "Email address bounced" };
+  }
   const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -460,6 +501,10 @@ async function sendContractorSuspensionEmail(contractor, reason) {
 }
 
 async function sendContractorReactivationEmail(contractor) {
+  // Check bounce status first
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: "Email address bounced" };
+  }
   const portalUrl = `https://app.getcontractornow.com/contractor`;
   const emailHtml = `
 <!DOCTYPE html>

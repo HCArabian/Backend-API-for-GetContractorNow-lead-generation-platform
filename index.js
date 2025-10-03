@@ -11,7 +11,7 @@ const cookieParser = require("cookie-parser");
 const { sendFeedbackRequestEmail } = require("./notifications");
 const crypto = require("crypto");
 const { sendContractorOnboardingEmail } = require("./notifications");
-const twilio = require('twilio');
+const twilio = require("twilio");
 
 const {
   hashPassword,
@@ -221,12 +221,12 @@ app.post("/api/leads/submit", async (req, res) => {
 // TWILIO WEBHOOK - NUMBER-BASED ROUTING
 // ============================================
 // Twilio webhook with signature verification
-app.post('/api/webhooks/twilio/call-status', async (req, res) => {
+app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   try {
     // Verify the request came from Twilio
-    const twilioSignature = req.headers['x-twilio-signature'];
-    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-    
+    const twilioSignature = req.headers["x-twilio-signature"];
+    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
     const isValid = twilio.validateRequest(
       process.env.TWILIO_AUTH_TOKEN,
       twilioSignature,
@@ -235,13 +235,13 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
     );
 
     if (!isValid) {
-      await logSecurityEvent('invalid_twilio_signature', {
+      await logSecurityEvent("invalid_twilio_signature", {
         ip: req.ip,
         url: url,
-        timestamp: new Date()
+        timestamp: new Date(),
       });
-      console.error('Invalid Twilio signature - possible fraud attempt');
-      return res.status(403).json({ error: 'Invalid signature' });
+      console.error("Invalid Twilio signature - possible fraud attempt");
+      return res.status(403).json({ error: "Invalid signature" });
     }
 
     // Extract Twilio data
@@ -253,15 +253,15 @@ app.post('/api/webhooks/twilio/call-status', async (req, res) => {
       To: to,
       Direction: direction,
       RecordingUrl: recordingUrl,
-      RecordingSid: recordingSid
+      RecordingSid: recordingSid,
     } = req.body;
 
-    console.log('📞 TWILIO WEBHOOK (verified):', {
+    console.log("📞 TWILIO WEBHOOK (verified):", {
       callSid,
       callStatus,
       from,
       to: to,
-      direction
+      direction,
     });
 
     // ============================================
@@ -1726,59 +1726,64 @@ app.get("/api/contractor/payment/status", contractorAuth, async (req, res) => {
 
 // Stripe webhook handler
 // Stripe webhook handler with signature verification
-app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+app.post(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let event;
+    let event;
 
-  try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
-    
-    // Verify the signature
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    
-    console.log('Stripe webhook verified:', event.type);
-    
-  } catch (err) {
-    console.error('⚠️ Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    try {
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+
+      // Verify the signature
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+
+      console.log("Stripe webhook verified:", event.type);
+    } catch (err) {
+      console.error("⚠️ Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        const paymentIntent = event.data.object;
+        console.log("Payment succeeded:", paymentIntent.id);
+
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: paymentIntent.id },
+          data: {
+            status: "paid",
+            paidAt: new Date(),
+          },
+        });
+        break;
+
+      case "payment_intent.payment_failed":
+        const failedPayment = event.data.object;
+        console.log("Payment failed:", failedPayment.id);
+
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: failedPayment.id },
+          data: {
+            status: "failed",
+            notes: `Payment failed: ${
+              failedPayment.last_payment_error?.message || "Unknown error"
+            }`,
+          },
+        });
+        break;
+
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    res.json({ received: true });
   }
-
-  // Handle the event
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      const paymentIntent = event.data.object;
-      console.log('Payment succeeded:', paymentIntent.id);
-      
-      await prisma.billingRecord.updateMany({
-        where: { stripePaymentId: paymentIntent.id },
-        data: { 
-          status: 'paid',
-          paidAt: new Date()
-        }
-      });
-      break;
-
-    case 'payment_intent.payment_failed':
-      const failedPayment = event.data.object;
-      console.log('Payment failed:', failedPayment.id);
-      
-      await prisma.billingRecord.updateMany({
-        where: { stripePaymentId: failedPayment.id },
-        data: { 
-          status: 'failed',
-          notes: `Payment failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`
-        }
-      });
-      break;
-
-    default:
-      console.log(`Unhandled event type ${event.type}`);
-  }
-
-  res.json({ received: true });
-});
+);
 
 // Cron endpoint to send feedback emails
 app.post("/api/cron/send-feedback-emails", async (req, res) => {
@@ -1830,24 +1835,24 @@ app.post("/api/cron/send-feedback-emails", async (req, res) => {
 // Security event logging
 async function logSecurityEvent(type, details) {
   try {
-    console.log('🔒 SECURITY EVENT:', type, details);
-    
+    console.log("🔒 SECURITY EVENT:", type, details);
+
     // Optionally log to database for audit trail
     await prisma.notificationLog.create({
       data: {
-        type: 'security',
-        recipient: 'admin',
+        type: "security",
+        recipient: "admin",
         subject: `Security Event: ${type}`,
-        status: 'logged',
+        status: "logged",
         sentAt: new Date(),
         metadata: {
           eventType: type,
-          ...details
-        }
-      }
+          ...details,
+        },
+      },
     });
   } catch (error) {
-    console.error('Failed to log security event:', error);
+    console.error("Failed to log security event:", error);
   }
 }
 
@@ -1914,6 +1919,149 @@ app.use((req, res, next) => {
   }
 
   next();
+});
+
+// SendGrid webhook for email events
+app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
+  try {
+    const events = req.body;
+
+    console.log(`📧 SendGrid webhook received ${events.length} events`);
+
+    for (const event of events) {
+      const { email, event: eventType, reason, timestamp } = event;
+
+      console.log(`Email event: ${eventType} for ${email}`);
+
+      // Handle bounces and blocks
+      if (
+        eventType === "bounce" ||
+        eventType === "blocked" ||
+        eventType === "dropped"
+      ) {
+        // Check if it's a contractor email
+        const contractor = await prisma.contractor.findUnique({
+          where: { email: email.toLowerCase() },
+        });
+
+        if (contractor) {
+          await prisma.contractor.update({
+            where: { id: contractor.id },
+            data: {
+              emailBounced: true,
+              emailBouncedAt: new Date(timestamp * 1000),
+              emailBounceReason: reason || eventType,
+            },
+          });
+
+          console.log(`✅ Marked contractor email as bounced: ${email}`);
+        }
+
+        // Check if it's a customer email
+        const leads = await prisma.lead.findMany({
+          where: { customerEmail: email.toLowerCase() },
+        });
+
+        if (leads.length > 0) {
+          await prisma.lead.updateMany({
+            where: { customerEmail: email.toLowerCase() },
+            data: {
+              customerEmailBounced: true,
+            },
+          });
+
+          console.log(
+            `✅ Marked ${leads.length} lead(s) email as bounced: ${email}`
+          );
+        }
+
+        // Log the bounce
+        await prisma.notificationLog.create({
+          data: {
+            type: "email_bounce",
+            recipient: email,
+            subject: `Email bounced: ${eventType}`,
+            status: "bounced",
+            sentAt: new Date(timestamp * 1000),
+            metadata: {
+              eventType,
+              reason,
+              contractorId: contractor?.id,
+              leadCount: leads.length,
+            },
+          },
+        });
+      }
+
+      // Handle spam reports
+      if (eventType === "spamreport") {
+        await prisma.notificationLog.create({
+          data: {
+            type: "spam_report",
+            recipient: email,
+            subject: "Email marked as spam",
+            status: "spam",
+            sentAt: new Date(timestamp * 1000),
+            metadata: { eventType },
+          },
+        });
+
+        console.log(`⚠️ Spam report for: ${email}`);
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error("SendGrid webhook error:", error);
+    res.status(500).json({ error: "Webhook processing failed" });
+  }
+});
+
+// Get bounced emails (admin)
+app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
+  try {
+    const contractors = await prisma.contractor.findMany({
+      where: { emailBounced: true },
+      select: {
+        email: true,
+        businessName: true,
+        emailBouncedAt: true,
+        emailBounceReason: true,
+      },
+    });
+
+    const leads = await prisma.lead.findMany({
+      where: { customerEmailBounced: true },
+      select: {
+        customerEmail: true,
+        customerFirstName: true,
+        customerLastName: true,
+      },
+      distinct: ["customerEmail"],
+    });
+
+    const bounced = [
+      ...contractors.map((c) => ({
+        email: c.email,
+        type: "Contractor",
+        businessName: c.businessName,
+        bouncedAt: c.emailBouncedAt,
+        reason: c.emailBounceReason,
+      })),
+      ...leads.map((l) => ({
+        email: l.customerEmail,
+        type: "Customer",
+        businessName: `${l.customerFirstName} ${l.customerLastName}`,
+        bouncedAt: null,
+        reason: "Bounced",
+      })),
+    ];
+
+    res.json({ bounced });
+  } catch (error) {
+    console.error("Error fetching bounced emails:", error);
+    res.status(500).json({ error: "Failed to fetch bounced emails" });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
