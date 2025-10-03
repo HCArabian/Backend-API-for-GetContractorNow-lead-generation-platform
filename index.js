@@ -1,3 +1,15 @@
+const Sentry = require("@sentry/node");
+const { ProfilingIntegration } = require("@sentry/profiling-node");
+
+// Initialize Sentry FIRST
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || "production",
+  integrations: [new ProfilingIntegration()],
+  tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+});
+
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -56,6 +68,24 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
 app.use(cookieParser());
+
+// ADD STEP 6 CODE RIGHT HERE - AFTER express.json() BUT BEFORE YOUR ROUTES:
+app.use((req, res, next) => {
+  // Add request context to Sentry
+  if (req.headers.authorization) {
+    Sentry.setUser({ 
+      auth: 'admin' // Don't log actual passwords
+    });
+  }
+  
+  Sentry.setContext('request', {
+    method: req.method,
+    url: req.url,
+    ip: req.ip
+  });
+  
+  next();
+});
 
 // Rate limiter for most API endpoints
 const apiLimiter = rateLimit({
@@ -527,7 +557,15 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       reason: callDuration ? `Duration: ${callDuration}s` : "No duration",
     });
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: { webhook: "twilio" },
+      extra: {
+        callSid: req.body.CallSid,
+        callStatus: req.body.CallStatus,
+      },
+    });
     console.error("❌ WEBHOOK ERROR:", error);
+    res.status(500).json({ error: "Webhook processing failed" });
     return res.status(500).json({
       error: "Internal server error",
       details: error.message,
@@ -2075,6 +2113,11 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch bounced emails" });
   }
 });
+
+// Sentry error handler MUST be before other error handlers
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
+app.use(Sentry.Handlers.errorHandler());
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

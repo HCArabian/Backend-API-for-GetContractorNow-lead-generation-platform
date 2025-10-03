@@ -1,5 +1,5 @@
+const Sentry = require("@sentry/node");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
@@ -25,6 +25,16 @@ async function createStripeCustomer(contractor) {
     console.log("Stripe customer created:", customer.id);
     return customer;
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        operation: 'create_stripe_customer',
+        contractorId: contractor.id
+      },
+      extra: {
+        contractorEmail: contractor.email,
+        businessName: contractor.businessName
+      }
+    });
     console.error("Stripe customer creation error:", error);
     throw error;
   }
@@ -86,6 +96,19 @@ async function chargeContractorForLead(
       amount: amount,
     };
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        operation: 'charge_contractor',
+        contractorId: contractorId,
+        leadId: leadId
+      },
+      extra: {
+        amount: amount,
+        description: description,
+        errorType: error.type,
+        errorCode: error.code
+      }
+    });
     console.error("Payment error:", error);
 
     // Update billing record with error
@@ -128,6 +151,12 @@ async function createSetupIntent(contractorId) {
 
     return setupIntent;
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        operation: 'create_setup_intent',
+        contractorId: contractorId
+      }
+    });
     console.error("Setup intent error:", error);
     throw error;
   }
@@ -144,6 +173,15 @@ async function savePaymentMethod(contractorId, paymentMethodId) {
     console.log("Payment method saved for contractor:", contractorId);
     return { success: true };
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        operation: 'save_payment_method',
+        contractorId: contractorId
+      },
+      extra: {
+        paymentMethodId: paymentMethodId
+      }
+    });
     console.error("Save payment method error:", error);
     throw error;
   }
