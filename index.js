@@ -1848,6 +1848,28 @@ app.post("/api/admin/contractors/:id/approve", adminAuth, async (req, res) => {
   }
 });
 
+// Allow both api and app subdomains
+app.use((req, res, next) => {
+  const host = req.get("host");
+
+  // API routes should only work on api subdomain
+  if (req.path.startsWith("/api/") && !host.includes("api.")) {
+    return res
+      .status(404)
+      .json({ error: "API endpoints must use api subdomain" });
+  }
+
+  // Portal routes should work on app subdomain
+  if (
+    (req.path === "/contractor" || req.path === "/admin") &&
+    !host.includes("app.")
+  ) {
+    return res.redirect(`https://app.getcontractornow.com${req.path}`);
+  }
+
+  next();
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

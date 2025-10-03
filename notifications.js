@@ -309,7 +309,7 @@ async function sendFeedbackRequestEmail(lead) {
 }
 
 async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
-  const portalUrl = `${process.env.RAILWAY_URL}/contractor`;
+  const portalUrl = `https://app.getcontractornow.com/contractor`;
 
   const emailHtml = `
 <!DOCTYPE html>
@@ -460,8 +460,7 @@ async function sendContractorSuspensionEmail(contractor, reason) {
 }
 
 async function sendContractorReactivationEmail(contractor) {
-  const portalUrl = `${process.env.RAILWAY_URL}/contractor`;
-  
+  const portalUrl = `https://app.getcontractornow.com/contractor`;
   const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -513,30 +512,30 @@ async function sendContractorReactivationEmail(contractor) {
     await sgMail.send({
       to: contractor.email,
       from: process.env.SENDGRID_FROM_EMAIL,
-      subject: 'Account Reactivated - GetContractorNow',
-      html: emailHtml
+      subject: "Account Reactivated - GetContractorNow",
+      html: emailHtml,
     });
 
-    console.log('Reactivation email sent to:', contractor.email);
+    console.log("Reactivation email sent to:", contractor.email);
 
     await prisma.notificationLog.create({
       data: {
-        type: 'email',
+        type: "email",
         recipient: contractor.email,
-        subject: 'Account Reactivated - GetContractorNow',
+        subject: "Account Reactivated - GetContractorNow",
         body: emailHtml,
-        status: 'sent',
+        status: "sent",
         sentAt: new Date(),
         metadata: {
           contractorId: contractor.id,
-          purpose: 'reactivation'
-        }
-      }
+          purpose: "reactivation",
+        },
+      },
     });
 
     return { success: true };
   } catch (error) {
-    console.error('Reactivation email error:', error);
+    console.error("Reactivation email error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -546,5 +545,5 @@ module.exports = {
   sendFeedbackRequestEmail,
   sendContractorOnboardingEmail,
   sendContractorSuspensionEmail,
-  sendContractorReactivationEmail  // ADD THIS
+  sendContractorReactivationEmail, // ADD THIS
 };
