@@ -2121,7 +2121,7 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
   }
 });
 
-// Remove this entire block:
+/* // Remove this entire block:
 app.get('/api/test-sentry', (req, res) => {
   try {
     throw new Error('Test error for Sentry');
@@ -2129,7 +2129,7 @@ app.get('/api/test-sentry', (req, res) => {
     Sentry.captureException(error);
     res.json({ message: 'Error sent to Sentry' });
   }
-});
+}); */
 
 // Optional: Your own error handler after Sentry's
 app.use((err, req, res, next) => {
