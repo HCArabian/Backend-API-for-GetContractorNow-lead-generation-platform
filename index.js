@@ -31,9 +31,16 @@ const {
 
 const app = express();
 
-// Sentry error handler MUST be before other error handlers
-app.use(Sentry.Handlers.requestHandler());
-app.use(Sentry.Handlers.tracingHandler());
+// Sentry must be initialized before app handlers
+app.use((req, res, next) => {
+  Sentry.addBreadcrumb({
+    message: req.url,
+    category: 'request',
+    level: 'info',
+  });
+  next();
+});
+
 // Trust Railway proxy
 app.set("trust proxy", 1);
 
@@ -2113,9 +2120,6 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch bounced emails" });
   }
 });
-
-// Sentry ErrorHandler must be AFTER all routes, BEFORE server starts
-app.use(Sentry.Handlers.errorHandler());
 
 // Optional: Your own error handler after Sentry's
 app.use((err, req, res, next) => {
