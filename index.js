@@ -1924,6 +1924,22 @@ app.use((req, res, next) => {
 // SendGrid webhook for email events
 app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
   try {
+    // Verify SendGrid signature if enabled
+    const signature = req.headers["x-twilio-email-event-webhook-signature"];
+    const timestamp = req.headers["x-twilio-email-event-webhook-timestamp"];
+
+    if (signature && process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY) {
+      const payload = timestamp + JSON.stringify(req.body);
+      const expectedSignature = crypto
+        .createHmac("sha256", process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY)
+        .update(payload)
+        .digest("base64");
+
+      if (signature !== expectedSignature) {
+        console.error("Invalid SendGrid signature");
+        return res.status(403).json({ error: "Invalid signature" });
+      }
+    }
     const events = req.body;
 
     console.log(`📧 SendGrid webhook received ${events.length} events`);
@@ -1934,11 +1950,7 @@ app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
       console.log(`Email event: ${eventType} for ${email}`);
 
       // Handle bounces and blocks
-      if (
-        eventType === "bounce" ||
-        eventType === "blocked" ||
-        eventType === "dropped"
-      ) {
+      if (eventType === "bounce" || eventType === "dropped") {
         // Check if it's a contractor email
         const contractor = await prisma.contractor.findUnique({
           where: { email: email.toLowerCase() },
