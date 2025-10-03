@@ -2114,8 +2114,14 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
   }
 });
 
-// Sentry error handler AFTER all routes
+// Sentry ErrorHandler must be AFTER all routes, BEFORE server starts
 app.use(Sentry.Handlers.errorHandler());
+
+// Optional: Your own error handler after Sentry's
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
