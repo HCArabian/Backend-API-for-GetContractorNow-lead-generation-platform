@@ -11,6 +11,7 @@ const cookieParser = require("cookie-parser");
 const { sendFeedbackRequestEmail } = require("./notifications");
 const crypto = require("crypto");
 const { sendContractorOnboardingEmail } = require("./notifications");
+const twilio = require('twilio');
 
 const {
   hashPassword,
@@ -219,8 +220,31 @@ app.post("/api/leads/submit", async (req, res) => {
 // ============================================
 // TWILIO WEBHOOK - NUMBER-BASED ROUTING
 // ============================================
-app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+// Twilio webhook with signature verification
+app.post('/api/webhooks/twilio/call-status', async (req, res) => {
   try {
+    // Verify the request came from Twilio
+    const twilioSignature = req.headers['x-twilio-signature'];
+    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    
+    const isValid = twilio.validateRequest(
+      process.env.TWILIO_AUTH_TOKEN,
+      twilioSignature,
+      url,
+      req.body
+    );
+
+    if (!isValid) {
+      await logSecurityEvent('invalid_twilio_signature', {
+        ip: req.ip,
+        url: url,
+        timestamp: new Date()
+      });
+      console.error('Invalid Twilio signature - possible fraud attempt');
+      return res.status(403).json({ error: 'Invalid signature' });
+    }
+
+    // Extract Twilio data
     const {
       CallSid: callSid,
       CallStatus: callStatus,
@@ -229,15 +253,15 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       To: to,
       Direction: direction,
       RecordingUrl: recordingUrl,
-      RecordingSid: recordingSid,
+      RecordingSid: recordingSid
     } = req.body;
 
-    console.log("📞 TWILIO WEBHOOK:", {
+    console.log('📞 TWILIO WEBHOOK (verified):', {
       callSid,
       callStatus,
       from,
       to: to,
-      direction,
+      direction
     });
 
     // ============================================
@@ -1701,62 +1725,60 @@ app.get("/api/contractor/payment/status", contractorAuth, async (req, res) => {
 });
 
 // Stripe webhook handler
-app.post(
-  "/api/webhooks/stripe",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// Stripe webhook handler with signature verification
+app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    let event;
+  let event;
 
-    try {
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (err) {
-      console.error("Webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    // Handle the event
-    switch (event.type) {
-      case "payment_intent.succeeded":
-        const paymentIntent = event.data.object;
-        console.log("Payment succeeded:", paymentIntent.id);
-
-        // Update billing record
-        await prisma.billingRecord.updateMany({
-          where: { stripePaymentId: paymentIntent.id },
-          data: {
-            status: "paid",
-            paidAt: new Date(),
-          },
-        });
-        break;
-
-      case "payment_intent.payment_failed":
-        const failedPayment = event.data.object;
-        console.log("Payment failed:", failedPayment.id);
-
-        // Mark billing as failed
-        await prisma.billingRecord.updateMany({
-          where: { stripePaymentId: failedPayment.id },
-          data: {
-            status: "failed",
-            notes: `Payment failed: ${
-              failedPayment.last_payment_error?.message || "Unknown error"
-            }`,
-          },
-        });
-        break;
-
-      default:
-        console.log(`Unhandled event type ${event.type}`);
-    }
-
-    res.json({ received: true });
+  try {
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+    
+    // Verify the signature
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    
+    console.log('Stripe webhook verified:', event.type);
+    
+  } catch (err) {
+    console.error('⚠️ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
-);
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      console.log('Payment succeeded:', paymentIntent.id);
+      
+      await prisma.billingRecord.updateMany({
+        where: { stripePaymentId: paymentIntent.id },
+        data: { 
+          status: 'paid',
+          paidAt: new Date()
+        }
+      });
+      break;
+
+    case 'payment_intent.payment_failed':
+      const failedPayment = event.data.object;
+      console.log('Payment failed:', failedPayment.id);
+      
+      await prisma.billingRecord.updateMany({
+        where: { stripePaymentId: failedPayment.id },
+        data: { 
+          status: 'failed',
+          notes: `Payment failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`
+        }
+      });
+      break;
+
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
 
 // Cron endpoint to send feedback emails
 app.post("/api/cron/send-feedback-emails", async (req, res) => {
@@ -1804,6 +1826,30 @@ app.post("/api/cron/send-feedback-emails", async (req, res) => {
     res.status(500).json({ error: "Failed to send feedback emails" });
   }
 });
+
+// Security event logging
+async function logSecurityEvent(type, details) {
+  try {
+    console.log('🔒 SECURITY EVENT:', type, details);
+    
+    // Optionally log to database for audit trail
+    await prisma.notificationLog.create({
+      data: {
+        type: 'security',
+        recipient: 'admin',
+        subject: `Security Event: ${type}`,
+        status: 'logged',
+        sentAt: new Date(),
+        metadata: {
+          eventType: type,
+          ...details
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to log security event:', error);
+  }
+}
 
 // Approve contractor and send onboarding email
 app.post("/api/admin/contractors/:id/approve", adminAuth, async (req, res) => {
