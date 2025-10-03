@@ -1,7 +1,7 @@
 // notifications.js - Email Notification System
 
-const sgMail = require('@sendgrid/mail');
-const { PrismaClient } = require('@prisma/client');
+const sgMail = require("@sendgrid/mail");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // Initialize SendGrid
@@ -12,18 +12,21 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 // ============================================
 
 async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
-  const emailSubject = `🎯 New ${lead.category} Lead - ${lead.serviceType.replace(/_/g, ' ')} in ${lead.customerCity}`;
-  
+  const emailSubject = `🎯 New ${
+    lead.category
+  } Lead - ${lead.serviceType.replace(/_/g, " ")} in ${lead.customerCity}`;
+
   try {
     console.log(`\n📧 Sending new lead email to ${contractor.businessName}...`);
-    
-    const responseTimeText = {
-      'PLATINUM': '20 minutes',
-      'GOLD': '2 hours',
-      'SILVER': '24 hours',
-      'BRONZE': '48 hours'
-    }[lead.category] || '24 hours';
-    
+
+    const responseTimeText =
+      {
+        PLATINUM: "20 minutes",
+        GOLD: "2 hours",
+        SILVER: "24 hours",
+        BRONZE: "48 hours",
+      }[lead.category] || "24 hours";
+
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -56,7 +59,9 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     
     <div class="content">
       <div style="text-align: center;">
-        <span class="lead-badge ${lead.category.toLowerCase()}">${lead.category} LEAD</span>
+        <span class="lead-badge ${lead.category.toLowerCase()}">${
+      lead.category
+    } LEAD</span>
       </div>
       
       <div class="tracking-box">
@@ -67,11 +72,17 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
         </div>
       </div>
       
-      <div class="info-section ${lead.category === 'PLATINUM' ? 'urgent' : ''}">
+      <div class="info-section ${lead.category === "PLATINUM" ? "urgent" : ""}">
         <div class="info-label">⏰ Response Deadline</div>
-        <div class="info-value">${new Date(assignment.responseDeadline).toLocaleString()}</div>
+        <div class="info-value">${new Date(
+          assignment.responseDeadline
+        ).toLocaleString()}</div>
         <div style="margin-top: 5px; font-size: 14px; color: #dc2626;">
-          ${lead.category === 'PLATINUM' ? '🔥 URGENT: Respond within ' + responseTimeText : 'Respond within ' + responseTimeText}
+          ${
+            lead.category === "PLATINUM"
+              ? "🔥 URGENT: Respond within " + responseTimeText
+              : "Respond within " + responseTimeText
+          }
         </div>
       </div>
       
@@ -79,7 +90,9 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
       
       <div class="info-section">
         <div class="info-label">Customer Name</div>
-        <div class="info-value">${lead.customerFirstName} ${lead.customerLastName}</div>
+        <div class="info-value">${lead.customerFirstName} ${
+      lead.customerLastName
+    }</div>
       </div>
       
       <div class="info-section">
@@ -102,30 +115,42 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
       
       <div class="info-section">
         <div class="info-label">Service Needed</div>
-        <div class="info-value">${lead.serviceType.replace(/_/g, ' ').toUpperCase()}</div>
+        <div class="info-value">${lead.serviceType
+          .replace(/_/g, " ")
+          .toUpperCase()}</div>
       </div>
       
       <div class="info-section">
         <div class="info-label">Timeline</div>
-        <div class="info-value">${lead.timeline.replace(/_/g, ' ').toUpperCase()}</div>
+        <div class="info-value">${lead.timeline
+          .replace(/_/g, " ")
+          .toUpperCase()}</div>
       </div>
       
       <div class="info-section">
         <div class="info-label">Budget Range</div>
-        <div class="info-value">${lead.budgetRange.replace(/_/g, ' ').toUpperCase()}</div>
+        <div class="info-value">${lead.budgetRange
+          .replace(/_/g, " ")
+          .toUpperCase()}</div>
       </div>
       
       <div class="info-section">
         <div class="info-label">Property Type</div>
-        <div class="info-value">${lead.propertyType.replace(/_/g, ' ').toUpperCase()}</div>
+        <div class="info-value">${lead.propertyType
+          .replace(/_/g, " ")
+          .toUpperCase()}</div>
       </div>
       
-      ${lead.serviceDescription ? `
+      ${
+        lead.serviceDescription
+          ? `
       <div class="info-section">
         <div class="info-label">Additional Details</div>
         <div class="info-value">${lead.serviceDescription}</div>
       </div>
-      ` : ''}
+      `
+          : ""
+      }
       
       <div style="background: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0;">
         <strong>💡 Important:</strong>
@@ -147,77 +172,76 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
 </body>
 </html>
     `;
-    
+
     const msg = {
       to: contractor.email,
       from: process.env.SENDGRID_FROM_EMAIL,
       subject: emailSubject,
-      html: emailHtml
+      html: emailHtml,
     };
-    
+
     await sgMail.send(msg);
-    
+
     console.log(`✅ Email sent successfully to ${contractor.email}`);
 
     // Log successful email to database
     await prisma.notificationLog.create({
       data: {
-        type: 'email',
+        type: "email",
         recipient: contractor.email,
         subject: emailSubject,
         body: emailHtml,
-        status: 'sent',
+        status: "sent",
         sentAt: new Date(),
         metadata: {
           leadId: lead.id,
           contractorId: contractor.id,
           category: lead.category,
-          trackingNumber: trackingNumber
-        }
-      }
+          trackingNumber: trackingNumber,
+        },
+      },
     });
 
-    console.log('✅ Email logged to database');
-    
+    console.log("✅ Email logged to database");
+
     return {
       success: true,
       sentTo: contractor.email,
-      sentAt: new Date()
+      sentAt: new Date(),
     };
-    
   } catch (error) {
-    console.error('❌ Error sending email:', error);
+    console.error("❌ Error sending email:", error);
 
     // Log failed email to database
     try {
       await prisma.notificationLog.create({
         data: {
-          type: 'email',
+          type: "email",
           recipient: contractor.email,
           subject: emailSubject,
-          status: 'failed',
+          status: "failed",
           sentAt: new Date(),
           metadata: {
             leadId: lead.id,
             contractorId: contractor.id,
-            error: error.message
-          }
-        }
+            error: error.message,
+          },
+        },
       });
-      console.log('✅ Email failure logged to database');
+      console.log("✅ Email failure logged to database");
     } catch (logError) {
-      console.error('Failed to log email error:', logError.message);
+      console.error("Failed to log email error:", logError.message);
     }
-    
+
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
 async function sendFeedbackRequestEmail(lead) {
   const feedbackUrl = `${process.env.RAILWAY_URL}/feedback?leadId=${lead.id}`;
-  
+
   const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -227,7 +251,7 @@ async function sendFeedbackRequestEmail(lead) {
     .container { max-width: 600px; margin: 0 auto; padding: 20px; }
     .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
     .content { padding: 30px; background: #f9fafb; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
   </style>
 </head>
 <body>
@@ -255,38 +279,38 @@ async function sendFeedbackRequestEmail(lead) {
     await sgMail.send({
       to: lead.customerEmail,
       from: process.env.SENDGRID_FROM_EMAIL,
-      subject: 'How was your contractor experience?',
-      html: emailHtml
+      subject: "How was your contractor experience?",
+      html: emailHtml,
     });
 
-    console.log('Feedback request email sent to:', lead.customerEmail);
+    console.log("Feedback request email sent to:", lead.customerEmail);
 
     // Log to database
     await prisma.notificationLog.create({
       data: {
-        type: 'email',
+        type: "email",
         recipient: lead.customerEmail,
-        subject: 'How was your contractor experience?',
+        subject: "How was your contractor experience?",
         body: emailHtml,
-        status: 'sent',
+        status: "sent",
         sentAt: new Date(),
         metadata: {
           leadId: lead.id,
-          purpose: 'feedback_request'
-        }
-      }
+          purpose: "feedback_request",
+        },
+      },
     });
 
     return { success: true };
   } catch (error) {
-    console.error('Feedback email error:', error);
+    console.error("Feedback email error:", error);
     return { success: false, error: error.message };
   }
 }
 
 async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
   const portalUrl = `${process.env.RAILWAY_URL}/contractor`;
-  
+
   const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -344,14 +368,14 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
     await sgMail.send({
       to: contractor.email,
       from: process.env.SENDGRID_FROM_EMAIL,
-      subject: 'Welcome to GetContractorNow - Your Account is Approved',
-      html: emailHtml
+      subject: "Welcome to GetContractorNow - Your Account is Approved",
+      html: emailHtml,
     });
 
-    console.log('Onboarding email sent to:', contractor.email);
+    console.log("Onboarding email sent to:", contractor.email);
     return { success: true };
   } catch (error) {
-    console.error('Onboarding email error:', error);
+    console.error("Onboarding email error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -359,5 +383,5 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
 module.exports = {
   sendNewLeadEmail,
   sendFeedbackRequestEmail,
-  sendContractorOnboardingEmail
+  sendContractorOnboardingEmail,
 };
