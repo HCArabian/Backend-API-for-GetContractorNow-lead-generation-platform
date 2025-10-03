@@ -3,20 +3,12 @@ name: Recycle Tracking Numbers
 on:
   schedule:
     - cron: '0 0 * * *'  # Daily at midnight UTC
-  workflow_dispatch:  # Allows manual trigger from GitHub UI
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
   recycle:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Number Recycling
-  run: |
-    curl -X POST "https://api.getcontractornow.com/api/cron/recycle-numbers?secret=${{ secrets.CRON_SECRET }}"
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
-          echo "Response: $body"
-          echo "Status: $http_code"
-          if [ "$http_code" != "200" ]; then
-            echo "Error: Received status code $http_code"
-            exit 1
-          fi
+        run: |
+          curl -X POST "https://api.getcontractornow.com/api/cron/recycle-numbers?secret=${{ secrets.CRON_SECRET }}"
