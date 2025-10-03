@@ -696,6 +696,50 @@ app.get("/api/admin/contractors", adminAuth, async (req, res) => {
   }
 });
 
+// Suspend/revoke contractor access (admin)
+app.post('/api/admin/contractors/:id/suspend', adminAuth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    
+    if (!reason) {
+      return res.status(400).json({ error: 'Suspension reason required' });
+    }
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+
+    // Update contractor status
+    await prisma.contractor.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'suspended',
+        isAcceptingLeads: false,
+        suspensionReason: reason
+      }
+    });
+
+    // Send suspension email
+    const { sendContractorSuspensionEmail } = require('./notifications');
+    await sendContractorSuspensionEmail(contractor, reason);
+
+    console.log('Contractor suspended:', contractor.businessName);
+
+    res.json({
+      success: true,
+      message: 'Contractor suspended and notification sent'
+    });
+
+  } catch (error) {
+    console.error('Suspension error:', error);
+    res.status(500).json({ error: 'Failed to suspend contractor' });
+  }
+});
+
 // Dashboard stats
 app.get("/api/admin/stats", adminAuth, async (req, res) => {
   try {

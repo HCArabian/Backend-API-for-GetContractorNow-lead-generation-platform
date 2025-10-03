@@ -1213,6 +1213,11 @@
                                 Approve & Send Login Credentials
                             </button>
                         ` : ''}
+                        ${contractor.isVerified && contractor.status === 'active' ? `
+                            <button onclick="suspendContractor('${contractor.id}', '${contractor.businessName}')" class="action-btn" style="background: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 10px;">
+                                Suspend Contractor
+                            </button>
+                        ` : ''} 
                     </div>
                 `;
             }).join('');
@@ -1247,6 +1252,42 @@
                 alert('Network error. Please try again.');
             }
         }
+        async function suspendContractor(contractorId, contractorName) {
+            const reason = prompt(`Enter reason for suspending ${contractorName}:`);
+
+            if (!reason) {
+                alert('Suspension reason is required');
+                return;
+            }
+
+            if (!confirm(`Suspend ${contractorName}? They will receive an email notification.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/contractors/${contractorId}/suspend`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reason })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Contractor suspended. Notification email sent.');
+                    fetchContractorsForModal();
+                    fetchStats();
+                } else {
+                    alert(data.error || 'Failed to suspend contractor');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+            }
+        }
+
     </script>
 </body>
 

@@ -379,9 +379,89 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
     return { success: false, error: error.message };
   }
 }
+async function sendContractorSuspensionEmail(contractor, reason) {
+  const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 20px; text-align: center; }
+    .content { padding: 30px; background: #f9fafb; border: 1px solid #e5e7eb; }
+    .alert-box { background: #fee2e2; border: 2px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⚠️ Account Access Suspended</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${contractor.businessName},</p>
+      
+      <div class="alert-box">
+        <strong>Your GetContractorNow account has been suspended.</strong>
+      </div>
+      
+      <p><strong>Reason:</strong></p>
+      <p>${reason}</p>
+      
+      <p><strong>What this means:</strong></p>
+      <ul>
+        <li>You will no longer receive new leads</li>
+        <li>Your account access has been revoked</li>
+        <li>You will not be charged for any new leads</li>
+      </ul>
+      
+      <p>If you believe this is an error or would like to discuss reinstatement, please contact us immediately at support@getcontractornow.com</p>
+      
+      <p style="margin-top: 30px; font-size: 12px; color: #666;">
+        GetContractorNow Support Team
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    await sgMail.send({
+      to: contractor.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: "Account Suspended - GetContractorNow",
+      html: emailHtml,
+    });
+
+    console.log("Suspension email sent to:", contractor.email);
+
+    // Log notification
+    await prisma.notificationLog.create({
+      data: {
+        type: "email",
+        recipient: contractor.email,
+        subject: "Account Suspended - GetContractorNow",
+        body: emailHtml,
+        status: "sent",
+        sentAt: new Date(),
+        metadata: {
+          contractorId: contractor.id,
+          purpose: "suspension",
+          reason: reason,
+        },
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Suspension email error:", error);
+    return { success: false, error: error.message };
+  }
+}
 
 module.exports = {
   sendNewLeadEmail,
   sendFeedbackRequestEmail,
   sendContractorOnboardingEmail,
+  sendContractorSuspensionEmail, // ADD THIS
 };
