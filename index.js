@@ -7,14 +7,10 @@ Sentry.init({
   tracesSampleRate: 1.0
 });
 
-// Sentry error handler MUST be before other error handlers
-app.use(Sentry.Handlers.requestHandler());
-app.use(Sentry.Handlers.tracingHandler());
-
+require("dotenv").config();
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
-require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { calculateLeadScore } = require("./scoring");
@@ -35,11 +31,13 @@ const {
 
 const app = express();
 
+// Sentry error handler MUST be before other error handlers
+app.use(Sentry.Handlers.requestHandler());
+app.use(Sentry.Handlers.tracingHandler());
 // Trust Railway proxy
 app.set("trust proxy", 1);
 
 const path = require("path");
-app.use(Sentry.Handlers.errorHandler());
 
 // Contractor portal route
 app.get("/contractor", (req, res) => {
@@ -2116,7 +2114,8 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
   }
 });
 
-
+// Sentry error handler AFTER all routes
+app.use(Sentry.Handlers.errorHandler());
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
