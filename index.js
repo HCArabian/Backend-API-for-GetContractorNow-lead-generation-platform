@@ -47,8 +47,8 @@ app.set("trust proxy", 1);
 const path = require("path");
 
 // Contractor portal route
-app.get("/contractor", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+app.get('/contractor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'contractor-portal-v2.html'));
 });
 
 app.get("/api/debug/check-env", (req, res) => {
