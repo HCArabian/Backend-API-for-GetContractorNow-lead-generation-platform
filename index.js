@@ -8,6 +8,7 @@ Sentry.init({
 });
 
 require("dotenv").config();
+const jwt = require('jsonwebtoken');
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -46,8 +47,13 @@ app.set("trust proxy", 1);
 
 const path = require("path");
 
-// Contractor portal route
+// Contractor route - serve the same portal
 app.get('/contractor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'contractor-portal-v2.html'));
+});
+
+// Root route - serve the contractor portal
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'contractor-portal-v2.html'));
 });
 
@@ -93,6 +99,54 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// Middleware to authenticate contractor requests
+const authenticateContractor = async (req, res, next) => {
+  try {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Extract token
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Get contractor from database
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: decoded.contractorId }
+    });
+
+    if (!contractor) {
+      return res.status(401).json({ error: 'Contractor not found' });
+    }
+
+    if (contractor.status !== 'active') {
+      return res.status(403).json({ error: 'Contractor account is not active' });
+    }
+
+    // Attach contractor to request object
+    req.contractor = contractor;
+    next();
+
+  } catch (error) {
+    console.error('Auth error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+
+    return res.status(500).json({ error: 'Authentication failed' });
+  }
+};
 
 // Rate limiter for most API endpoints
 const apiLimiter = rateLimit({
@@ -2720,6 +2774,274 @@ app.get('/api/admin/backup-status', adminAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch backup status' });
   }
 }); */
+
+// GET Contractor Dashboard Data
+app.get('/api/contractor/dashboard', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+
+    // Get contractor with subscription details
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        phone: true,
+        creditBalance: true,
+        subscriptionTier: true,
+        subscriptionStatus: true,
+        stripeSubscriptionId: true,
+        serviceType: true,
+        serviceAreas: true,
+        status: true
+      }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+
+    // Get subscription pricing based on tier
+    let monthlyPrice = 0;
+    let leadCost = 0;
+    
+    if (contractor.subscriptionTier === 'starter') {
+      monthlyPrice = 75;
+      leadCost = 75;
+    } else if (contractor.subscriptionTier === 'pro') {
+      monthlyPrice = 125;
+      leadCost = 100;
+    } else if (contractor.subscriptionTier === 'elite') {
+      monthlyPrice = 200;
+      leadCost = 250;
+    }
+
+    // Get lead count for current month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const leadsThisMonth = await prisma.leadAssignment.count({
+      where: {
+        contractorId: contractorId,
+        assignedAt: {
+          gte: startOfMonth
+        }
+      }
+    });
+
+    // Get recent credit transactions (last 10)
+    const recentTransactions = await prisma.creditTransaction.findMany({
+      where: { contractorId: contractorId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        type: true,
+        amount: true,
+        balanceAfter: true,
+        description: true,
+        createdAt: true
+      }
+    });
+
+    // Calculate max leads based on tier
+    let maxLeads = 15; // starter default
+    if (contractor.subscriptionTier === 'pro') maxLeads = 40;
+    if (contractor.subscriptionTier === 'elite') maxLeads = 999; // unlimited
+
+    res.json({
+      contractor: {
+        id: contractor.id,
+        businessName: contractor.businessName,
+        email: contractor.email,
+        phone: contractor.phone,
+        creditBalance: contractor.creditBalance || 0,
+        serviceType: contractor.serviceType,
+        serviceAreas: contractor.serviceAreas,
+        status: contractor.status
+      },
+      subscription: {
+        tier: contractor.subscriptionTier || 'none',
+        status: contractor.subscriptionStatus || 'inactive',
+        monthlyPrice: monthlyPrice,
+        leadCost: leadCost,
+        stripeSubscriptionId: contractor.stripeSubscriptionId
+      },
+      stats: {
+        leadsThisMonth: leadsThisMonth,
+        maxLeadsPerMonth: maxLeads
+      },
+      recentTransactions: recentTransactions
+    });
+
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: 'Failed to load dashboard data' });
+  }
+});
+
+// GET Contractor's Leads
+app.get('/api/contractor/leads', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+    const { status } = req.query; // Optional filter by status
+
+    // Build where clause
+    const whereClause = {
+      contractorId: contractorId
+    };
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Get all lead assignments with lead details
+    const assignments = await prisma.leadAssignment.findMany({
+      where: whereClause,
+      include: {
+        lead: {
+          select: {
+            id: true,
+            customerName: true,
+            customerEmail: true,
+            customerPhone: true,
+            serviceType: true,
+            category: true,
+            price: true,
+            timeline: true,
+            propertyType: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            projectDescription: true,
+            budgetRange: true,
+            createdAt: true
+          }
+        },
+        trackingNumber: {
+          select: {
+            phoneNumber: true,
+            expiresAt: true
+          }
+        }
+      },
+      orderBy: {
+        assignedAt: 'desc'
+      }
+    });
+
+    // Format response
+    const leads = assignments.map(assignment => ({
+      assignmentId: assignment.id,
+      leadId: assignment.lead.id,
+      status: assignment.status,
+      assignedAt: assignment.assignedAt,
+      respondedAt: assignment.respondedAt,
+      customer: {
+        name: assignment.lead.customerName,
+        email: assignment.lead.customerEmail,
+        phone: assignment.lead.customerPhone,
+        address: assignment.lead.address,
+        city: assignment.lead.city,
+        state: assignment.lead.state,
+        zipCode: assignment.lead.zipCode
+      },
+      project: {
+        serviceType: assignment.lead.serviceType,
+        category: assignment.lead.category,
+        price: assignment.lead.price,
+        timeline: assignment.lead.timeline,
+        propertyType: assignment.lead.propertyType,
+        description: assignment.lead.projectDescription,
+        budgetRange: assignment.lead.budgetRange
+      },
+      trackingNumber: assignment.trackingNumber ? {
+        phone: assignment.trackingNumber.phoneNumber,
+        expiresAt: assignment.trackingNumber.expiresAt
+      } : null,
+      createdAt: assignment.lead.createdAt
+    }));
+
+    res.json({ leads });
+
+  } catch (error) {
+    console.error('Get leads error:', error);
+    res.status(500).json({ error: 'Failed to load leads' });
+  }
+});
+// POST Add Credits to Contractor Account
+app.post('/api/contractor/credits/add', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+    const { amount } = req.body;
+
+    // Validate amount (must be $500, $1000, or $2500)
+    if (![500, 1000, 2500].includes(amount)) {
+      return res.status(400).json({ error: 'Invalid amount. Must be $500, $1000, or $2500' });
+    }
+
+    // Get current contractor
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+
+    // Calculate new balance
+    const currentBalance = contractor.creditBalance || 0;
+    const newBalance = currentBalance + amount;
+
+    // Calculate expiry date (60 days from now for starter, 90 for pro, 120 for elite)
+    const expiryDate = new Date();
+    if (contractor.subscriptionTier === 'pro') {
+      expiryDate.setDate(expiryDate.getDate() + 90);
+    } else if (contractor.subscriptionTier === 'elite') {
+      expiryDate.setDate(expiryDate.getDate() + 120);
+    } else {
+      expiryDate.setDate(expiryDate.getDate() + 60); // starter default
+    }
+
+    // Update contractor balance and create transaction record
+    const [updatedContractor, transaction] = await prisma.$transaction([
+      prisma.contractor.update({
+        where: { id: contractorId },
+        data: { creditBalance: newBalance }
+      }),
+      prisma.creditTransaction.create({
+        data: {
+          contractorId: contractorId,
+          type: 'deposit',
+          amount: amount,
+          balanceBefore: currentBalance,
+          balanceAfter: newBalance,
+          description: `Credit deposit: $${amount}`,
+          expiresAt: expiryDate
+        }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      newBalance: newBalance,
+      transaction: {
+        id: transaction.id,
+        amount: transaction.amount,
+        type: transaction.type,
+        expiresAt: transaction.expiresAt,
+        createdAt: transaction.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Add credits error:', error);
+    res.status(500).json({ error: 'Failed to add credits' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
