@@ -20,10 +20,6 @@ add-test-payment-method.js
 auth-test.js
 clear-test-data.js
 set-contractor-password.js
-setup-twilio-numbers.js
-sms-notifications.js
-stripe-payments.js
-trackingNumbers.js
 update-twilio-webhooks.js
 
 # Database
