@@ -2137,6 +2137,50 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+/* ### **Step 3: Add Backup Monitoring Endpoint**
+
+ Add to `index.js`:
+```javascript
+// Database backup status (admin)
+app.get('/api/admin/backup-status', adminAuth, async (req, res) => {
+  try {
+    // Get database stats
+    const stats = await Promise.all([
+      prisma.lead.count(),
+      prisma.contractor.count(),
+      prisma.billingRecord.count(),
+      prisma.leadAssignment.count(),
+      prisma.callLog.count(),
+      prisma.notificationLog.count()
+    ]);
+
+    const backupInfo = {
+      lastChecked: new Date().toISOString(),
+      recordCounts: {
+        leads: stats[0],
+        contractors: stats[1],
+        billingRecords: stats[2],
+        leadAssignments: stats[3],
+        callLogs: stats[4],
+        notificationLogs: stats[5]
+      },
+      totalRecords: stats.reduce((sum, count) => sum + count, 0),
+      databaseSize: 'Check Railway Dashboard',
+      backupSchedule: 'Daily at 2 AM UTC',
+      retention: '7 days',
+      provider: 'Railway Managed Backups'
+    };
+
+    res.json({
+      success: true,
+      backup: backupInfo
+    });
+  } catch (error) {
+    console.error('Backup status error:', error);
+    res.status(500).json({ error: 'Failed to fetch backup status' });
+  }
+}); */
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
