@@ -2792,8 +2792,8 @@ app.get('/api/contractor/dashboard', authenticateContractor, async (req, res) =>
         subscriptionTier: true,
         subscriptionStatus: true,
         stripeSubscriptionId: true,
-        serviceType: true,
-        serviceAreas: true,
+        //serviceType: true,
+        //serviceAreas: true,
         status: true
       }
     });
