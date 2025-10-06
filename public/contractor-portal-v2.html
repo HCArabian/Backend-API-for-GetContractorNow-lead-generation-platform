@@ -806,303 +806,197 @@
     </div>
   </div>
 
-  <script>
-    const API_URL = 'https://api.getcontractornow.com';
-    let selectedCreditAmount = 500;
-    let contractorData = null;
+ <script>
+    const API_BASE = window.location.hostname === 'localhost' 
+      ? 'http://localhost:3000/api'
+      : 'https://api.getcontractornow.com/api';
 
-    // Tab Management
-    document.querySelectorAll('.tab, .mobile-nav-item').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const tabName = tab.dataset.tab;
-        showTab(tabName);
-      });
-    });
+    // Login function
+    async function login(e) {
+      e.preventDefault();
+      
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      const errorDiv = document.getElementById('loginError');
 
-    function showTab(tabName) {
-      // Update desktop tabs
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
-      // Update mobile nav
-      document.querySelectorAll('.mobile-nav-item').forEach(t => t.classList.remove('active'));
-      
-      document.querySelector(`.tab[data-tab="${tabName}"]`)?.classList.add('active');
-      document.querySelector(`.mobile-nav-item[data-tab="${tabName}"]`)?.classList.add('active');
-      document.getElementById(tabName)?.classList.add('active');
-      
-      window.scrollTo(0, 0);
+      try {
+        const response = await fetch(`${API_BASE}/contractor/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          errorDiv.textContent = data.error || 'Login failed';
+          errorDiv.classList.remove('hidden');
+          return;
+        }
+
+        // Save token
+        localStorage.setItem('contractorToken', data.token);
+        
+        // Hide login, show dashboard
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+        
+        // Load dashboard data
+        await loadDashboard();
+
+      } catch (error) {
+        console.error('Login error:', error);
+        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.classList.remove('hidden');
+      }
     }
 
-    // Initialize
-    async function init() {
+    // Load dashboard data
+    async function loadDashboard() {
       const token = localStorage.getItem('contractorToken');
+      
       if (!token) {
-        window.location.href = '/contractor';
+        showLogin();
         return;
       }
 
-      await loadDashboard();
-    }
-
-    async function loadDashboard() {
       try {
-        const token = localStorage.getItem('contractorToken');
-        
-        // Load contractor data
-        const response = await fetch(`${API_URL}/api/contractors/dashboard`, {
+        const response = await fetch(`${API_BASE}/contractor/dashboard`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
 
-        if (!response.ok) throw new Error('Failed to load dashboard');
-
-        contractorData = await response.json();
-        
-        // Update UI
-        document.getElementById('contractorName').textContent = contractorData.contractor.businessName;
-        updateCreditBalance(contractorData.contractor.creditBalance || 0);
-        updateSubscriptionInfo(contractorData.contractor);
-        updateStats(contractorData.stats);
-        
-        // Load credit balance details
-        await loadCreditBalance();
-        
-      } catch (error) {
-        console.error('Dashboard load error:', error);
-        showAlert('Failed to load dashboard. Please refresh.', 'warning');
-      }
-    }
-
-    function updateCreditBalance(balance) {
-      document.getElementById('creditBalance').textContent = formatCurrency(balance);
-      
-      // Show alert if balance low
-      const minBalance = 500;
-      if (balance < minBalance) {
-        showAlert(`Your credit balance is below ${minBalance}. Add credit to continue receiving leads.`, 'warning');
-      }
-    }
-
-    function updateSubscriptionInfo(contractor) {
-      const tier = contractor.subscriptionTier || 'none';
-      const status = contractor.subscriptionStatus || 'inactive';
-      
-      // Badge
-      let badgeClass = 'badge-pro';
-      let badgeText = 'PRO';
-      
-      if (tier === 'starter') {
-        badgeClass = 'badge-starter';
-        badgeText = 'STARTER';
-      } else if (tier === 'elite') {
-        badgeClass = 'badge-elite';
-        badgeText = 'ELITE';
-      }
-      
-      if (contractor.isBetaTester) {
-        badgeText += ' (Beta)';
-      }
-      
-      document.getElementById('subscriptionBadge').innerHTML = 
-        `<div class="subscription-badge ${badgeClass}">${badgeText}</div>`;
-      
-      // Details
-      const monthlyFee = contractor.isBetaTester ? '$0' : 
-        tier === 'starter' ? '$99' :
-        tier === 'pro' ? '$125' :
-        tier === 'elite' ? '$200' : 'N/A';
-      
-      const leadCost = contractor.isBetaTester ? '$50' :
-        tier === 'starter' ? '$75' :
-        tier === 'pro' ? '$100' :
-        tier === 'elite' ? '$250' : 'N/A';
-      
-      const leadCap = tier === 'starter' ? '15' :
-        tier === 'pro' ? '40' :
-        tier === 'elite' ? 'Unlimited' : 'N/A';
-      
-      document.getElementById('subscriptionDetails').innerHTML = `
-        <div class="detail-row">
-          <div class="detail-label">Monthly Fee</div>
-          <div class="detail-value">${monthlyFee}/month</div>
-        </div>
-        <div class="detail-row">
-          <div class="detail-label">Lead Cost</div>
-          <div class="detail-value">${leadCost} per lead</div>
-        </div>
-        <div class="detail-row">
-          <div class="detail-label">Lead Cap</div>
-          <div class="detail-value">${leadCap}/month</div>
-        </div>
-        <div class="detail-row">
-          <div class="detail-label">Status</div>
-          <div class="detail-value" style="color: ${status === 'active' ? 'var(--success)' : 'var(--danger)'}">
-            ${status.toUpperCase()}
-          </div>
-        </div>
-      `;
-    }
-
-    function updateStats(stats) {
-      document.getElementById('leadsThisMonth').textContent = stats.leadsThisMonth || 0;
-      
-      const tier = contractorData.contractor.subscriptionTier;
-      const leadCap = tier === 'starter' ? 15 : tier === 'pro' ? 40 : 999;
-      const remaining = tier === 'elite' ? 'Unlimited' : Math.max(0, leadCap - (stats.leadsThisMonth || 0));
-      
-      document.getElementById('leadsRemaining').textContent = remaining;
-      
-      // Progress bar
-      if (tier !== 'elite') {
-        const percentage = ((stats.leadsThisMonth || 0) / leadCap) * 100;
-        document.getElementById('leadProgressBar').style.width = `${Math.min(percentage, 100)}%`;
-      }
-    }
-
-    async function loadCreditBalance() {
-      try {
-        const token = localStorage.getItem('contractorToken');
-        const response = await fetch(`${API_URL}/api/contractors/credit/balance`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!response.ok) throw new Error('Failed to load credit balance');
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Token invalid or expired
+            localStorage.removeItem('contractorToken');
+            showLogin();
+            return;
+          }
+          throw new Error('Failed to load dashboard');
+        }
 
         const data = await response.json();
-        displayTransactions(data.transactions || []);
         
+        // Update UI with real data
+        document.getElementById('contractorName').textContent = data.contractor.businessName;
+        updateCreditBalance(data.contractor.creditBalance);
+        
+        // Update subscription info
+        document.getElementById('subscriptionTier').textContent = 
+          data.subscription.tier.toUpperCase();
+        document.getElementById('subscriptionPrice').textContent = 
+          `$${data.subscription.monthlyPrice}/month`;
+        document.getElementById('subscriptionStatus').textContent = 
+          data.subscription.status;
+        document.getElementById('leadCost').textContent = 
+          `$${data.subscription.leadCost}`;
+
+        // Update stats
+        document.getElementById('leadsThisMonth').textContent = 
+          data.stats.leadsThisMonth;
+        document.getElementById('maxLeads').textContent = 
+          data.stats.maxLeadsPerMonth;
+        
+        const percentage = (data.stats.leadsThisMonth / data.stats.maxLeadsPerMonth) * 100;
+        document.getElementById('leadsProgress').style.width = `${Math.min(percentage, 100)}%`;
+
+        // Update transactions
+        displayTransactions(data.recentTransactions);
+
       } catch (error) {
-        console.error('Credit balance error:', error);
+        console.error('Dashboard error:', error);
+        showAlert('Failed to load dashboard data', 'error');
       }
     }
 
+    // Display transactions
     function displayTransactions(transactions) {
-      const recentContainer = document.getElementById('recentTransactions');
-      const allContainer = document.getElementById('allTransactions');
+      const container = document.getElementById('transactionsList');
       
-      if (transactions.length === 0) {
-        const emptyState = `
-          <div class="empty-state">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M13 2.05v2.02c3.95.49 7 3.85 7 7.93s-3.05 7.44-7 7.93v2.02c5.05-.5 9-4.76 9-9.95s-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
-            </svg>
-            <p>No transactions yet</p>
-          </div>
-        `;
-        recentContainer.innerHTML = emptyState;
-        allContainer.innerHTML = emptyState;
+      if (!transactions || transactions.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-center py-4">No transactions yet</p>';
         return;
       }
-      
-      const transactionHTML = transactions.map(t => {
-        const isPositive = t.amount > 0;
-        const typeClass = isPositive ? 'deposit' : 'deduction';
-        const amountClass = isPositive ? 'positive' : 'negative';
-        const sign = isPositive ? '+' : '';
-        
-        return `
-          <div class="transaction-item ${typeClass}">
-            <div class="transaction-info">
-              <div class="transaction-description">${t.description}</div>
-              <div class="transaction-date">${formatDate(t.createdAt)}</div>
-            </div>
-            <div class="transaction-amount ${amountClass}">
-              ${sign}${formatCurrency(Math.abs(t.amount))}
-            </div>
+
+      container.innerHTML = transactions.map(tx => `
+        <div class="flex justify-between items-center py-3 border-b border-gray-700">
+          <div>
+            <p class="font-medium">${tx.description}</p>
+            <p class="text-sm text-gray-400">${new Date(tx.createdAt).toLocaleDateString()}</p>
           </div>
-        `;
-      }).join('');
-      
-      recentContainer.innerHTML = transactionHTML;
-      allContainer.innerHTML = transactionHTML;
+          <div class="text-right">
+            <p class="font-bold ${tx.type === 'deposit' ? 'text-green-400' : 'text-red-400'}">
+              ${tx.type === 'deposit' ? '+' : '-'}$${tx.amount}
+            </p>
+            <p class="text-sm text-gray-400">Balance: $${tx.balanceAfter}</p>
+          </div>
+        </div>
+      `).join('');
     }
 
-    // Credit Modal
+    // Update credit balance display
+    function updateCreditBalance(balance) {
+      document.getElementById('creditBalance').textContent = `$${balance.toFixed(2)}`;
+    }
+
+    // Show login screen
+    function showLogin() {
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('dashboard').classList.add('hidden');
+    }
+
+    // Open add credit modal
     function openAddCreditModal() {
-      document.getElementById('addCreditModal').classList.add('active');
+      document.getElementById('addCreditModal').classList.remove('hidden');
     }
 
+    // Close add credit modal
     function closeAddCreditModal() {
-      document.getElementById('addCreditModal').classList.remove('active');
+      document.getElementById('addCreditModal').classList.add('hidden');
     }
 
-    function selectCreditAmount(amount) {
-      selectedCreditAmount = amount;
-      document.querySelectorAll('.credit-option').forEach(opt => {
-        opt.classList.remove('selected');
-      });
-      event.target.closest('.credit-option').classList.add('selected');
-    }
-
-    async function processCredit() {
-      const btn = document.getElementById('addCreditBtn');
-      btn.disabled = true;
-      btn.textContent = 'Processing...';
+    // Add credits
+    async function addCredits(amount) {
+      const token = localStorage.getItem('contractorToken');
       
       try {
-        const token = localStorage.getItem('contractorToken');
-        const response = await fetch(`${API_URL}/api/contractors/credit/deposit`, {
+        const response = await fetch(`${API_BASE}/contractor/credits/add`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ amount: selectedCreditAmount })
+          body: JSON.stringify({ amount })
         });
 
         const data = await response.json();
 
-        if (response.ok && data.success) {
-          showAlert(`Successfully added ${formatCurrency(selectedCreditAmount)} to your account!`, 'success');
-          closeAddCreditModal();
-          await loadDashboard();
-        } else {
-          throw new Error(data.error || 'Failed to add credit');
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to add credits');
         }
+
+        showAlert(`Successfully added $${amount} to your account!`, 'success');
+        closeAddCreditModal();
         
+        // Reload dashboard to show new balance
+        await loadDashboard();
+
       } catch (error) {
-        console.error('Credit deposit error:', error);
-        showAlert(error.message || 'Failed to process payment', 'warning');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Add Credit';
+        console.error('Add credits error:', error);
+        showAlert(error.message, 'error');
       }
     }
 
-    // Utility Functions
-    function formatCurrency(amount) {
-      return `${parseFloat(amount).toFixed(2)}`;
-    }
-
-    function formatDate(dateString) {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-      
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-      });
-    }
-
-    function showAlert(message, type = 'info') {
+    // Show alert
+    function showAlert(message, type = 'success') {
       const alertContainer = document.getElementById('alertContainer');
       const alert = document.createElement('div');
-      alert.className = `alert alert-${type}`;
+      alert.className = `p-4 rounded-lg ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center gap-3`;
       alert.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
         </svg>
         <div>${message}</div>
       `;
@@ -1111,12 +1005,30 @@
       setTimeout(() => alert.remove(), 5000);
     }
 
+    // Logout
     function logout() {
       localStorage.removeItem('contractorToken');
-      window.location.href = '/contractor';
+      showLogin();
     }
 
-    // Initialize on load
+    // Initialize on page load
+    async function init() {
+      const token = localStorage.getItem('contractorToken');
+      
+      if (!token) {
+        showLogin();
+        return;
+      }
+
+      // Hide login, show dashboard
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboard').classList.remove('hidden');
+      
+      // Load dashboard data
+      await loadDashboard();
+    }
+
+    // Run init when page loads
     init();
   </script>
 </body>
