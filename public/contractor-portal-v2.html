@@ -5,35 +5,116 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Contractor Portal - GetContractorNow</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
     :root {
-      --primary-blue: #0078D4;
-      --dark-blue: #005A9E;
+      --primary: #0078D4;
+      --primary-dark: #005A9E;
       --success: #10B981;
       --warning: #F59E0B;
       --danger: #EF4444;
       --gray-50: #F9FAFB;
       --gray-100: #F3F4F6;
       --gray-200: #E5E7EB;
-      --gray-300: #D1D5DB;
       --gray-600: #4B5563;
-      --gray-800: #1F2937;
       --gray-900: #111827;
-      --shadow: 0 1px 3px rgba(0,0,0,0.1);
-      --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
-      --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--gray-50);
       color: var(--gray-900);
-      line-height: 1.6;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Login Screen */
+    .login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      padding: 1rem;
+    }
+
+    .login-card {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 20px 25px rgba(0,0,0,0.15);
+    }
+
+    .login-logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 1.5rem;
+      display: block;
+      border-radius: 50%;
+    }
+
+    .login-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--gray-200);
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .login-error {
+      background: #FEE2E2;
+      color: #991B1B;
+      padding: 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
     }
 
     /* Header */
@@ -43,7 +124,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: var(--shadow);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
 
     .header-content {
@@ -70,27 +151,7 @@
     .logo-text {
       font-size: 1.25rem;
       font-weight: 700;
-      color: var(--primary-blue);
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .user-menu {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .user-menu:hover {
-      background: var(--gray-100);
+      color: var(--primary);
     }
 
     .logout-btn {
@@ -100,60 +161,18 @@
       border-radius: 6px;
       cursor: pointer;
       font-weight: 500;
-      transition: all 0.2s;
     }
 
     .logout-btn:hover {
-      background: var(--gray-300);
+      background: var(--gray-600);
+      color: white;
     }
 
-    /* Layout */
+    /* Container */
     .container {
       max-width: 1400px;
       margin: 0 auto;
       padding: 2rem 1.5rem;
-    }
-
-    /* Mobile Nav */
-    .mobile-nav {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: white;
-      border-top: 1px solid var(--gray-200);
-      padding: 0.5rem;
-      z-index: 50;
-      box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-    }
-
-    .mobile-nav-items {
-      display: flex;
-      justify-content: space-around;
-    }
-
-    .mobile-nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.5rem;
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: var(--gray-600);
-      font-size: 0.75rem;
-      transition: color 0.2s;
-    }
-
-    .mobile-nav-item.active {
-      color: var(--primary-blue);
-    }
-
-    .mobile-nav-item svg {
-      width: 24px;
-      height: 24px;
     }
 
     /* Tabs */
@@ -162,8 +181,6 @@
       gap: 0.5rem;
       border-bottom: 2px solid var(--gray-200);
       margin-bottom: 2rem;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
     }
 
     .tab {
@@ -175,33 +192,23 @@
       color: var(--gray-600);
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
-      white-space: nowrap;
-      transition: all 0.2s;
     }
 
-    .tab:hover {
-      color: var(--primary-blue);
-    }
-
+    .tab:hover { color: var(--primary); }
     .tab.active {
-      color: var(--primary-blue);
-      border-bottom-color: var(--primary-blue);
+      color: var(--primary);
+      border-bottom-color: var(--primary);
     }
 
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
 
     /* Cards */
     .card {
       background: white;
       border-radius: 12px;
       padding: 1.5rem;
-      box-shadow: var(--shadow);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
       margin-bottom: 1.5rem;
     }
 
@@ -215,27 +222,13 @@
     .card-title {
       font-size: 1.25rem;
       font-weight: 700;
-      color: var(--gray-900);
     }
 
-    /* Credit Balance Card */
+    /* Credit Card */
     .credit-card {
-      background: linear-gradient(135deg, var(--primary-blue) 0%, var(--dark-blue) 100%);
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
       color: white;
       padding: 2rem;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .credit-card::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      right: -20%;
-      width: 300px;
-      height: 300px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 50%;
     }
 
     .credit-balance-label {
@@ -256,53 +249,14 @@
       flex-wrap: wrap;
     }
 
-    .btn {
-      padding: 0.75rem 1.5rem;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
     .btn-white {
       background: white;
-      color: var(--primary-blue);
-    }
-
-    .btn-white:hover {
-      background: var(--gray-100);
+      color: var(--primary);
     }
 
     .btn-outline {
       background: transparent;
       border: 2px solid white;
-      color: white;
-    }
-
-    .btn-outline:hover {
-      background: rgba(255,255,255,0.1);
-    }
-
-    .btn-primary {
-      background: var(--primary-blue);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--dark-blue);
-    }
-
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
-
-    .btn-danger {
-      background: var(--danger);
       color: white;
     }
 
@@ -313,47 +267,43 @@
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     }
 
-    /* Subscription Card */
-    .subscription-badge {
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      border-radius: 20px;
-      font-weight: 600;
-      font-size: 0.875rem;
+    /* Lead Card */
+    .lead-card {
+      border-left: 4px solid var(--primary);
+      padding: 1.5rem;
+      background: white;
+      border-radius: 8px;
       margin-bottom: 1rem;
     }
 
-    .badge-starter {
-      background: #DBEAFE;
-      color: #1E40AF;
-    }
-
-    .badge-pro {
-      background: #D1FAE5;
-      color: #065F46;
-    }
-
-    .badge-elite {
-      background: #FEF3C7;
-      color: #92400E;
-    }
-
-    .subscription-details {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .detail-row {
+    .lead-header {
       display: flex;
       justify-content: space-between;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid var(--gray-200);
+      align-items: flex-start;
+      margin-bottom: 1rem;
     }
 
-    .detail-row:last-child {
-      border-bottom: none;
+    .lead-category {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
     }
+
+    .category-platinum { background: #FEF3C7; color: #92400E; }
+    .category-gold { background: #FDE68A; color: #78350F; }
+    .category-silver { background: #E5E7EB; color: #374151; }
+    .category-bronze { background: #FED7AA; color: #9A3412; }
+
+    .lead-detail {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--gray-100);
+    }
+
+    .lead-detail:last-child { border-bottom: none; }
 
     .detail-label {
       color: var(--gray-600);
@@ -362,13 +312,30 @@
 
     .detail-value {
       font-weight: 600;
-      color: var(--gray-900);
     }
+
+    .btn-call {
+      background: var(--success);
+      color: white;
+      width: 100%;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+
+    /* Subscription Details */
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .detail-row:last-child { border-bottom: none; }
 
     /* Stats */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 1rem;
       margin-top: 1rem;
     }
@@ -383,22 +350,15 @@
     .stat-value {
       font-size: 2rem;
       font-weight: 700;
-      color: var(--primary-blue);
+      color: var(--primary);
     }
 
     .stat-label {
       font-size: 0.875rem;
       color: var(--gray-600);
-      margin-top: 0.25rem;
     }
 
-    /* Transaction List */
-    .transaction-list {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
+    /* Transactions */
     .transaction-item {
       display: flex;
       justify-content: space-between;
@@ -406,20 +366,12 @@
       padding: 1rem;
       background: var(--gray-50);
       border-radius: 8px;
-      border-left: 4px solid var(--gray-300);
+      margin-bottom: 0.75rem;
+      border-left: 4px solid var(--gray-200);
     }
 
-    .transaction-item.deposit {
-      border-left-color: var(--success);
-    }
-
-    .transaction-item.deduction {
-      border-left-color: var(--danger);
-    }
-
-    .transaction-info {
-      flex: 1;
-    }
+    .transaction-item.deposit { border-left-color: var(--success); }
+    .transaction-item.deduction { border-left-color: var(--danger); }
 
     .transaction-description {
       font-weight: 600;
@@ -436,13 +388,8 @@
       font-weight: 700;
     }
 
-    .transaction-amount.positive {
-      color: var(--success);
-    }
-
-    .transaction-amount.negative {
-      color: var(--danger);
-    }
+    .transaction-amount.positive { color: var(--success); }
+    .transaction-amount.negative { color: var(--danger); }
 
     /* Progress Bar */
     .progress-bar {
@@ -455,35 +402,8 @@
 
     .progress-fill {
       height: 100%;
-      background: var(--primary-blue);
+      background: var(--primary);
       transition: width 0.3s;
-    }
-
-    /* Alert */
-    .alert {
-      padding: 1rem;
-      border-radius: 8px;
-      margin-bottom: 1.5rem;
-      display: flex;
-      gap: 0.75rem;
-    }
-
-    .alert-warning {
-      background: #FEF3C7;
-      border: 1px solid #FCD34D;
-      color: #92400E;
-    }
-
-    .alert-success {
-      background: #D1FAE5;
-      border: 1px solid #6EE7B7;
-      color: #065F46;
-    }
-
-    .alert-info {
-      background: #DBEAFE;
-      border: 1px solid #93C5FD;
-      color: #1E40AF;
     }
 
     /* Modal */
@@ -501,9 +421,7 @@
       padding: 1rem;
     }
 
-    .modal.active {
-      display: flex;
-    }
+    .modal.active { display: flex; }
 
     .modal-content {
       background: white;
@@ -511,8 +429,6 @@
       padding: 2rem;
       max-width: 500px;
       width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
     }
 
     .modal-header {
@@ -532,7 +448,6 @@
       border: none;
       font-size: 1.5rem;
       cursor: pointer;
-      color: var(--gray-600);
     }
 
     .credit-options {
@@ -546,24 +461,19 @@
       border: 2px solid var(--gray-200);
       border-radius: 8px;
       cursor: pointer;
-      transition: all 0.2s;
       text-align: center;
+      transition: all 0.2s;
     }
 
     .credit-option:hover {
-      border-color: var(--primary-blue);
+      border-color: var(--primary);
       background: var(--gray-50);
-    }
-
-    .credit-option.selected {
-      border-color: var(--primary-blue);
-      background: #EFF6FF;
     }
 
     .credit-option-amount {
       font-size: 2rem;
       font-weight: 700;
-      color: var(--primary-blue);
+      color: var(--primary);
       margin-bottom: 0.5rem;
     }
 
@@ -572,214 +482,184 @@
       color: var(--gray-600);
     }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      .container {
-        padding: 1rem;
-        padding-bottom: 5rem;
-      }
-
-      .mobile-nav {
-        display: block;
-      }
-
-      .tabs {
-        display: none;
-      }
-
-      .logo-text {
-        display: none;
-      }
-
-      .credit-balance-amount {
-        font-size: 2rem;
-      }
-
-      .grid {
-        grid-template-columns: 1fr;
-      }
-
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .transaction-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-      }
-
-      .modal-content {
-        padding: 1.5rem;
-      }
-    }
-
     .loading {
       text-align: center;
-      padding: 3rem;
+      padding: 2rem;
       color: var(--gray-600);
     }
 
     .empty-state {
       text-align: center;
-      padding: 3rem;
+      padding: 3rem 1rem;
       color: var(--gray-600);
     }
 
-    .empty-state svg {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 1rem;
-      opacity: 0.5;
+    @media (max-width: 768px) {
+      .container { padding: 1rem; }
+      .credit-balance-amount { font-size: 2rem; }
+      .grid { grid-template-columns: 1fr; }
+      .logo-text { display: none; }
     }
   </style>
 </head>
 <body>
-  <!-- Header -->
-  <header class="header">
-    <div class="header-content">
-      <div class="logo-section">
-        <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo" class="logo">
-        <div class="logo-text">GetContractorNow</div>
-      </div>
-      <div class="header-actions">
-        <div class="user-menu" id="userMenu">
-          <span id="contractorName">Loading...</span>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="Logo" class="login-logo">
+      <h1 class="login-title">Contractor Portal</h1>
+      <div id="loginError" class="login-error hidden"></div>
+      <form onsubmit="login(event)">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="loginEmail" class="form-input" required>
         </div>
-        <button class="logout-btn" onclick="logout()">Logout</button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Main Container -->
-  <div class="container">
-    <!-- Desktop Tabs -->
-    <div class="tabs">
-      <button class="tab active" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="leads">Leads</button>
-      <button class="tab" data-tab="billing">Billing</button>
-      <button class="tab" data-tab="settings">Settings</button>
-    </div>
-
-    <!-- Dashboard Tab -->
-    <div class="tab-content active" id="dashboard">
-      <div id="alertContainer"></div>
-
-      <!-- Credit Balance Card -->
-      <div class="card credit-card">
-        <div class="credit-balance-label">Available Credit</div>
-        <div class="credit-balance-amount" id="creditBalance">$0.00</div>
-        <div class="credit-actions">
-          <button class="btn btn-white" onclick="openAddCreditModal()">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"/></svg>
-            Add Credit
-          </button>
-          <button class="btn btn-outline" onclick="showTab('billing')">View History</button>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="loginPassword" class="form-input" required>
         </div>
-      </div>
-
-      <!-- Grid Layout -->
-      <div class="grid">
-        <!-- Subscription Card -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Subscription</h2>
-          </div>
-          <div id="subscriptionBadge"></div>
-          <div class="subscription-details" id="subscriptionDetails">
-            <div class="loading">Loading subscription info...</div>
-          </div>
-        </div>
-
-        <!-- Quick Stats -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">This Month</h2>
-          </div>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-value" id="leadsThisMonth">0</div>
-              <div class="stat-label">Leads Received</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-value" id="leadsRemaining">0</div>
-              <div class="stat-label">Remaining</div>
-            </div>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="leadProgressBar" style="width: 0%"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Recent Transactions -->
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Recent Transactions</h2>
-          <button class="btn btn-primary" onclick="showTab('billing')">View All</button>
-        </div>
-        <div class="transaction-list" id="recentTransactions">
-          <div class="loading">Loading transactions...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Leads Tab -->
-    <div class="tab-content" id="leads">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Your Leads</h2>
-        </div>
-        <div id="leadsContainer">
-          <div class="loading">Loading leads...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Billing Tab -->
-    <div class="tab-content" id="billing">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Transaction History</h2>
-        </div>
-        <div class="transaction-list" id="allTransactions">
-          <div class="loading">Loading transactions...</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Settings Tab -->
-    <div class="tab-content" id="settings">
-      <div class="card">
-        <div class="card-header">
-          <h2 class="card-title">Account Settings</h2>
-        </div>
-        <p>Settings page coming soon...</p>
-      </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
     </div>
   </div>
 
-  <!-- Mobile Navigation -->
-  <nav class="mobile-nav">
-    <div class="mobile-nav-items">
-      <button class="mobile-nav-item active" data-tab="dashboard">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-        Dashboard
-      </button>
-      <button class="mobile-nav-item" data-tab="leads">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-        Leads
-      </button>
-      <button class="mobile-nav-item" data-tab="billing">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
-        Billing
-      </button>
-      <button class="mobile-nav-item" data-tab="settings">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-        Settings
-      </button>
+  <!-- Dashboard Container -->
+  <div id="dashboardContainer" class="hidden">
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-section">
+          <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="Logo" class="logo">
+          <div class="logo-text">GetContractorNow</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <span id="contractorName">Loading...</span>
+          <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="container">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
+        <button class="tab" onclick="showTab('leads')">My Leads</button>
+        <button class="tab" onclick="showTab('billing')">Billing</button>
+        <button class="tab" onclick="showTab('profile')">Profile</button>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div class="tab-content active" id="dashboard">
+        <div id="alertContainer"></div>
+
+        <div class="card credit-card">
+          <div class="credit-balance-label">Available Credit</div>
+          <div class="credit-balance-amount" id="creditBalance">$0.00</div>
+          <div class="credit-actions">
+            <button class="btn btn-white" onclick="openAddCreditModal()">
+              Add Credit
+            </button>
+            <button class="btn btn-outline" onclick="showTab('billing')">View History</button>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Subscription</h2>
+            </div>
+            <div id="subscriptionDetails">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">This Month</h2>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="leadsThisMonth">0</div>
+                <div class="stat-label">Leads Received</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="leadsRemaining">0</div>
+                <div class="stat-label">Remaining</div>
+              </div>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="leadProgressBar"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Transactions</h2>
+          </div>
+          <div id="recentTransactions">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- My Leads Tab -->
+      <div class="tab-content" id="leads">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">My Leads</h2>
+          </div>
+          <div id="leadsContainer">
+            <div class="loading">Loading leads...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billing Tab -->
+      <div class="tab-content" id="billing">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Transaction History</h2>
+          </div>
+          <div id="allTransactions">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile Tab -->
+      <div class="tab-content" id="profile">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Profile</h2>
+          </div>
+          <div id="profileDetails">
+            <div class="loading">Loading...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Change Password</h2>
+          </div>
+          <form onsubmit="changePassword(event)">
+            <div class="form-group">
+              <label class="form-label">Current Password</label>
+              <input type="password" id="currentPassword" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">New Password</label>
+              <input type="password" id="newPassword" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Confirm New Password</label>
+              <input type="password" id="confirmPassword" class="form-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Update Password</button>
+          </form>
+        </div>
+      </div>
     </div>
-  </nav>
+  </div>
 
   <!-- Add Credit Modal -->
   <div class="modal" id="addCreditModal">
@@ -789,32 +669,30 @@
         <button class="close-btn" onclick="closeAddCreditModal()">&times;</button>
       </div>
       <div class="credit-options">
-        <div class="credit-option" onclick="selectCreditAmount(500)">
+        <div class="credit-option" onclick="addCredits(500)">
           <div class="credit-option-amount">$500</div>
           <div class="credit-option-note">Minimum required</div>
         </div>
-        <div class="credit-option" onclick="selectCreditAmount(1000)">
+        <div class="credit-option" onclick="addCredits(1000)">
           <div class="credit-option-amount">$1,000</div>
           <div class="credit-option-note">Recommended</div>
         </div>
-        <div class="credit-option" onclick="selectCreditAmount(2500)">
+        <div class="credit-option" onclick="addCredits(2500)">
           <div class="credit-option-amount">$2,500</div>
           <div class="credit-option-note">Best value</div>
         </div>
       </div>
-      <button class="btn btn-primary" style="width: 100%;" onclick="processCredit()" id="addCreditBtn">Add Credit</button>
     </div>
   </div>
 
- <script>
+  <script>
     const API_BASE = window.location.hostname === 'localhost' 
       ? 'http://localhost:3000/api'
       : 'https://api.getcontractornow.com/api';
 
-    // Login function
+    // Login
     async function login(e) {
       e.preventDefault();
-      
       const email = document.getElementById('loginEmail').value;
       const password = document.getElementById('loginPassword').value;
       const errorDiv = document.getElementById('loginError');
@@ -827,140 +705,235 @@
         });
 
         const data = await response.json();
-
         if (!response.ok) {
           errorDiv.textContent = data.error || 'Login failed';
           errorDiv.classList.remove('hidden');
           return;
         }
 
-        // Save token
         localStorage.setItem('contractorToken', data.token);
-        
-        // Hide login, show dashboard
         document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('dashboard').classList.remove('hidden');
-        
-        // Load dashboard data
+        document.getElementById('dashboardContainer').classList.remove('hidden');
         await loadDashboard();
-
+        await loadLeads();
       } catch (error) {
-        console.error('Login error:', error);
-        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.textContent = 'Connection error';
         errorDiv.classList.remove('hidden');
       }
     }
 
-    // Load dashboard data
+    // Load Dashboard
     async function loadDashboard() {
       const token = localStorage.getItem('contractorToken');
-      
-      if (!token) {
-        showLogin();
-        return;
-      }
+      if (!token) { showLogin(); return; }
 
       try {
         const response = await fetch(`${API_BASE}/contractor/dashboard`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (!response.ok) {
-          if (response.status === 401) {
-            // Token invalid or expired
-            localStorage.removeItem('contractorToken');
-            showLogin();
-            return;
-          }
-          throw new Error('Failed to load dashboard');
+          if (response.status === 401) { showLogin(); return; }
+          throw new Error('Failed to load');
         }
 
         const data = await response.json();
         
-        // Update UI with real data
         document.getElementById('contractorName').textContent = data.contractor.businessName;
-        updateCreditBalance(data.contractor.creditBalance);
+        document.getElementById('creditBalance').textContent = `$${data.contractor.creditBalance.toFixed(2)}`;
         
-        // Update subscription info
-        document.getElementById('subscriptionTier').textContent = 
-          data.subscription.tier.toUpperCase();
-        document.getElementById('subscriptionPrice').textContent = 
-          `$${data.subscription.monthlyPrice}/month`;
-        document.getElementById('subscriptionStatus').textContent = 
-          data.subscription.status;
-        document.getElementById('leadCost').textContent = 
-          `$${data.subscription.leadCost}`;
+        // Subscription
+        document.getElementById('subscriptionDetails').innerHTML = `
+          <div class="detail-row">
+            <span class="detail-label">Tier</span>
+            <span class="detail-value">${data.subscription.tier.toUpperCase()}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Monthly Price</span>
+            <span class="detail-value">$${data.subscription.monthlyPrice}/month</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Lead Cost</span>
+            <span class="detail-value">$${data.subscription.leadCost}/lead</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status</span>
+            <span class="detail-value">${data.subscription.status}</span>
+          </div>
+        `;
 
-        // Update stats
-        document.getElementById('leadsThisMonth').textContent = 
-          data.stats.leadsThisMonth;
-        document.getElementById('maxLeads').textContent = 
-          data.stats.maxLeadsPerMonth;
+        // Stats
+        document.getElementById('leadsThisMonth').textContent = data.stats.leadsThisMonth;
+        const remaining = data.stats.maxLeadsPerMonth - data.stats.leadsThisMonth;
+        document.getElementById('leadsRemaining').textContent = remaining;
         
         const percentage = (data.stats.leadsThisMonth / data.stats.maxLeadsPerMonth) * 100;
-        document.getElementById('leadsProgress').style.width = `${Math.min(percentage, 100)}%`;
+        document.getElementById('leadProgressBar').style.width = `${Math.min(percentage, 100)}%`;
 
-        // Update transactions
-        displayTransactions(data.recentTransactions);
+        // Transactions
+        displayTransactions(data.recentTransactions, 'recentTransactions');
 
+        // Load profile
+        document.getElementById('profileDetails').innerHTML = `
+          <div class="detail-row">
+            <span class="detail-label">Business Name</span>
+            <span class="detail-value">${data.contractor.businessName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Email</span>
+            <span class="detail-value">${data.contractor.email}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Phone</span>
+            <span class="detail-value">${data.contractor.phone}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Service Type</span>
+            <span class="detail-value">${data.contractor.serviceType}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Service Areas</span>
+            <span class="detail-value">${data.contractor.serviceAreas.join(', ')}</span>
+          </div>
+        `;
       } catch (error) {
         console.error('Dashboard error:', error);
-        showAlert('Failed to load dashboard data', 'error');
       }
     }
 
-    // Display transactions
-    function displayTransactions(transactions) {
-      const container = document.getElementById('transactionsList');
-      
+    // Load Leads
+    async function loadLeads() {
+      const token = localStorage.getItem('contractorToken');
+      try {
+        const response = await fetch(`${API_BASE}/contractor/leads`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await response.json();
+        
+        if (!data.leads || data.leads.length === 0) {
+          document.getElementById('leadsContainer').innerHTML = '<div class="empty-state">No leads yet</div>';
+          return;
+        }
+
+        document.getElementById('leadsContainer').innerHTML = data.leads.map(lead => `
+          <div class="lead-card">
+            <div class="lead-header">
+              <div>
+                <h3>${lead.customer.name}</h3>
+                <span class="lead-category category-${lead.project.category.toLowerCase()}">${lead.project.category}</span>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">$${lead.project.price}</div>
+                <div style="font-size: 0.875rem; color: var(--gray-600);">Lead Price</div>
+              </div>
+            </div>
+            <div class="lead-detail">
+              <span class="detail-label">Service</span>
+              <span class="detail-value">${lead.project.serviceType.replace(/_/g, ' ')}</span>
+            </div>
+            <div class="lead-detail">
+              <span class="detail-label">Timeline</span>
+              <span class="detail-value">${lead.project.timeline}</span>
+            </div>
+            <div class="lead-detail">
+              <span class="detail-label">Location</span>
+              <span class="detail-value">${lead.customer.city}, ${lead.customer.state} ${lead.customer.zipCode}</span>
+            </div>
+            <div class="lead-detail">
+              <span class="detail-label">Phone</span>
+              <span class="detail-value">${lead.customer.phone}</span>
+            </div>
+            ${lead.trackingNumber ? `
+              <div class="lead-detail">
+                <span class="detail-label">Tracking Number</span>
+                <span class="detail-value">${lead.trackingNumber.phone}</span>
+              </div>
+            ` : ''}
+            <div class="lead-detail">
+              <span class="detail-label">Status</span>
+              <span class="detail-value">${lead.status}</span>
+            </div>
+            ${lead.project.description ? `
+              <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-100);">
+                <div class="detail-label">Project Description:</div>
+                <div style="margin-top: 0.5rem;">${lead.project.description}</div>
+              </div>
+            ` : ''}
+            <button class="btn btn-call" onclick="window.location.href='tel:${lead.trackingNumber ? lead.trackingNumber.phone : lead.customer.phone}'">
+              Call Customer
+            </button>
+          </div>
+        `).join('');
+      } catch (error) {
+        console.error('Leads error:', error);
+      }
+    }
+
+    // Display Transactions
+    function displayTransactions(transactions, containerId) {
+      const container = document.getElementById(containerId);
       if (!transactions || transactions.length === 0) {
-        container.innerHTML = '<p class="text-gray-400 text-center py-4">No transactions yet</p>';
+        container.innerHTML = '<div class="empty-state">No transactions yet</div>';
         return;
       }
 
       container.innerHTML = transactions.map(tx => `
-        <div class="flex justify-between items-center py-3 border-b border-gray-700">
+        <div class="transaction-item ${tx.type}">
           <div>
-            <p class="font-medium">${tx.description}</p>
-            <p class="text-sm text-gray-400">${new Date(tx.createdAt).toLocaleDateString()}</p>
+            <div class="transaction-description">${tx.description}</div>
+            <div class="transaction-date">${new Date(tx.createdAt).toLocaleDateString()}</div>
           </div>
-          <div class="text-right">
-            <p class="font-bold ${tx.type === 'deposit' ? 'text-green-400' : 'text-red-400'}">
-              ${tx.type === 'deposit' ? '+' : '-'}$${tx.amount}
-            </p>
-            <p class="text-sm text-gray-400">Balance: $${tx.balanceAfter}</p>
+          <div class="transaction-amount ${tx.type === 'deposit' ? 'positive' : 'negative'}">
+            ${tx.type === 'deposit' ? '+' : '-'}$${tx.amount}
           </div>
         </div>
       `).join('');
     }
 
-    // Update credit balance display
-    function updateCreditBalance(balance) {
-      document.getElementById('creditBalance').textContent = `$${balance.toFixed(2)}`;
+    // Show Tab
+    function showTab(tabName) {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      event.target.classList.add('active');
+      document.getElementById(tabName).classList.add('active');
+
+      if (tabName === 'billing') {
+        loadAllTransactions();
+      }
     }
 
-    // Show login screen
-    function showLogin() {
-      document.getElementById('loginScreen').classList.remove('hidden');
-      document.getElementById('dashboard').classList.add('hidden');
+    // Load all transactions
+    async function loadAllTransactions() {
+      const token = localStorage.getItem('contractorToken');
+      try {
+        const response = await fetch(`${API_BASE}/contractor/dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        displayTransactions(data.recentTransactions, 'allTransactions');
+      } catch (error) {
+        console.error('Transactions error:', error);
+      }
     }
 
-    // Open add credit modal
+    // Modal functions
     function openAddCreditModal() {
-      document.getElementById('addCreditModal').classList.remove('hidden');
+      document.getElementById('addCreditModal').classList.add('active');
     }
 
-    // Close add credit modal
     function closeAddCreditModal() {
-      document.getElementById('addCreditModal').classList.add('hidden');
+      document.getElementById('addCreditModal').classList.remove('active');
     }
 
-    // Add credits
+    // Add Credits
     async function addCredits(amount) {
       const token = localStorage.getItem('contractorToken');
-      
       try {
         const response = await fetch(`${API_BASE}/contractor/credits/add`, {
           method: 'POST',
@@ -972,37 +945,60 @@
         });
 
         const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to add credits');
-        }
-
-        showAlert(`Successfully added $${amount} to your account!`, 'success');
+        showAlert(`Successfully added $${amount}!`);
         closeAddCreditModal();
-        
-        // Reload dashboard to show new balance
         await loadDashboard();
-
       } catch (error) {
-        console.error('Add credits error:', error);
         showAlert(error.message, 'error');
       }
     }
 
-    // Show alert
+    // Change Password
+    async function changePassword(e) {
+      e.preventDefault();
+      const current = document.getElementById('currentPassword').value;
+      const newPass = document.getElementById('newPassword').value;
+      const confirm = document.getElementById('confirmPassword').value;
+
+      if (newPass !== confirm) {
+        showAlert('Passwords do not match', 'error');
+        return;
+      }
+
+      const token = localStorage.getItem('contractorToken');
+      try {
+        const response = await fetch(`${API_BASE}/contractor/change-password`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ currentPassword: current, newPassword: newPass })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        showAlert('Password updated successfully!');
+        e.target.reset();
+      } catch (error) {
+        showAlert(error.message, 'error');
+      }
+    }
+
+    // Show Alert
     function showAlert(message, type = 'success') {
-      const alertContainer = document.getElementById('alertContainer');
+      const container = document.getElementById('alertContainer');
       const alert = document.createElement('div');
-      alert.className = `p-4 rounded-lg ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white flex items-center gap-3`;
-      alert.innerHTML = `
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-        </svg>
-        <div>${message}</div>
-      `;
-      alertContainer.appendChild(alert);
-      
-      setTimeout(() => alert.remove(), 5000);
+      alert.className = 'card';
+      alert.style.padding = '1rem';
+      alert.style.background = type === 'success' ? 'var(--success)' : 'var(--danger)';
+      alert.style.color = 'white';
+      alert.textContent = message;
+      container.appendChild(alert);
+      setTimeout(() => alert.remove(), 3000);
     }
 
     // Logout
@@ -1011,24 +1007,33 @@
       showLogin();
     }
 
-    // Initialize on page load
-    async function init() {
-      const token = localStorage.getItem('contractorToken');
-      
-      if (!token) {
-        showLogin();
-        return;
-      }
-
-      // Hide login, show dashboard
-      document.getElementById('loginScreen').classList.add('hidden');
-      document.getElementById('dashboard').classList.remove('hidden');
-      
-      // Load dashboard data
-      await loadDashboard();
+    // Show Login
+    function showLogin() {
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('dashboardContainer').classList.add('hidden');
     }
 
-    // Run init when page loads
+    // Initialize
+    async function init() {
+      const token = localStorage.getItem('contractorToken');
+      if (!token) { showLogin(); return; }
+
+      try {
+        const response = await fetch(`${API_BASE}/contractor/dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) { showLogin(); return; }
+
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('dashboardContainer').classList.remove('hidden');
+        await loadDashboard();
+        await loadLeads();
+      } catch (error) {
+        showLogin();
+      }
+    }
+
     init();
   </script>
 </body>
