@@ -1,17 +1,10 @@
-node_modules
-# Keep environment variables out of version control
-.env
-
-/generated/prisma
-
-
-Dependencies
+# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-Environment Variables
+# Environment Variables (Keep out of version control)
 .env
 .env.local
 .env.development
@@ -19,7 +12,10 @@ Environment Variables
 .env.production
 .env.*.local
 
-Testing Files (DO NOT PUSH TO PRODUCTION)
+# Generated Prisma Files
+/generated/prisma
+
+# Testing Files (DO NOT PUSH TO PRODUCTION)
 add-test-payment-method.js
 auth-test.js
 clear-test-data.js
@@ -30,7 +26,7 @@ stripe-payments.js
 trackingNumbers.js
 update-twilio-webhooks.js
 
-Database
+# Database
 *.sql
 *.db
 *.sqlite
@@ -39,14 +35,20 @@ pre-migration-backup.sql
 backups/
 *.backup
 
-Prisma
+# Prisma
 prisma/migrations/*_test/
 prisma/dev.db
 
-Logs
-logs/ .log npm-debug.log yarn-debug.log* yarn-error.log* pnpm-debug.log* lerna-debug.log*
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-OS Files
+# OS Files
 .DS_Store
 .DS_Store?
 ._*
@@ -58,7 +60,7 @@ Thumbs.db
 *.swo
 *~
 
-IDE Files
+# IDE Files
 .vscode/
 .idea/
 *.sublime-project
@@ -67,33 +69,32 @@ IDE Files
 .classpath
 .settings/
 
-Build Output
+# Build Output
 dist/
 build/
 out/
 .next/
 .cache/
 
-Coverage
+# Coverage
 coverage/
 *.lcov
 .nyc_output/
 
-Temporary Files
+# Temporary Files
 tmp/
 temp/
 *.tmp
 *.temp
 
-Railway (Local Development)
+# Railway (Local Development)
 .railway/
 
-Package Manager
+# Package Manager
 package-lock.json.backup
 yarn.lock.backup
 
-Misc
+# Misc
 *.orig
 .eslintcache
 .stylelintcache
-
