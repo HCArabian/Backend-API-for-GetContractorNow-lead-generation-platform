@@ -21,6 +21,7 @@ auth-test.js
 clear-test-data.js
 set-contractor-password.js
 update-twilio-webhooks.js
+test-helpers.js
 
 # Database
 *.sql
