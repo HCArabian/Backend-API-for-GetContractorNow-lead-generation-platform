@@ -4,7 +4,7 @@ const Sentry = require("@sentry/node");
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || "production",
-  tracesSampleRate: 1.0
+  tracesSampleRate: 1.0,
 });
 
 require("dotenv").config();
@@ -35,8 +35,8 @@ const app = express();
 app.use((req, res, next) => {
   Sentry.addBreadcrumb({
     message: req.url,
-    category: 'request',
-    level: 'info',
+    category: "request",
+    level: "info",
   });
   next();
 });
@@ -80,17 +80,17 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   // Add request context to Sentry
   if (req.headers.authorization) {
-    Sentry.setUser({ 
-      auth: 'admin' // Don't log actual passwords
+    Sentry.setUser({
+      auth: "admin", // Don't log actual passwords
     });
   }
-  
-  Sentry.setContext('request', {
+
+  Sentry.setContext("request", {
     method: req.method,
     url: req.url,
-    ip: req.ip
+    ip: req.ip,
   });
-  
+
   next();
 });
 
@@ -425,15 +425,29 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
 
     console.log("✅ CallLog:", callLog.id, "Duration:", callDuration);
 
-    // BILLING LOGIC
+    // ============================================
+    // STEP 3: NEW BILLING LOGIC - CREDIT DEDUCTION
+    // ============================================
+
+    // Only bill for qualified calls (30+ seconds, completed)
     if (
       callStatus === "completed" &&
       callDuration &&
-      parseInt(callDuration) > 30
+      parseInt(callDuration) >= 30
     ) {
-      console.log("💰 Call qualifies for billing");
+      console.log("✅ Qualified call detected (30+ seconds)");
 
-      // Check for existing billing
+      // Get full contractor details with subscription info
+      const fullContractor = await prisma.contractor.findUnique({
+        where: { id: contractor.id },
+      });
+
+      if (!fullContractor) {
+        console.error("❌ Contractor not found");
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Check if already billed for this call
       const existingBilling = await prisma.billingRecord.findFirst({
         where: {
           leadId: lead.id,
@@ -442,126 +456,200 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       });
 
       if (existingBilling) {
-        console.log("⚠️  Billing already exists");
-
-        // Release tracking number back to pool
-        await prisma.twilioNumberPool.updateMany({
-          where: {
-            phoneNumber: to,
-            status: "assigned",
-          },
-          data: {
-            status: "available",
-            currentLeadId: null,
-            assignedAt: null,
-            expiresAt: null,
-          },
-        });
-
-        console.log("✅ Tracking number released back to pool");
-
+        console.log("⚠️ Already billed for this lead, skipping");
         return res.json({
           success: true,
-          message: "Call logged - billing exists",
+          message: "Call logged (already billed)",
           callLogId: callLog.id,
         });
       }
 
-      // Create billing record
-      const billingRecord = await prisma.billingRecord.create({
-        data: {
-          leadId: lead.id,
-          contractorId: contractor.id,
-          amountOwed: lead.price,
-          status: "pending",
-          dateIncurred: new Date(),
-        },
-      });
-
-      console.log("🎉 BILLING CREATED:", {
-        billingId: billingRecord.id,
-        amount: `$${lead.price}`,
-        lead: lead.id,
-      });
-
-      // Auto-charge contractor via Stripe
-      const { chargeContractorForLead } = require("./stripe-payments");
-
-      console.log("💳 Attempting to charge contractor via Stripe...");
-
-      const chargeResult = await chargeContractorForLead(
-        contractor.id,
-        lead.id,
-        lead.price,
-        `${lead.category} Lead - ${lead.serviceType.replace(/_/g, " ")} in ${
-          lead.customerCity
-        }, ${lead.customerState}`
-      );
-
-      if (chargeResult.success) {
+      // SECURITY CHECK 1: Active subscription required
+      if (fullContractor.subscriptionStatus !== "active") {
+        console.log("❌ No active subscription - cannot charge");
         console.log(
-          "✅ Contractor charged successfully:",
-          chargeResult.paymentIntentId
+          "   Subscription status:",
+          fullContractor.subscriptionStatus
         );
-      } else {
-        console.error("❌ Auto-charge failed:", chargeResult.error);
-        console.error("⚠️  Billing record marked as failed in database");
 
-        // Optionally: Disable contractor if payment fails
-        // await prisma.contractor.update({
-        //   where: { id: contractor.id },
-        //   data: { isAcceptingLeads: false }
-        // });
+        return res.json({
+          success: true,
+          message: "Call logged but not charged (no active subscription)",
+          callLogId: callLog.id,
+        });
       }
 
-      // Update lead status
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: {
-          status: "contacted",
-          firstContactAt: new Date(),
-        },
-      });
+      // Get lead cost for this contractor (tier-based pricing)
+      const leadCost = getLeadCostForContractor(fullContractor);
+      console.log(
+        `💰 Lead cost for ${
+          fullContractor.subscriptionTier || "no tier"
+        } tier: ${formatCurrency(leadCost)}`
+      );
 
-      // Update assignment status
-      await prisma.leadAssignment.update({
-        where: { id: assignment.id },
-        data: {
-          status: "contacted",
-        },
-      });
+      // SECURITY CHECK 2: Sufficient credit balance
+      if (fullContractor.creditBalance < leadCost) {
+        console.log(
+          `⚠️ Insufficient credit: Balance ${formatCurrency(
+            fullContractor.creditBalance
+          )}, Need ${formatCurrency(leadCost)}`
+        );
 
-      // Release tracking number back to pool
-      await prisma.twilioNumberPool.updateMany({
-        where: {
-          phoneNumber: to,
-          status: "assigned",
-        },
-        data: {
-          status: "available",
-          currentLeadId: null,
-          assignedAt: null,
-          expiresAt: null,
-        },
-      });
+        // Disable lead acceptance
+        await prisma.contractor.update({
+          where: { id: fullContractor.id },
+          data: { isAcceptingLeads: false },
+        });
 
-      console.log("✅ Tracking number released back to pool");
+        console.log("🚫 Contractor disabled due to low credit");
 
-      return res.json({
-        success: true,
-        message: "Call logged, billing created, and payment processed",
-        callLogId: callLog.id,
-        billingRecordId: billingRecord.id,
-        paymentStatus: chargeResult.success ? "charged" : "failed",
-        amount: lead.price,
-      });
+        // TODO: Send low credit warning email to contractor
+
+        return res.json({
+          success: true,
+          message: "Call logged but not charged (insufficient credit)",
+          callLogId: callLog.id,
+        });
+      }
+
+      // Calculate new balance
+      const newBalance = fullContractor.creditBalance - leadCost;
+      console.log(
+        `📊 Balance calculation: ${formatCurrency(
+          fullContractor.creditBalance
+        )} - ${formatCurrency(leadCost)} = ${formatCurrency(newBalance)}`
+      );
+
+      // DEDUCT FROM CREDIT BALANCE (Database Transaction)
+      try {
+        await prisma.$transaction([
+          // 1. Create credit transaction record
+          prisma.creditTransaction.create({
+            data: {
+              contractorId: fullContractor.id,
+              type: "deduction",
+              amount: -leadCost,
+              balanceBefore: fullContractor.creditBalance,
+              balanceAfter: newBalance,
+              leadId: lead.id,
+              description: `Lead charge: ${lead.customerFirstName} ${lead.customerLastName} - ${lead.serviceType}`,
+            },
+          }),
+
+          // 2. Update contractor balance
+          prisma.contractor.update({
+            where: { id: fullContractor.id },
+            data: {
+              creditBalance: newBalance,
+              // If balance drops below minimum, stop accepting leads
+              isAcceptingLeads: newBalance >= getMinimumCreditBalance(),
+            },
+          }),
+
+          // 3. Create billing record
+          prisma.billingRecord.create({
+            data: {
+              leadId: lead.id,
+              contractorId: fullContractor.id,
+              amountOwed: leadCost,
+              status: "paid", // Already paid from credit
+              dateIncurred: new Date(),
+              notes: `Paid from credit balance. Previous: ${formatCurrency(
+                fullContractor.creditBalance
+              )}, New: ${formatCurrency(newBalance)}`,
+            },
+          }),
+
+          // 4. Update lead status
+          prisma.lead.update({
+            where: { id: lead.id },
+            data: {
+              status: "contacted",
+              firstContactAt: new Date(),
+            },
+          }),
+
+          // 5. Update lead assignment status
+          prisma.leadAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              status: "contacted",
+            },
+          }),
+
+          // 6. Set tracking number to expire in 48 hours (instead of 7 days)
+          prisma.trackingNumber.updateMany({
+            where: {
+              leadId: lead.id,
+              status: "active",
+            },
+            data: {
+              expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours from now
+            },
+          }),
+        ]);
+
+        console.log(
+          `✅ CREDIT DEDUCTED: ${formatCurrency(leadCost)} from ${
+            fullContractor.businessName
+          }`
+        );
+        console.log(
+          `   Previous balance: ${formatCurrency(fullContractor.creditBalance)}`
+        );
+        console.log(`   New balance: ${formatCurrency(newBalance)}`);
+
+        if (newBalance < getMinimumCreditBalance()) {
+          console.log(
+            `⚠️ Balance below minimum (${formatCurrency(
+              getMinimumCreditBalance()
+            )}) - contractor disabled from receiving new leads`
+          );
+        }
+
+        console.log("📞 Tracking number set to expire in 48 hours");
+
+        return res.json({
+          success: true,
+          message: "Call logged and lead charged from credit",
+          callLogId: callLog.id,
+          charged: leadCost,
+          newBalance: newBalance,
+          subscriptionTier: fullContractor.subscriptionTier,
+        });
+      } catch (transactionError) {
+        console.error("❌ Transaction failed:", transactionError);
+        Sentry.captureException(transactionError, {
+          tags: {
+            webhook: "twilio",
+            operation: "credit_deduction",
+          },
+          extra: {
+            contractorId: fullContractor.id,
+            leadId: lead.id,
+            leadCost: leadCost,
+          },
+        });
+
+        return res.status(500).json({
+          success: false,
+          error: "Failed to process credit deduction",
+          details: transactionError.message,
+        });
+      }
     }
+
+    // Call did not qualify for billing (less than 30 seconds or not completed)
+    console.log("ℹ️ Call did not qualify for billing");
+    console.log(`   Status: ${callStatus}, Duration: ${callDuration}s`);
 
     return res.json({
       success: true,
       message: "Call logged - no billing",
       callLogId: callLog.id,
-      reason: callDuration ? `Duration: ${callDuration}s` : "No duration",
+      reason: callDuration
+        ? `Duration too short (${callDuration}s < 30s)`
+        : "No duration recorded",
     });
   } catch (error) {
     Sentry.captureException(error, {
@@ -572,9 +660,8 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       },
     });
     console.error("❌ WEBHOOK ERROR:", error);
-    res.status(500).json({ error: "Webhook processing failed" });
     return res.status(500).json({
-      error: "Internal server error",
+      error: "Webhook processing failed",
       details: error.message,
     });
   }
@@ -2121,6 +2208,459 @@ app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
   }
 });
 
+const {
+  getLeadCostForContractor,
+  canContractorReceiveLeads,
+  getMinimumCreditBalance,
+  getCreditExpiryDate,
+  formatCurrency,
+} = require("./subscription-helpers");
+
+// ============================================
+// CREDIT MANAGEMENT ENDPOINTS
+// ============================================
+
+// Add credit to contractor account
+app.post(
+  "/api/contractors/credit/deposit",
+  contractorAuth,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractorId;
+      const { amount } = req.body;
+
+      // Validate amount
+      if (!amount || amount < 100) {
+        return res.status(400).json({
+          error: "Minimum deposit is $100",
+        });
+      }
+
+      if (amount > 10000) {
+        return res.status(400).json({
+          error: "Maximum deposit is $10,000",
+        });
+      }
+
+      // Get contractor
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Check if payment method exists
+      if (!contractor.stripeCustomerId || !contractor.stripePaymentMethodId) {
+        return res.status(400).json({
+          error: "Please add a payment method first",
+        });
+      }
+
+      console.log(
+        `💳 Creating credit deposit: $${amount} for ${contractor.businessName}`
+      );
+
+      // Create Stripe payment intent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: "usd",
+        customer: contractor.stripeCustomerId,
+        payment_method: contractor.stripePaymentMethodId,
+        off_session: true,
+        confirm: true,
+        description: `Credit deposit - ${contractor.businessName}`,
+        metadata: {
+          contractorId: contractor.id,
+          type: "credit_deposit",
+        },
+      });
+
+      if (paymentIntent.status === "succeeded") {
+        // Calculate new balance
+        const newBalance = contractor.creditBalance + amount;
+        const expiresAt = getCreditExpiryDate();
+
+        // Create credit transaction record
+        await prisma.$transaction([
+          prisma.creditTransaction.create({
+            data: {
+              contractorId: contractor.id,
+              type: "deposit",
+              amount: amount,
+              balanceBefore: contractor.creditBalance,
+              balanceAfter: newBalance,
+              stripePaymentId: paymentIntent.id,
+              expiresAt: expiresAt,
+              description: `Credit deposit: ${formatCurrency(amount)}`,
+            },
+          }),
+
+          prisma.contractor.update({
+            where: { id: contractor.id },
+            data: {
+              creditBalance: newBalance,
+              isAcceptingLeads: true, // Enable lead acceptance
+            },
+          }),
+        ]);
+
+        console.log(
+          `✅ Credit deposited: ${
+            contractor.businessName
+          } - New balance: ${formatCurrency(newBalance)}`
+        );
+
+        res.json({
+          success: true,
+          message: `Successfully added ${formatCurrency(
+            amount
+          )} to your account`,
+          newBalance: newBalance,
+          expiresAt: expiresAt,
+          paymentIntentId: paymentIntent.id,
+        });
+      } else {
+        console.error("Payment intent failed:", paymentIntent.status);
+        res.status(400).json({
+          error: "Payment failed. Please check your payment method.",
+        });
+      }
+    } catch (error) {
+      console.error("Credit deposit error:", error);
+
+      if (error.code === "card_declined") {
+        return res.status(400).json({
+          error: "Card declined. Please use a different payment method.",
+        });
+      }
+
+      res.status(500).json({
+        error: "Failed to process credit deposit",
+        details: error.message,
+      });
+    }
+  }
+);
+
+// Get credit balance and transaction history
+app.get("/api/contractors/credit/balance", contractorAuth, async (req, res) => {
+  try {
+    const contractorId = req.contractorId;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: {
+        creditBalance: true,
+        subscriptionTier: true,
+        isBetaTester: true,
+        betaTesterLeadCost: true,
+      },
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: "Contractor not found" });
+    }
+
+    // Get recent transactions
+    const transactions = await prisma.creditTransaction.findMany({
+      where: { contractorId: contractorId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    // Get next expiring credit
+    const nextExpiring = await prisma.creditTransaction.findFirst({
+      where: {
+        contractorId: contractorId,
+        type: "deposit",
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { expiresAt: "asc" },
+    });
+
+    const leadCost = getLeadCostForContractor(contractor);
+    const minBalance = getMinimumCreditBalance();
+
+    res.json({
+      success: true,
+      balance: contractor.creditBalance,
+      leadCost: leadCost,
+      minimumRequired: minBalance,
+      hasMinimum: contractor.creditBalance >= minBalance,
+      nextExpiry: nextExpiring?.expiresAt || null,
+      transactions: transactions,
+    });
+  } catch (error) {
+    console.error("Get balance error:", error);
+    res.status(500).json({ error: "Failed to get credit balance" });
+  }
+});
+
+// ============================================
+// STRIPE SUBSCRIPTION WEBHOOK
+// ============================================
+
+app.post('/api/webhooks/stripe/subscription', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  
+  let event;
+  
+  try {
+    // Verify webhook signature
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('⚠️ Stripe webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  
+  console.log(`📬 Stripe webhook received: ${event.type}`);
+  
+  // Handle the event
+  switch (event.type) {
+    case 'customer.subscription.created':
+      await handleSubscriptionCreated(event.data.object);
+      break;
+      
+    case 'customer.subscription.updated':
+      await handleSubscriptionUpdated(event.data.object);
+      break;
+      
+    case 'customer.subscription.deleted':
+      await handleSubscriptionDeleted(event.data.object);
+      break;
+      
+    case 'invoice.payment_succeeded':
+      await handleInvoicePaymentSucceeded(event.data.object);
+      break;
+      
+    case 'invoice.payment_failed':
+      await handleInvoicePaymentFailed(event.data.object);
+      break;
+      
+    default:
+      console.log(`ℹ️ Unhandled event type: ${event.type}`);
+  }
+  
+  res.json({ received: true });
+});
+
+// ============================================
+// SUBSCRIPTION WEBHOOK HANDLERS
+// ============================================
+
+async function handleSubscriptionCreated(subscription) {
+  console.log('🎉 New subscription created:', subscription.id);
+  
+  try {
+    const stripeCustomerId = subscription.customer;
+    
+    // Find contractor by Stripe customer ID
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeCustomerId: stripeCustomerId }
+    });
+    
+    if (!contractor) {
+      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      return;
+    }
+    
+    // Determine tier from price ID
+    let tier = 'pro'; // default
+    const priceId = subscription.items.data[0].price.id;
+    
+    if (priceId === process.env.STRIPE_PRICE_STARTER) {
+      tier = 'starter';
+    } else if (priceId === process.env.STRIPE_PRICE_PRO) {
+      tier = 'pro';
+    } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
+      tier = 'elite';
+    }
+    
+    // Check if beta tester (100% discount)
+    const isBeta = subscription.discount?.coupon?.id === process.env.STRIPE_PROMO_BETA;
+    
+    // Update contractor
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        subscriptionStatus: 'active',
+        subscriptionTier: tier,
+        stripeSubscriptionId: subscription.id,
+        subscriptionStartDate: new Date(subscription.current_period_start * 1000),
+        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+        isBetaTester: isBeta,
+        betaTesterLeadCost: isBeta ? 50.00 : null // $50 for beta testers
+      }
+    });
+    
+    console.log(`✅ Contractor ${contractor.businessName} subscribed to ${tier.toUpperCase()} tier`);
+    if (isBeta) {
+      console.log('🎟️ Beta tester discount applied');
+    }
+    
+  } catch (error) {
+    console.error('Error handling subscription created:', error);
+    Sentry.captureException(error);
+  }
+}
+
+async function handleSubscriptionUpdated(subscription) {
+  console.log('🔄 Subscription updated:', subscription.id);
+  
+  try {
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeSubscriptionId: subscription.id }
+    });
+    
+    if (!contractor) {
+      console.error('❌ Contractor not found for subscription:', subscription.id);
+      return;
+    }
+    
+    // Determine tier from price ID
+    let tier = contractor.subscriptionTier || 'pro';
+    const priceId = subscription.items.data[0].price.id;
+    
+    if (priceId === process.env.STRIPE_PRICE_STARTER) {
+      tier = 'starter';
+    } else if (priceId === process.env.STRIPE_PRICE_PRO) {
+      tier = 'pro';
+    } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
+      tier = 'elite';
+    }
+    
+    // Update status based on subscription status
+    let status = 'inactive';
+    if (subscription.status === 'active') {
+      status = 'active';
+    } else if (subscription.status === 'past_due') {
+      status = 'past_due';
+    } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
+      status = 'cancelled';
+    }
+    
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        subscriptionStatus: status,
+        subscriptionTier: tier,
+        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+        // Disable lead acceptance if subscription not active
+        isAcceptingLeads: status === 'active' && contractor.creditBalance >= getMinimumCreditBalance()
+      }
+    });
+    
+    console.log(`✅ Contractor ${contractor.businessName} subscription updated: ${status}`);
+    
+  } catch (error) {
+    console.error('Error handling subscription updated:', error);
+    Sentry.captureException(error);
+  }
+}
+
+async function handleSubscriptionDeleted(subscription) {
+  console.log('❌ Subscription cancelled:', subscription.id);
+  
+  try {
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeSubscriptionId: subscription.id }
+    });
+    
+    if (!contractor) {
+      console.error('❌ Contractor not found for subscription:', subscription.id);
+      return;
+    }
+    
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        subscriptionStatus: 'cancelled',
+        isAcceptingLeads: false // Stop receiving leads
+      }
+    });
+    
+    console.log(`✅ Contractor ${contractor.businessName} subscription cancelled`);
+    
+    // TODO: Send cancellation email
+    
+  } catch (error) {
+    console.error('Error handling subscription deleted:', error);
+    Sentry.captureException(error);
+  }
+}
+
+async function handleInvoicePaymentSucceeded(invoice) {
+  console.log('✅ Invoice payment succeeded:', invoice.id);
+  
+  try {
+    const stripeCustomerId = invoice.customer;
+    
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeCustomerId: stripeCustomerId }
+    });
+    
+    if (!contractor) {
+      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      return;
+    }
+    
+    // Ensure subscription is active
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        subscriptionStatus: 'active',
+        // Re-enable if they have sufficient credit
+        isAcceptingLeads: contractor.creditBalance >= getMinimumCreditBalance()
+      }
+    });
+    
+    console.log(`✅ Invoice paid for ${contractor.businessName}`);
+    
+  } catch (error) {
+    console.error('Error handling invoice payment succeeded:', error);
+    Sentry.captureException(error);
+  }
+}
+
+async function handleInvoicePaymentFailed(invoice) {
+  console.log('❌ Invoice payment failed:', invoice.id);
+  
+  try {
+    const stripeCustomerId = invoice.customer;
+    
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeCustomerId: stripeCustomerId }
+    });
+    
+    if (!contractor) {
+      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      return;
+    }
+    
+    await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        subscriptionStatus: 'past_due',
+        isAcceptingLeads: false // Stop receiving leads until payment made
+      }
+    });
+    
+    console.log(`⚠️ Payment failed for ${contractor.businessName} - subscription past due`);
+    
+    // TODO: Send payment failed email
+    
+  } catch (error) {
+    console.error('Error handling invoice payment failed:', error);
+    Sentry.captureException(error);
+  }
+}
+
 /* // Remove this entire block:
 app.get('/api/test-sentry', (req, res) => {
   try {
@@ -2133,8 +2673,8 @@ app.get('/api/test-sentry', (req, res) => {
 
 // Optional: Your own error handler after Sentry's
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
 /* ### **Step 3: Add Backup Monitoring Endpoint**
