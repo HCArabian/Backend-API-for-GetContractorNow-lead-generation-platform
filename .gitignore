@@ -3,3 +3,97 @@ node_modules
 .env
 
 /generated/prisma
+
+
+Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+Environment Variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+
+Testing Files (DO NOT PUSH TO PRODUCTION)
+add-test-payment-method.js
+auth-test.js
+clear-test-data.js
+set-contractor-password.js
+setup-twilio-numbers.js
+sms-notifications.js
+stripe-payments.js
+trackingNumbers.js
+update-twilio-webhooks.js
+
+Database
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+pre-migration-backup.sql
+backups/
+*.backup
+
+Prisma
+prisma/migrations/*_test/
+prisma/dev.db
+
+Logs
+logs/ .log npm-debug.log yarn-debug.log* yarn-error.log* pnpm-debug.log* lerna-debug.log*
+
+OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+IDE Files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+Build Output
+dist/
+build/
+out/
+.next/
+.cache/
+
+Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+Railway (Local Development)
+.railway/
+
+Package Manager
+package-lock.json.backup
+yarn.lock.backup
+
+Misc
+*.orig
+.eslintcache
+.stylelintcache
+
