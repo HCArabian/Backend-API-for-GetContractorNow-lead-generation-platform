@@ -2163,12 +2163,18 @@ app.use((req, res, next) => {
   const host = req.get("host");
 
   // API routes should only work on api subdomain
-  if (req.path.startsWith("/api/") && !host.includes("api.")) {
+  /* if (req.path.startsWith("/api/") && !host.includes("api.")) {
     return res
       .status(404)
       .json({ error: "API endpoints must use api subdomain" });
+  } */
+ 
+   // Allow API routes on BOTH api and app subdomains
+  if (req.path.startsWith("/api/")) {
+    // API calls work on both api. and app. subdomains
+    next();
+    return;
   }
-
   // Portal routes should work on app subdomain
   if (
     (req.path === "/contractor" || req.path === "/admin") &&
