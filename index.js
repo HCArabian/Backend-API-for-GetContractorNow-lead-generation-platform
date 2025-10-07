@@ -24,6 +24,12 @@ const { sendContractorOnboardingEmail } = require("./notifications");
 const twilio = require("twilio");
 const { hashPassword, comparePassword, generateToken } = require("./auth");
 const { handleSubscriptionCreated } = require("./webhook-handler");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  authenticateAdmin: newAdminAuth
+} = require('./admin-auth');
 
 
 const app = express();
@@ -4436,13 +4442,6 @@ app.get('/api/admin/compliance/status', authenticateAdmin, async (req, res) => {
 // ============================================
 // ADMIN AUTHENTICATION ENDPOINTS
 // ============================================
-
-const {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyRefreshToken,
-  authenticateAdmin: newAdminAuth
-} = require('./admin-auth');
 
 // Admin login
 app.post('/api/admin/login', async (req, res) => {
