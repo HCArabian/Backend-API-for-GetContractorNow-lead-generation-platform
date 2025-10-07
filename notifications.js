@@ -216,15 +216,15 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     // Log successful email to database
     await prisma.notificationLog.create({
       data: {
+        contractorId: contractor.id, // ✅ FIXED: Set at top level
         type: "email",
         recipient: contractor.email,
         subject: emailSubject,
-        body: emailHtml,
+        body: null, // ✅ Add body field even if empty
         status: "sent",
         sentAt: new Date(),
         metadata: {
           leadId: lead.id,
-          contractorId: contractor.id,
           category: lead.category,
           trackingNumber: trackingNumber,
         },
@@ -321,6 +321,7 @@ async function sendFeedbackRequestEmail(lead) {
     // Log to database
     await prisma.notificationLog.create({
       data: {
+        contractorId: null, // ✅ No contractor for customer emails
         type: "email",
         recipient: lead.customerEmail,
         subject: "How was your contractor experience?",
@@ -479,6 +480,7 @@ async function sendContractorSuspensionEmail(contractor, reason) {
     // Log notification
     await prisma.notificationLog.create({
       data: {
+        contractorId: contractor.id, // ✅ FIXED
         type: "email",
         recipient: contractor.email,
         subject: "Account Suspended - GetContractorNow",
@@ -486,7 +488,6 @@ async function sendContractorSuspensionEmail(contractor, reason) {
         status: "sent",
         sentAt: new Date(),
         metadata: {
-          contractorId: contractor.id,
           purpose: "suspension",
           reason: reason,
         },
@@ -565,6 +566,7 @@ async function sendContractorReactivationEmail(contractor) {
 
     await prisma.notificationLog.create({
       data: {
+        contractorId: contractor.id, // ✅ FIXED
         type: "email",
         recipient: contractor.email,
         subject: "Account Reactivated - GetContractorNow",
@@ -572,7 +574,6 @@ async function sendContractorReactivationEmail(contractor) {
         status: "sent",
         sentAt: new Date(),
         metadata: {
-          contractorId: contractor.id,
           purpose: "reactivation",
         },
       },
