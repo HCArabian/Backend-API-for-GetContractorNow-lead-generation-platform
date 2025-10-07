@@ -82,78 +82,60 @@ model Lead {
 }
 
 model Contractor {
-  id                      String    @id @default(uuid())
+  id                      String   @id @default(uuid())
   
-  // Business Info
+  // Existing fields...
   businessName            String
-  email                   String    @unique
+  email                   String   @unique
   phone                   String
-  passwordHash            String
+  password                String
   
-  // Service Coverage
+  // NEW VERIFICATION FIELDS
+  licenseNumber           String?
+  licenseState            String?
+  licenseExpirationDate   DateTime?
+  businessAddress         String?
+  businessCity            String?
+  businessState           String?
+  businessZip             String?
+  taxId                   String?   // EIN or SSN
+  insuranceProvider       String?
+  insurancePolicyNumber   String?
+  insuranceExpirationDate DateTime?
+  yearsInBusiness         Int?
+  websiteUrl              String?
+  businessType            String?   // LLC, Sole Proprietor, Corporation
+  
+  // STRIPE PAYMENT METHOD INFO
+  paymentMethodLast4      String?
+  paymentMethodBrand      String?   // Visa, Mastercard, etc
+  paymentMethodExpMonth   Int?
+  paymentMethodExpYear    Int?
+  
+  // VERIFICATION STATUS
+  isVerified              Boolean  @default(false)
+  verifiedAt              DateTime?
+  verificationNotes       String?
+  
+  // Existing fields...
   serviceZipCodes         String[]
   specializations         String[]
-  
-  // Performance Metrics
   avgResponseTime         Int?
   conversionRate          Float?
   customerRating          Float?
-  totalJobsCompleted      Int       @default(0)      // KEEP THIS
-  totalLeadsReceived      Int       @default(0)      // KEEP THIS
-  totalReviews            Int       @default(0)      // KEEP THIS
-  currentLeadCount        Int       @default(0)      // KEEP THIS
-  
-  // Lead Limits (Old system - keep for now)
-  maxLeadsPerDay          Int?                       // KEEP THIS
-  maxLeadsPerWeek         Int?                       // KEEP THIS
-  
-  // Status
-  status                  String    @default("active")
-  isAcceptingLeads        Boolean   @default(true)
-  isApproved              Boolean   @default(false)
-  isVerified              Boolean   @default(false)  // KEEP THIS
-  
-  // Email
-  emailBounced            Boolean   @default(false)  // KEEP THIS
-  emailBouncedAt          DateTime?
-  emailBounceReason       String?
-  
-  // Suspension
-  suspensionReason        String?                    // KEEP THIS
-  
-  // Activity Tracking
-  lastActiveAt            DateTime?                  // KEEP THIS
-  
-  // Authentication
-  requirePasswordChange   Boolean   @default(false)
-  
-  // Stripe Payment (Existing)
-  stripeCustomerId        String?
-  stripePaymentMethodId   String?
-  
-  // ============================================
-  // NEW SUBSCRIPTION FIELDS (Phase 2)
-  // ============================================
-  subscriptionStatus      String?   @default("inactive")
+  totalJobsCompleted      Int?
+  totalLeadsReceived      Int?
+  status                  String   @default("active")
+  isAcceptingLeads        Boolean  @default(true)
+  isApproved              Boolean  @default(false)
   subscriptionTier        String?
+  subscriptionStatus      String?  @default("inactive")
+  creditBalance           Float    @default(0.00)
+  stripeCustomerId        String?
   stripeSubscriptionId    String?
-  subscriptionStartDate   DateTime?
-  subscriptionEndDate     DateTime?
-  
-  // ============================================
-  // NEW CREDIT FIELDS (Phase 2)
-  // ============================================
-  creditBalance           Float     @default(0.00)
-  
-  // ============================================
-  // NEW BETA TESTER FIELDS (Phase 2)
-  // ============================================
-  isBetaTester            Boolean   @default(false)
-  betaTesterLeadCost      Float?
-  
-  // Timestamps
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @default(now()) @updatedAt
+  stripePaymentMethodId   String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
   
   // Relations
   assignments             LeadAssignment[]
@@ -168,11 +150,8 @@ model Contractor {
   @@index([email])
   @@index([phone])
   @@index([status])
-  @@index([isAcceptingLeads])
-  @@index([subscriptionStatus])
-  @@index([subscriptionTier])
-  @@index([creditBalance])
-  @@map("Contractor")
+  @@index([licenseNumber])
+  @@index([isVerified])
 }
 
 model LeadAssignment {

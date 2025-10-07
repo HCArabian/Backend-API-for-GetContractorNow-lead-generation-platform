@@ -8,7 +8,7 @@ Sentry.init({
 });
 
 require("dotenv").config();
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 const express = require("express");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -48,13 +48,13 @@ app.set("trust proxy", 1);
 const path = require("path");
 
 // Contractor route - serve the same portal
-app.get('/contractor', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'contractor-portal-v2.html'));
+app.get("/contractor", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
 });
 
 // Root route - serve the contractor portal
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'contractor-portal-v2.html'));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
 });
 
 app.get("/api/debug/check-env", (req, res) => {
@@ -105,9 +105,9 @@ const authenticateContractor = async (req, res, next) => {
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token provided" });
     }
 
     // Extract token
@@ -118,33 +118,34 @@ const authenticateContractor = async (req, res, next) => {
 
     // Get contractor from database
     const contractor = await prisma.contractor.findUnique({
-      where: { id: decoded.contractorId }
+      where: { id: decoded.contractorId },
     });
 
     if (!contractor) {
-      return res.status(401).json({ error: 'Contractor not found' });
+      return res.status(401).json({ error: "Contractor not found" });
     }
 
-    if (contractor.status !== 'active') {
-      return res.status(403).json({ error: 'Contractor account is not active' });
+    if (contractor.status !== "active") {
+      return res
+        .status(403)
+        .json({ error: "Contractor account is not active" });
     }
 
     // Attach contractor to request object
     req.contractor = contractor;
     next();
-
   } catch (error) {
-    console.error('Auth error:', error);
-    
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
+    console.error("Auth error:", error);
+
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Invalid token" });
     }
 
-    return res.status(500).json({ error: 'Authentication failed' });
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Token expired" });
+    }
+
+    return res.status(500).json({ error: "Authentication failed" });
   }
 };
 
@@ -2456,149 +2457,168 @@ app.get("/api/contractors/credit/balance", contractorAuth, async (req, res) => {
 // STRIPE SUBSCRIPTION WEBHOOK
 // ============================================
 
-app.post('/api/webhooks/stripe/subscription', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  
-  let event;
-  
-  try {
-    // Verify webhook signature
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error('⚠️ Stripe webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+app.post(
+  "/api/webhooks/stripe/subscription",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+
+    let event;
+
+    try {
+      // Verify webhook signature
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error(
+        "⚠️ Stripe webhook signature verification failed:",
+        err.message
+      );
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`📬 Stripe webhook received: ${event.type}`);
+
+    // Handle the event
+    switch (event.type) {
+      case "customer.subscription.created":
+        await handleSubscriptionCreated(event.data.object);
+        break;
+
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(event.data.object);
+        break;
+
+      case "invoice.payment_succeeded":
+        await handleInvoicePaymentSucceeded(event.data.object);
+        break;
+
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event.data.object);
+        break;
+
+      default:
+        console.log(`ℹ️ Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
   }
-  
-  console.log(`📬 Stripe webhook received: ${event.type}`);
-  
-  // Handle the event
-  switch (event.type) {
-    case 'customer.subscription.created':
-      await handleSubscriptionCreated(event.data.object);
-      break;
-      
-    case 'customer.subscription.updated':
-      await handleSubscriptionUpdated(event.data.object);
-      break;
-      
-    case 'customer.subscription.deleted':
-      await handleSubscriptionDeleted(event.data.object);
-      break;
-      
-    case 'invoice.payment_succeeded':
-      await handleInvoicePaymentSucceeded(event.data.object);
-      break;
-      
-    case 'invoice.payment_failed':
-      await handleInvoicePaymentFailed(event.data.object);
-      break;
-      
-    default:
-      console.log(`ℹ️ Unhandled event type: ${event.type}`);
-  }
-  
-  res.json({ received: true });
-});
+);
 
 // ============================================
 // SUBSCRIPTION WEBHOOK HANDLERS
 // ============================================
 
 async function handleSubscriptionCreated(subscription) {
-  console.log('🎉 New subscription created:', subscription.id);
-  
+  console.log("🎉 New subscription created:", subscription.id);
+
   try {
     const stripeCustomerId = subscription.customer;
-    
+
     // Find contractor by Stripe customer ID
     const contractor = await prisma.contractor.findFirst({
-      where: { stripeCustomerId: stripeCustomerId }
+      where: { stripeCustomerId: stripeCustomerId },
     });
-    
+
     if (!contractor) {
-      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      console.error("❌ Contractor not found for customer:", stripeCustomerId);
       return;
     }
-    
+
     // Determine tier from price ID
-    let tier = 'pro'; // default
+    let tier = "pro"; // default
     const priceId = subscription.items.data[0].price.id;
-    
+
     if (priceId === process.env.STRIPE_PRICE_STARTER) {
-      tier = 'starter';
+      tier = "starter";
     } else if (priceId === process.env.STRIPE_PRICE_PRO) {
-      tier = 'pro';
+      tier = "pro";
     } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
-      tier = 'elite';
+      tier = "elite";
     }
-    
+
     // Check if beta tester (100% discount)
-    const isBeta = subscription.discount?.coupon?.id === process.env.STRIPE_PROMO_BETA;
-    
+    const isBeta =
+      subscription.discount?.coupon?.id === process.env.STRIPE_PROMO_BETA;
+
     // Update contractor
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        subscriptionStatus: 'active',
+        subscriptionStatus: "active",
         subscriptionTier: tier,
         stripeSubscriptionId: subscription.id,
-        subscriptionStartDate: new Date(subscription.current_period_start * 1000),
+        subscriptionStartDate: new Date(
+          subscription.current_period_start * 1000
+        ),
         subscriptionEndDate: new Date(subscription.current_period_end * 1000),
         isBetaTester: isBeta,
-        betaTesterLeadCost: isBeta ? 50.00 : null // $50 for beta testers
-      }
+        betaTesterLeadCost: isBeta ? 50.0 : null, // $50 for beta testers
+      },
     });
-    
-    console.log(`✅ Contractor ${contractor.businessName} subscribed to ${tier.toUpperCase()} tier`);
+
+    console.log(
+      `✅ Contractor ${
+        contractor.businessName
+      } subscribed to ${tier.toUpperCase()} tier`
+    );
     if (isBeta) {
-      console.log('🎟️ Beta tester discount applied');
+      console.log("🎟️ Beta tester discount applied");
     }
-    
   } catch (error) {
-    console.error('Error handling subscription created:', error);
+    console.error("Error handling subscription created:", error);
     Sentry.captureException(error);
   }
 }
 
 async function handleSubscriptionUpdated(subscription) {
-  console.log('🔄 Subscription updated:', subscription.id);
-  
+  console.log("🔄 Subscription updated:", subscription.id);
+
   try {
     const contractor = await prisma.contractor.findFirst({
-      where: { stripeSubscriptionId: subscription.id }
+      where: { stripeSubscriptionId: subscription.id },
     });
-    
+
     if (!contractor) {
-      console.error('❌ Contractor not found for subscription:', subscription.id);
+      console.error(
+        "❌ Contractor not found for subscription:",
+        subscription.id
+      );
       return;
     }
-    
+
     // Determine tier from price ID
-    let tier = contractor.subscriptionTier || 'pro';
+    let tier = contractor.subscriptionTier || "pro";
     const priceId = subscription.items.data[0].price.id;
-    
+
     if (priceId === process.env.STRIPE_PRICE_STARTER) {
-      tier = 'starter';
+      tier = "starter";
     } else if (priceId === process.env.STRIPE_PRICE_PRO) {
-      tier = 'pro';
+      tier = "pro";
     } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
-      tier = 'elite';
+      tier = "elite";
     }
-    
+
     // Update status based on subscription status
-    let status = 'inactive';
-    if (subscription.status === 'active') {
-      status = 'active';
-    } else if (subscription.status === 'past_due') {
-      status = 'past_due';
-    } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
-      status = 'cancelled';
+    let status = "inactive";
+    if (subscription.status === "active") {
+      status = "active";
+    } else if (subscription.status === "past_due") {
+      status = "past_due";
+    } else if (
+      subscription.status === "canceled" ||
+      subscription.status === "unpaid"
+    ) {
+      status = "cancelled";
     }
-    
+
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
@@ -2606,111 +2626,118 @@ async function handleSubscriptionUpdated(subscription) {
         subscriptionTier: tier,
         subscriptionEndDate: new Date(subscription.current_period_end * 1000),
         // Disable lead acceptance if subscription not active
-        isAcceptingLeads: status === 'active' && contractor.creditBalance >= getMinimumCreditBalance()
-      }
+        isAcceptingLeads:
+          status === "active" &&
+          contractor.creditBalance >= getMinimumCreditBalance(),
+      },
     });
-    
-    console.log(`✅ Contractor ${contractor.businessName} subscription updated: ${status}`);
-    
+
+    console.log(
+      `✅ Contractor ${contractor.businessName} subscription updated: ${status}`
+    );
   } catch (error) {
-    console.error('Error handling subscription updated:', error);
+    console.error("Error handling subscription updated:", error);
     Sentry.captureException(error);
   }
 }
 
 async function handleSubscriptionDeleted(subscription) {
-  console.log('❌ Subscription cancelled:', subscription.id);
-  
+  console.log("❌ Subscription cancelled:", subscription.id);
+
   try {
     const contractor = await prisma.contractor.findFirst({
-      where: { stripeSubscriptionId: subscription.id }
+      where: { stripeSubscriptionId: subscription.id },
     });
-    
+
     if (!contractor) {
-      console.error('❌ Contractor not found for subscription:', subscription.id);
+      console.error(
+        "❌ Contractor not found for subscription:",
+        subscription.id
+      );
       return;
     }
-    
+
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        subscriptionStatus: 'cancelled',
-        isAcceptingLeads: false // Stop receiving leads
-      }
+        subscriptionStatus: "cancelled",
+        isAcceptingLeads: false, // Stop receiving leads
+      },
     });
-    
-    console.log(`✅ Contractor ${contractor.businessName} subscription cancelled`);
-    
+
+    console.log(
+      `✅ Contractor ${contractor.businessName} subscription cancelled`
+    );
+
     // TODO: Send cancellation email
-    
   } catch (error) {
-    console.error('Error handling subscription deleted:', error);
+    console.error("Error handling subscription deleted:", error);
     Sentry.captureException(error);
   }
 }
 
 async function handleInvoicePaymentSucceeded(invoice) {
-  console.log('✅ Invoice payment succeeded:', invoice.id);
-  
+  console.log("✅ Invoice payment succeeded:", invoice.id);
+
   try {
     const stripeCustomerId = invoice.customer;
-    
+
     const contractor = await prisma.contractor.findFirst({
-      where: { stripeCustomerId: stripeCustomerId }
+      where: { stripeCustomerId: stripeCustomerId },
     });
-    
+
     if (!contractor) {
-      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      console.error("❌ Contractor not found for customer:", stripeCustomerId);
       return;
     }
-    
+
     // Ensure subscription is active
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        subscriptionStatus: 'active',
+        subscriptionStatus: "active",
         // Re-enable if they have sufficient credit
-        isAcceptingLeads: contractor.creditBalance >= getMinimumCreditBalance()
-      }
+        isAcceptingLeads: contractor.creditBalance >= getMinimumCreditBalance(),
+      },
     });
-    
+
     console.log(`✅ Invoice paid for ${contractor.businessName}`);
-    
   } catch (error) {
-    console.error('Error handling invoice payment succeeded:', error);
+    console.error("Error handling invoice payment succeeded:", error);
     Sentry.captureException(error);
   }
 }
 
 async function handleInvoicePaymentFailed(invoice) {
-  console.log('❌ Invoice payment failed:', invoice.id);
-  
+  console.log("❌ Invoice payment failed:", invoice.id);
+
   try {
     const stripeCustomerId = invoice.customer;
-    
+
     const contractor = await prisma.contractor.findFirst({
-      where: { stripeCustomerId: stripeCustomerId }
+      where: { stripeCustomerId: stripeCustomerId },
     });
-    
+
     if (!contractor) {
-      console.error('❌ Contractor not found for customer:', stripeCustomerId);
+      console.error("❌ Contractor not found for customer:", stripeCustomerId);
       return;
     }
-    
+
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        subscriptionStatus: 'past_due',
-        isAcceptingLeads: false // Stop receiving leads until payment made
-      }
+        subscriptionStatus: "past_due",
+        isAcceptingLeads: false, // Stop receiving leads until payment made
+      },
     });
-    
-    console.log(`⚠️ Payment failed for ${contractor.businessName} - subscription past due`);
-    
+
+    console.log(
+      `⚠️ Payment failed for ${contractor.businessName} - subscription past due`
+    );
+
     // TODO: Send payment failed email
-    
   } catch (error) {
-    console.error('Error handling invoice payment failed:', error);
+    console.error("Error handling invoice payment failed:", error);
     Sentry.captureException(error);
   }
 }
@@ -2776,121 +2803,150 @@ app.get('/api/admin/backup-status', adminAuth, async (req, res) => {
 }); */
 
 // GET Contractor Dashboard Data
-app.get('/api/contractor/dashboard', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
+app.get(
+  "/api/contractor/dashboard",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
 
-    // Get contractor with subscription details
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId },
-      select: {
-        id: true,
-        businessName: true,
-        email: true,
-        phone: true,
-        creditBalance: true,
-        subscriptionTier: true,
-        subscriptionStatus: true,
-        stripeSubscriptionId: true,
-        //serviceType: true,
-        //serviceAreas: true,
-        status: true
+      // Get contractor with subscription details
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+        select: {
+          id: true,
+          businessName: true,
+          email: true,
+          phone: true,
+          creditBalance: true,
+          subscriptionTier: true,
+          subscriptionStatus: true,
+          stripeSubscriptionId: true,
+          stripeCustomerId: true,
+          stripePaymentMethodId: true,
+          serviceZipCodes: true,
+          specializations: true,
+          status: true,
+          // Add these additional fields
+          avgResponseTime: true,
+          conversionRate: true,
+          customerRating: true,
+          totalJobsCompleted: true,
+          totalLeadsReceived: true,
+          isAcceptingLeads: true,
+          isApproved: true,
+          isVerified: true,
+          lastActiveAt: true,
+          createdAt: true,
+        },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
       }
-    });
 
-    if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
+      // Get subscription pricing based on tier
+      let monthlyPrice = 0;
+      let leadCost = 0;
+
+      if (contractor.subscriptionTier === "starter") {
+        monthlyPrice = 75;
+        leadCost = 75;
+      } else if (contractor.subscriptionTier === "pro") {
+        monthlyPrice = 125;
+        leadCost = 100;
+      } else if (contractor.subscriptionTier === "elite") {
+        monthlyPrice = 200;
+        leadCost = 250;
+      }
+
+      // Get lead count for current month
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const leadsThisMonth = await prisma.leadAssignment.count({
+        where: {
+          contractorId: contractorId,
+          assignedAt: {
+            gte: startOfMonth,
+          },
+        },
+      });
+
+      // Get recent credit transactions (last 10)
+      const recentTransactions = await prisma.creditTransaction.findMany({
+        where: { contractorId: contractorId },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          type: true,
+          amount: true,
+          balanceAfter: true,
+          description: true,
+          createdAt: true,
+        },
+      });
+
+      // Calculate max leads based on tier
+      let maxLeads = 15; // starter default
+      if (contractor.subscriptionTier === "pro") maxLeads = 40;
+      if (contractor.subscriptionTier === "elite") maxLeads = 999; // unlimited
+
+      res.json({
+        contractor: {
+          id: contractor.id,
+          businessName: contractor.businessName,
+          email: contractor.email,
+          phone: contractor.phone,
+          creditBalance: contractor.creditBalance || 0,
+          serviceZipCodes: contractor.serviceZipCodes,
+          specializations: contractor.specializations,
+          status: contractor.status,
+        },
+        subscription: {
+          tier: contractor.subscriptionTier || "none",
+          status: contractor.subscriptionStatus || "inactive",
+          monthlyPrice: monthlyPrice,
+          leadCost: leadCost,
+          stripeSubscriptionId: contractor.stripeSubscriptionId,
+          stripeCustomerId: contractor.stripeCustomerId,
+          paymentMethodLast4: null, // We'll add this next
+        },
+        profile: {
+          avgResponseTime: contractor.avgResponseTime,
+          conversionRate: contractor.conversionRate,
+          customerRating: contractor.customerRating,
+          totalJobsCompleted: contractor.totalJobsCompleted,
+          totalLeadsReceived: contractor.totalLeadsReceived,
+          isAcceptingLeads: contractor.isAcceptingLeads,
+          isApproved: contractor.isApproved,
+          isVerified: contractor.isVerified,
+          memberSince: contractor.createdAt,
+        },
+        stats: {
+          leadsThisMonth: leadsThisMonth,
+          maxLeadsPerMonth: maxLeads,
+        },
+        recentTransactions: recentTransactions,
+      });
+    } catch (error) {
+      console.error("Dashboard error:", error);
+      res.status(500).json({ error: "Failed to load dashboard data" });
     }
-
-    // Get subscription pricing based on tier
-    let monthlyPrice = 0;
-    let leadCost = 0;
-    
-    if (contractor.subscriptionTier === 'starter') {
-      monthlyPrice = 75;
-      leadCost = 75;
-    } else if (contractor.subscriptionTier === 'pro') {
-      monthlyPrice = 125;
-      leadCost = 100;
-    } else if (contractor.subscriptionTier === 'elite') {
-      monthlyPrice = 200;
-      leadCost = 250;
-    }
-
-    // Get lead count for current month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const leadsThisMonth = await prisma.leadAssignment.count({
-      where: {
-        contractorId: contractorId,
-        assignedAt: {
-          gte: startOfMonth
-        }
-      }
-    });
-
-    // Get recent credit transactions (last 10)
-    const recentTransactions = await prisma.creditTransaction.findMany({
-      where: { contractorId: contractorId },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        type: true,
-        amount: true,
-        balanceAfter: true,
-        description: true,
-        createdAt: true
-      }
-    });
-
-    // Calculate max leads based on tier
-    let maxLeads = 15; // starter default
-    if (contractor.subscriptionTier === 'pro') maxLeads = 40;
-    if (contractor.subscriptionTier === 'elite') maxLeads = 999; // unlimited
-
-    res.json({
-      contractor: {
-        id: contractor.id,
-        businessName: contractor.businessName,
-        email: contractor.email,
-        phone: contractor.phone,
-        creditBalance: contractor.creditBalance || 0,
-        serviceType: contractor.serviceType,
-        serviceAreas: contractor.serviceAreas,
-        status: contractor.status
-      },
-      subscription: {
-        tier: contractor.subscriptionTier || 'none',
-        status: contractor.subscriptionStatus || 'inactive',
-        monthlyPrice: monthlyPrice,
-        leadCost: leadCost,
-        stripeSubscriptionId: contractor.stripeSubscriptionId
-      },
-      stats: {
-        leadsThisMonth: leadsThisMonth,
-        maxLeadsPerMonth: maxLeads
-      },
-      recentTransactions: recentTransactions
-    });
-
-  } catch (error) {
-    console.error('Dashboard error:', error);
-    res.status(500).json({ error: 'Failed to load dashboard data' });
   }
-});
+);
 
 // GET Contractor's Leads
-app.get('/api/contractor/leads', authenticateContractor, async (req, res) => {
+app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
   try {
     const contractorId = req.contractor.id;
     const { status } = req.query; // Optional filter by status
 
     // Build where clause
     const whereClause = {
-      contractorId: contractorId
+      contractorId: contractorId,
     };
 
     if (status) {
@@ -2918,23 +2974,23 @@ app.get('/api/contractor/leads', authenticateContractor, async (req, res) => {
             zipCode: true,
             projectDescription: true,
             budgetRange: true,
-            createdAt: true
-          }
+            createdAt: true,
+          },
         },
         trackingNumber: {
           select: {
             phoneNumber: true,
-            expiresAt: true
-          }
-        }
+            expiresAt: true,
+          },
+        },
       },
       orderBy: {
-        assignedAt: 'desc'
-      }
+        assignedAt: "desc",
+      },
     });
 
     // Format response
-    const leads = assignments.map(assignment => ({
+    const leads = assignments.map((assignment) => ({
       assignmentId: assignment.id,
       leadId: assignment.lead.id,
       status: assignment.status,
@@ -2947,7 +3003,7 @@ app.get('/api/contractor/leads', authenticateContractor, async (req, res) => {
         address: assignment.lead.address,
         city: assignment.lead.city,
         state: assignment.lead.state,
-        zipCode: assignment.lead.zipCode
+        zipCode: assignment.lead.zipCode,
       },
       project: {
         serviceType: assignment.lead.serviceType,
@@ -2956,92 +3012,98 @@ app.get('/api/contractor/leads', authenticateContractor, async (req, res) => {
         timeline: assignment.lead.timeline,
         propertyType: assignment.lead.propertyType,
         description: assignment.lead.projectDescription,
-        budgetRange: assignment.lead.budgetRange
+        budgetRange: assignment.lead.budgetRange,
       },
-      trackingNumber: assignment.trackingNumber ? {
-        phone: assignment.trackingNumber.phoneNumber,
-        expiresAt: assignment.trackingNumber.expiresAt
-      } : null,
-      createdAt: assignment.lead.createdAt
+      trackingNumber: assignment.trackingNumber
+        ? {
+            phone: assignment.trackingNumber.phoneNumber,
+            expiresAt: assignment.trackingNumber.expiresAt,
+          }
+        : null,
+      createdAt: assignment.lead.createdAt,
     }));
 
     res.json({ leads });
-
   } catch (error) {
-    console.error('Get leads error:', error);
-    res.status(500).json({ error: 'Failed to load leads' });
+    console.error("Get leads error:", error);
+    res.status(500).json({ error: "Failed to load leads" });
   }
 });
 // POST Add Credits to Contractor Account
-app.post('/api/contractor/credits/add', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
-    const { amount } = req.body;
+app.post(
+  "/api/contractor/credits/add",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
+      const { amount } = req.body;
 
-    // Validate amount (must be $500, $1000, or $2500)
-    if (![500, 1000, 2500].includes(amount)) {
-      return res.status(400).json({ error: 'Invalid amount. Must be $500, $1000, or $2500' });
-    }
-
-    // Get current contractor
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId }
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
-    }
-
-    // Calculate new balance
-    const currentBalance = contractor.creditBalance || 0;
-    const newBalance = currentBalance + amount;
-
-    // Calculate expiry date (60 days from now for starter, 90 for pro, 120 for elite)
-    const expiryDate = new Date();
-    if (contractor.subscriptionTier === 'pro') {
-      expiryDate.setDate(expiryDate.getDate() + 90);
-    } else if (contractor.subscriptionTier === 'elite') {
-      expiryDate.setDate(expiryDate.getDate() + 120);
-    } else {
-      expiryDate.setDate(expiryDate.getDate() + 60); // starter default
-    }
-
-    // Update contractor balance and create transaction record
-    const [updatedContractor, transaction] = await prisma.$transaction([
-      prisma.contractor.update({
-        where: { id: contractorId },
-        data: { creditBalance: newBalance }
-      }),
-      prisma.creditTransaction.create({
-        data: {
-          contractorId: contractorId,
-          type: 'deposit',
-          amount: amount,
-          balanceBefore: currentBalance,
-          balanceAfter: newBalance,
-          description: `Credit deposit: $${amount}`,
-          expiresAt: expiryDate
-        }
-      })
-    ]);
-
-    res.json({
-      success: true,
-      newBalance: newBalance,
-      transaction: {
-        id: transaction.id,
-        amount: transaction.amount,
-        type: transaction.type,
-        expiresAt: transaction.expiresAt,
-        createdAt: transaction.createdAt
+      // Validate amount (must be $500, $1000, or $2500)
+      if (![500, 1000, 2500].includes(amount)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid amount. Must be $500, $1000, or $2500" });
       }
-    });
 
-  } catch (error) {
-    console.error('Add credits error:', error);
-    res.status(500).json({ error: 'Failed to add credits' });
+      // Get current contractor
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Calculate new balance
+      const currentBalance = contractor.creditBalance || 0;
+      const newBalance = currentBalance + amount;
+
+      // Calculate expiry date (60 days from now for starter, 90 for pro, 120 for elite)
+      const expiryDate = new Date();
+      if (contractor.subscriptionTier === "pro") {
+        expiryDate.setDate(expiryDate.getDate() + 90);
+      } else if (contractor.subscriptionTier === "elite") {
+        expiryDate.setDate(expiryDate.getDate() + 120);
+      } else {
+        expiryDate.setDate(expiryDate.getDate() + 60); // starter default
+      }
+
+      // Update contractor balance and create transaction record
+      const [updatedContractor, transaction] = await prisma.$transaction([
+        prisma.contractor.update({
+          where: { id: contractorId },
+          data: { creditBalance: newBalance },
+        }),
+        prisma.creditTransaction.create({
+          data: {
+            contractorId: contractorId,
+            type: "deposit",
+            amount: amount,
+            balanceBefore: currentBalance,
+            balanceAfter: newBalance,
+            description: `Credit deposit: $${amount}`,
+            expiresAt: expiryDate,
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        newBalance: newBalance,
+        transaction: {
+          id: transaction.id,
+          amount: transaction.amount,
+          type: transaction.type,
+          expiresAt: transaction.expiresAt,
+          createdAt: transaction.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("Add credits error:", error);
+      res.status(500).json({ error: "Failed to add credits" });
+    }
   }
-});
+);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
