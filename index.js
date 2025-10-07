@@ -4439,7 +4439,6 @@ const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  comparePassword,
   authenticateAdmin: newAdminAuth
 } = require('./admin-auth');
 
