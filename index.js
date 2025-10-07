@@ -165,8 +165,9 @@ app.get("/api/debug/check-env", (req, res) => {
     adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
     hasJwtSecret: !!process.env.JWT_SECRET,
     jwtSecretLength: process.env.JWT_SECRET?.length || 0,
-    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
-    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0,
+    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,  // ✅ ADDED
+    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0,  // ✅ ADDED
+    hasStripeKey: !!process.env.STRIPE_SECRET_KEY_TEST,  // ✅ BONUS CHECK
   });
 });
 
