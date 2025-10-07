@@ -2810,7 +2810,6 @@ app.get(
     try {
       const contractorId = req.contractor.id;
 
-      // Get contractor with subscription details
       const contractor = await prisma.contractor.findUnique({
         where: { id: contractorId },
         select: {
@@ -2827,7 +2826,28 @@ app.get(
           serviceZipCodes: true,
           specializations: true,
           status: true,
-          // Add these additional fields
+          // Verification fields
+          licenseNumber: true,
+          licenseState: true,
+          licenseExpirationDate: true,
+          businessAddress: true,
+          businessCity: true,
+          businessState: true,
+          businessZip: true,
+          taxId: true,
+          insuranceProvider: true,
+          insurancePolicyNumber: true,
+          insuranceExpirationDate: true,
+          yearsInBusiness: true,
+          websiteUrl: true,
+          businessType: true,
+          paymentMethodLast4: true,
+          paymentMethodBrand: true,
+          paymentMethodExpMonth: true,
+          paymentMethodExpYear: true,
+          isVerified: true,
+          verifiedAt: true,
+          // Performance
           avgResponseTime: true,
           conversionRate: true,
           customerRating: true,
@@ -2835,8 +2855,6 @@ app.get(
           totalLeadsReceived: true,
           isAcceptingLeads: true,
           isApproved: true,
-          isVerified: true,
-          lastActiveAt: true,
           createdAt: true,
         },
       });
@@ -2845,7 +2863,7 @@ app.get(
         return res.status(404).json({ error: "Contractor not found" });
       }
 
-      // Get subscription pricing based on tier
+      // Calculate subscription pricing
       let monthlyPrice = 0;
       let leadCost = 0;
 
@@ -2868,13 +2886,11 @@ app.get(
       const leadsThisMonth = await prisma.leadAssignment.count({
         where: {
           contractorId: contractorId,
-          assignedAt: {
-            gte: startOfMonth,
-          },
+          assignedAt: { gte: startOfMonth },
         },
       });
 
-      // Get recent credit transactions (last 10)
+      // Get recent transactions
       const recentTransactions = await prisma.creditTransaction.findMany({
         where: { contractorId: contractorId },
         orderBy: { createdAt: "desc" },
@@ -2889,10 +2905,10 @@ app.get(
         },
       });
 
-      // Calculate max leads based on tier
-      let maxLeads = 15; // starter default
+      // Max leads based on tier
+      let maxLeads = 15;
       if (contractor.subscriptionTier === "pro") maxLeads = 40;
-      if (contractor.subscriptionTier === "elite") maxLeads = 999; // unlimited
+      if (contractor.subscriptionTier === "elite") maxLeads = 999;
 
       res.json({
         contractor: {
@@ -2911,10 +2927,34 @@ app.get(
           monthlyPrice: monthlyPrice,
           leadCost: leadCost,
           stripeSubscriptionId: contractor.stripeSubscriptionId,
-          stripeCustomerId: contractor.stripeCustomerId,
-          paymentMethodLast4: null, // We'll add this next
+          paymentMethod: contractor.paymentMethodLast4
+            ? {
+                last4: contractor.paymentMethodLast4,
+                brand: contractor.paymentMethodBrand,
+                expMonth: contractor.paymentMethodExpMonth,
+                expYear: contractor.paymentMethodExpYear,
+              }
+            : null,
         },
         profile: {
+          licenseNumber: contractor.licenseNumber,
+          licenseState: contractor.licenseState,
+          licenseExpirationDate: contractor.licenseExpirationDate,
+          businessAddress: contractor.businessAddress,
+          businessCity: contractor.businessCity,
+          businessState: contractor.businessState,
+          businessZip: contractor.businessZip,
+          taxId: contractor.taxId
+            ? "***-**-" + contractor.taxId.slice(-4)
+            : null, // Masked
+          insuranceProvider: contractor.insuranceProvider,
+          insurancePolicyNumber: contractor.insurancePolicyNumber,
+          insuranceExpirationDate: contractor.insuranceExpirationDate,
+          yearsInBusiness: contractor.yearsInBusiness,
+          websiteUrl: contractor.websiteUrl,
+          businessType: contractor.businessType,
+          isVerified: contractor.isVerified,
+          verifiedAt: contractor.verifiedAt,
           avgResponseTime: contractor.avgResponseTime,
           conversionRate: contractor.conversionRate,
           customerRating: contractor.customerRating,
@@ -2922,7 +2962,6 @@ app.get(
           totalLeadsReceived: contractor.totalLeadsReceived,
           isAcceptingLeads: contractor.isAcceptingLeads,
           isApproved: contractor.isApproved,
-          isVerified: contractor.isVerified,
           memberSince: contractor.createdAt,
         },
         stats: {
