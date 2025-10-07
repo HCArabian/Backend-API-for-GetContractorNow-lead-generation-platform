@@ -29,7 +29,18 @@
     }
 
     .logo {
-      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-img {
+      height: 45px;
+      width: auto;
+    }
+
+    .logo-text {
+      font-size: 1.25rem;
       font-weight: bold;
     }
 
@@ -82,6 +93,13 @@
       max-width: 400px;
     }
 
+    .login-logo {
+      width: 150px;
+      height: auto;
+      display: block;
+      margin: 0 auto 1.5rem;
+    }
+
     .login-card h1 {
       color: #1f2937;
       margin-bottom: 0.5rem;
@@ -104,7 +122,7 @@
       font-weight: 500;
     }
 
-    .form-group input {
+    .form-group input, .form-group select {
       width: 100%;
       padding: 0.75rem;
       border: 2px solid #e5e7eb;
@@ -112,7 +130,7 @@
       font-size: 1rem;
     }
 
-    .form-group input:focus {
+    .form-group input:focus, .form-group select:focus {
       outline: none;
       border-color: #2563eb;
     }
@@ -137,6 +155,17 @@
     .btn-secondary {
       padding: 0.75rem 1.5rem;
       background: #6b7280;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-danger {
+      padding: 0.75rem 1.5rem;
+      background: #dc2626;
       color: white;
       border: none;
       border-radius: 8px;
@@ -197,6 +226,12 @@
       color: #1f2937;
     }
 
+    .card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+      color: #374151;
+    }
+
     /* Credit Balance Card */
     .credit-card {
       background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
@@ -245,42 +280,94 @@
       transform: translateY(-2px);
     }
 
-    /* Subscription Card */
-    .subscription-card {
-      border: 2px solid #e5e7eb;
+    /* Plan Cards */
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
     }
 
-    .tier-display {
+    .plan-card {
+      background: white;
+      border: 3px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 2rem;
       text-align: center;
-      padding: 1.5rem;
-      background: #f9fafb;
-      border-radius: 8px;
-      margin: 1rem 0;
+      transition: all 0.3s;
     }
 
-    .tier-name {
+    .plan-card.current {
+      border-color: #2563eb;
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(30, 64, 175, 0.05) 100%);
+    }
+
+    .plan-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    }
+
+    .plan-name {
       font-size: 1.5rem;
       font-weight: bold;
-      color: #2563eb;
+      color: #1f2937;
       margin-bottom: 0.5rem;
     }
 
-    .tier-price {
-      font-size: 2rem;
+    .plan-price {
+      font-size: 2.5rem;
       font-weight: bold;
-      color: #1f2937;
+      color: #2563eb;
+      margin: 1rem 0;
     }
 
-    .beta-badge {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    .plan-price small {
+      font-size: 1rem;
+      color: #6b7280;
+    }
+
+    .plan-features {
+      list-style: none;
+      margin: 1.5rem 0;
+      text-align: left;
+    }
+
+    .plan-features li {
+      padding: 0.5rem 0;
+      color: #4b5563;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .plan-features li:before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+    }
+
+    .plan-button {
+      width: 100%;
+      padding: 0.875rem;
+      background: #2563eb;
       color: white;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: bold;
-      margin-left: 10px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1rem;
     }
 
+    .plan-button.current-plan {
+      background: #6b7280;
+      cursor: default;
+    }
+
+    .plan-button:hover:not(.current-plan) {
+      background: #1e40af;
+    }
+
+    /* Subscription Details */
     .subscription-details {
       margin: 1.5rem 0;
     }
@@ -296,16 +383,17 @@
       border-bottom: none;
     }
 
-    .beta-note {
-      background: #fef3c7;
-      padding: 0.75rem;
-      border-radius: 6px;
-      color: #92400e;
-      font-size: 0.9rem;
-      display: block;
+    .beta-badge {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-left: 10px;
     }
 
-    /* Payment Method Card */
+    /* Payment Method */
     .payment-method-card {
       background: white;
       border: 2px solid #e5e7eb;
@@ -369,6 +457,36 @@
       font-size: 1rem;
       color: #1f2937;
       font-weight: 500;
+    }
+
+    /* Invoices Table */
+    .invoices-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+
+    .invoices-table th {
+      text-align: left;
+      padding: 0.75rem;
+      background: #f9fafb;
+      font-weight: 600;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .invoices-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .invoice-link {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .invoice-link:hover {
+      text-decoration: underline;
     }
 
     /* Modal */
@@ -477,6 +595,12 @@
       color: #991b1b;
     }
 
+    .alert-info {
+      background: #dbeafe;
+      border-left: 4px solid #2563eb;
+      color: #1e40af;
+    }
+
     /* Loading Spinner */
     .spinner {
       display: none;
@@ -519,6 +643,18 @@
       .credit-btn {
         width: 100%;
       }
+
+      .plans-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .logo-text {
+        display: none;
+      }
+
+      .logo-img {
+        height: 35px;
+      }
     }
   </style>
 </head>
@@ -527,6 +663,7 @@
   <!-- Login Screen -->
   <div id="loginScreen" class="login-container">
     <div class="login-card">
+      <img src="/public/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo" class="login-logo">
       <h1>Contractor Portal</h1>
       <p>Sign in to manage your leads and account</p>
       
@@ -551,7 +688,10 @@
   <!-- Dashboard -->
   <div id="dashboardScreen" class="dashboard">
     <div class="header">
-      <div class="logo">GetContractorNow</div>
+      <div class="logo">
+        <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo" class="logo-img">
+        <span class="logo-text">GetContractorNow</span>
+      </div>
       <div class="user-menu">
         <span class="user-name" id="userName"></span>
         <button class="logout-btn" onclick="logout()">Logout</button>
@@ -563,8 +703,9 @@
       <div class="tabs">
         <button class="tab active" onclick="showTab('overview')">Overview</button>
         <button class="tab" onclick="showTab('leads')">My Leads</button>
+        <button class="tab" onclick="showTab('account')">Account Management</button>
         <button class="tab" onclick="showTab('profile')">Profile</button>
-        <button class="tab" onclick="showTab('billing')">Billing</button>
+        <button class="tab" onclick="showTab('billing')">Transaction History</button>
       </div>
 
       <!-- Overview Tab -->
@@ -581,6 +722,11 @@
           <h2>My Leads</h2>
           <div id="leadsContent">Loading...</div>
         </div>
+      </div>
+
+      <!-- Account Management Tab -->
+      <div id="account-tab" class="tab-content">
+        <div id="accountContent">Loading...</div>
       </div>
 
       <!-- Profile Tab -->
@@ -640,9 +786,47 @@
     </div>
   </div>
 
+  <!-- Change Plan Confirmation Modal -->
+  <div id="planModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Confirm Plan Change</h2>
+      <div id="planModalContent"></div>
+    </div>
+  </div>
+
+  <!-- Cancel Subscription Modal -->
+  <div id="cancelModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2>Cancel Subscription</h2>
+      <p style="color: #6b7280; margin-bottom: 1rem;">We're sorry to see you go. Your subscription will remain active until the end of your billing period.</p>
+      
+      <div class="form-group">
+        <label for="cancelReason">Why are you cancelling? (optional)</label>
+        <select id="cancelReason">
+          <option value="">Select a reason...</option>
+          <option value="too_expensive">Too expensive</option>
+          <option value="not_enough_leads">Not enough leads</option>
+          <option value="poor_lead_quality">Poor lead quality</option>
+          <option value="switching_service">Switching to another service</option>
+          <option value="business_closing">Business closing</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeCancelModal()">Keep Subscription</button>
+        <button class="btn-danger" onclick="confirmCancelSubscription()">Confirm Cancellation</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let dashboardData = null;
     let currentAmount = 0;
+    let selectedPlan = null;
+
+    // API Base URL
+    const API_URL = '';
 
     // Login
     async function login(event) {
@@ -652,7 +836,7 @@
       const password = document.getElementById('password').value;
       
       try {
-        const response = await fetch('/api/contractor/login', {
+        const response = await fetch(`${API_URL}/api/contractor/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -663,7 +847,6 @@
         if (data.success) {
           localStorage.setItem('contractorToken', data.token);
           
-          // Check if password change required
           if (data.requirePasswordChange) {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('passwordModal').classList.add('active');
@@ -698,7 +881,7 @@
       }
 
       try {
-        const response = await fetch('/api/contractor/change-password', {
+        const response = await fetch(`${API_URL}/api/contractor/change-password`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -729,7 +912,7 @@
     // Load Dashboard
     async function loadDashboard() {
       try {
-        const response = await fetch('/api/contractor/dashboard', {
+        const response = await fetch(`${API_URL}/api/contractor/dashboard`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
           }
@@ -748,6 +931,7 @@
         renderPaymentMethod();
         renderStats();
         await loadLeads();
+        await loadAccountManagement();
         renderProfile();
         renderBilling();
       } catch (error) {
@@ -786,12 +970,12 @@
       const betaBadge = sub.isBetaTester ? '<span class="beta-badge">🎟️ BETA TESTER</span>' : '';
 
       const html = `
-        <div class="card subscription-card">
+        <div class="card">
           <h2>Your Subscription ${betaBadge}</h2>
           
-          <div class="tier-display">
-            <div class="tier-name">${sub.tier ? sub.tier.toUpperCase() : 'NO SUBSCRIPTION'}</div>
-            <div class="tier-price">${sub.monthlyPrice === 0 ? 'FREE' : `$${sub.monthlyPrice}/month`}</div>
+          <div style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 8px;">
+            <div style="font-size: 1.5rem; font-weight: bold; color: #2563eb;">${sub.tier ? sub.tier.toUpperCase() : 'NO SUBSCRIPTION'}</div>
+            <div style="font-size: 2rem; font-weight: bold; color: #1f2937; margin-top: 0.5rem;">${sub.monthlyPrice === 0 ? 'FREE' : `$${sub.monthlyPrice}/month`}</div>
           </div>
 
           <div class="subscription-details">
@@ -803,7 +987,7 @@
               <span>Lead Cost:</span>
               <strong>$${sub.leadCost}/lead</strong>
             </div>
-            ${sub.isBetaTester ? '<div class="beta-note">🎉 Special beta pricing applied!</div>' : ''}
+            ${sub.isBetaTester ? '<div style="background: #fef3c7; padding: 0.75rem; border-radius: 6px; color: #92400e; font-size: 0.9rem; margin-top: 1rem;">🎉 Special beta pricing applied!</div>' : ''}
           </div>
         </div>
       `;
@@ -823,7 +1007,7 @@
             <div class="card-display">
               <span class="card-brand">${pm.brand.toUpperCase()}</span>
               <span class="card-number">•••• •••• •••• ${pm.last4}</span>
-              <span class="card-exp">Expires: ${pm.expMonth}/${pm.expYear}</span>
+              <span style="color: #6b7280;">Expires: ${pm.expMonth}/${pm.expYear}</span>
               <span class="verified-badge">✅ Verified</span>
             </div>
           </div>
@@ -866,10 +1050,266 @@
       document.getElementById('statsCard').innerHTML = html;
     }
 
+    // Load Account Management
+    async function loadAccountManagement() {
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/subscription/plans`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          }
+        });
+
+        const data = await response.json();
+        renderAccountManagement(data.plans);
+      } catch (error) {
+        document.getElementById('accountContent').innerHTML = '<p>Failed to load account management.</p>';
+      }
+    }
+
+    // Render Account Management
+    function renderAccountManagement(plans) {
+      const currentTier = dashboardData.subscription.tier;
+      const isBeta = dashboardData.subscription.isBetaTester;
+      const status = dashboardData.subscription.status;
+
+      let html = `
+        <div class="card">
+          <h2>📊 Subscription Plans</h2>
+          ${isBeta ? '<div class="alert alert-info">🎟️ You\'re a beta tester with special pricing!</div>' : ''}
+          
+          <div class="plans-grid">
+      `;
+
+      plans.forEach(plan => {
+        const isCurrent = plan.tier === currentTier;
+        html += `
+          <div class="plan-card ${isCurrent ? 'current' : ''}">
+            <div class="plan-name">${plan.name}</div>
+            <div class="plan-price">$${plan.price}<small>/month</small></div>
+            <div style="color: #6b7280; margin: 0.5rem 0;">$${plan.leadCost} per lead</div>
+            <ul class="plan-features">
+              ${plan.features.map(f => `<li>${f}</li>`).join('')}
+            </ul>
+            <button class="plan-button ${isCurrent ? 'current-plan' : ''}" 
+                    onclick="${isCurrent ? 'void(0)' : `showChangePlanModal('${plan.tier}', '${plan.name}', ${plan.price})`}">
+              ${isCurrent ? 'Current Plan' : 'Select Plan'}
+            </button>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+        </div>
+
+        ${status === 'active' || status === 'cancelling' ? `
+          <div class="card">
+            <h2>⚙️ Subscription Settings</h2>
+            
+            ${status === 'cancelling' ? `
+              <div class="alert alert-warning">
+                ⚠️ Your subscription is scheduled to cancel at the end of your billing period.
+              </div>
+              <button class="btn-primary" onclick="reactivateSubscription()">Reactivate Subscription</button>
+            ` : `
+              <p style="color: #6b7280; margin-bottom: 1rem;">Need to make changes to your subscription?</p>
+              <button class="btn-danger" onclick="showCancelModal()">Cancel Subscription</button>
+            `}
+          </div>
+        ` : ''}
+
+        <div class="card">
+          <h2>📄 Billing Invoices</h2>
+          <div id="invoicesContent">Loading invoices...</div>
+        </div>
+      `;
+
+      document.getElementById('accountContent').innerHTML = html;
+      loadInvoices();
+    }
+
+    // Load Invoices
+    async function loadInvoices() {
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/subscription/invoices`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.invoices && data.invoices.length > 0) {
+          let html = `
+            <table class="invoices-table">
+              <thead>
+                <tr>
+                  <th>Invoice #</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Download</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+
+          data.invoices.forEach(inv => {
+            html += `
+              <tr>
+                <td>${inv.number || inv.id}</td>
+                <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
+                <td>$${inv.amount.toFixed(2)}</td>
+                <td>${inv.status === 'paid' ? '✅ Paid' : inv.status}</td>
+                <td><a href="${inv.invoicePdf}" target="_blank" class="invoice-link">PDF</a></td>
+              </tr>
+            `;
+          });
+
+          html += `
+              </tbody>
+            </table>
+          `;
+          document.getElementById('invoicesContent').innerHTML = html;
+        } else {
+          document.getElementById('invoicesContent').innerHTML = '<p>No invoices yet.</p>';
+        }
+      } catch (error) {
+        document.getElementById('invoicesContent').innerHTML = '<p>Failed to load invoices.</p>';
+      }
+    }
+
+    // Show Change Plan Modal
+    function showChangePlanModal(tier, name, price) {
+      selectedPlan = { tier, name, price };
+
+      const html = `
+        <p style="margin-bottom: 1.5rem;">You are about to change your subscription to:</p>
+        
+        <div style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 12px; margin: 1.5rem 0;">
+          <div style="font-size: 1.5rem; font-weight: bold; color: #2563eb;">${name}</div>
+          <div style="font-size: 2.5rem; font-weight: bold; color: #1f2937; margin-top: 0.5rem;">$${price}/month</div>
+        </div>
+
+        <div class="alert alert-info">
+          💡 Your plan will be changed immediately and you'll be charged a prorated amount.
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closePlanModal()">Cancel</button>
+          <button class="btn-primary" onclick="confirmChangePlan()">Confirm Change</button>
+        </div>
+      `;
+
+      document.getElementById('planModalContent').innerHTML = html;
+      document.getElementById('planModal').classList.add('active');
+    }
+
+    async function confirmChangePlan() {
+      closePlanModal();
+      showSpinner();
+
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/subscription/change-plan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          },
+          body: JSON.stringify({ newTier: selectedPlan.tier })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`Successfully changed to ${selectedPlan.name} plan!`);
+          await loadDashboard();
+        } else {
+          alert(data.error || 'Failed to change plan');
+        }
+      } catch (error) {
+        alert('Failed to change plan. Please try again.');
+      } finally {
+        hideSpinner();
+      }
+    }
+
+    function closePlanModal() {
+      document.getElementById('planModal').classList.remove('active');
+    }
+
+    // Cancel Subscription
+    function showCancelModal() {
+      document.getElementById('cancelModal').classList.add('active');
+    }
+
+    function closeCancelModal() {
+      document.getElementById('cancelModal').classList.remove('active');
+    }
+
+    async function confirmCancelSubscription() {
+      const reason = document.getElementById('cancelReason').value;
+      closeCancelModal();
+      showSpinner();
+
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/subscription/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          },
+          body: JSON.stringify({ reason })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(data.message);
+          await loadDashboard();
+        } else {
+          alert(data.error || 'Failed to cancel subscription');
+        }
+      } catch (error) {
+        alert('Failed to cancel subscription. Please try again.');
+      } finally {
+        hideSpinner();
+      }
+    }
+
+    // Reactivate Subscription
+    async function reactivateSubscription() {
+      if (!confirm('Are you sure you want to reactivate your subscription?')) return;
+      
+      showSpinner();
+
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/subscription/reactivate`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('Subscription reactivated successfully!');
+          await loadDashboard();
+        } else {
+          alert(data.error || 'Failed to reactivate subscription');
+        }
+      } catch (error) {
+        alert('Failed to reactivate subscription. Please try again.');
+      } finally {
+        hideSpinner();
+      }
+    }
+
     // Load Leads
     async function loadLeads() {
       try {
-        const response = await fetch('/api/contractor/leads', {
+        const response = await fetch(`${API_URL}/api/contractor/leads`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
           }
@@ -921,7 +1361,7 @@
 
       const html = `
         <div class="profile-section">
-          <h2 style="margin-top: 0;">Business Information</h2>
+          <h3 style="margin-top: 0;">Business Information</h3>
           <div class="info-grid">
             <div class="info-item">
               <label>Business Name</label>
@@ -937,7 +1377,7 @@
             </div>
           </div>
 
-          <h2>License & Insurance</h2>
+          <h3>License & Insurance</h3>
           <div class="info-grid">
             <div class="info-item">
               <label>License Number</label>
@@ -957,7 +1397,7 @@
             </div>
           </div>
 
-          <h2>Service Coverage</h2>
+          <h3>Service Coverage</h3>
           <div class="info-item">
             <label>ZIP Codes</label>
             <div>${contractor.serviceZipCodes.join(', ')}</div>
@@ -967,7 +1407,7 @@
             <div>${contractor.specializations.map(s => s.replace(/_/g, ' ')).join(', ')}</div>
           </div>
 
-          <h2>Account Details</h2>
+          <h3>Account Details</h3>
           <div class="info-grid">
             <div class="info-item">
               <label>Member Since</label>
@@ -1033,7 +1473,7 @@
           <div class="card-display">
             <span class="card-brand">${pm.brand.toUpperCase()}</span>
             <span class="card-number">•••• ${pm.last4}</span>
-            <span class="card-exp">${pm.expMonth}/${pm.expYear}</span>
+            <span style="color: #6b7280;">${pm.expMonth}/${pm.expYear}</span>
           </div>
         </div>
 
@@ -1068,7 +1508,7 @@
       showSpinner();
 
       try {
-        const response = await fetch('/api/contractor/credits/add', {
+        const response = await fetch(`${API_URL}/api/contractor/credits/add`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1103,6 +1543,11 @@
       
       event.target.classList.add('active');
       document.getElementById(`${tabName}-tab`).classList.add('active');
+
+      // Load account management when tab is clicked
+      if (tabName === 'account' && dashboardData) {
+        loadAccountManagement();
+      }
     }
 
     // Utilities
