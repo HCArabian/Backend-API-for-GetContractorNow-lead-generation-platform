@@ -23,6 +23,7 @@ const crypto = require("crypto");
 const { sendContractorOnboardingEmail } = require("./notifications");
 const twilio = require("twilio");
 const { hashPassword, comparePassword, generateToken } = require("./auth");
+const { handleSubscriptionCreated } = require("./webhook-handler");
 
 const app = express();
 
@@ -35,7 +36,35 @@ const path = require("path");
 // CRITICAL: STRIPE WEBHOOK MUST BE FIRST
 // BEFORE ANY MIDDLEWARE THAT PARSES BODY
 // ============================================
+// ============================================
+// STRIPE SUBSCRIPTION WEBHOOK
+// ============================================
 
+app.post(
+  "/api/webhooks/stripe/subscription",
+  express.json(),
+  async (req, res) => {
+    console.log("📬 Webhook received");
+    console.log("Event type:", req.body?.type);
+    
+    const event = req.body;
+
+    if (!event || !event.type) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    try {
+      if (event.type === "customer.subscription.created") {
+        await handleSubscriptionCreated(event.data.object);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 app.post(
   "/api/webhooks/stripe/subscription",
   express.raw({ type: "application/json" }),
