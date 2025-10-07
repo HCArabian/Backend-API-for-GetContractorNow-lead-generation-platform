@@ -184,6 +184,80 @@ const authenticateContractor = async (req, res, next) => {
   }
 };
 
+// ============================================
+// ADMIN API ENDPOINTS
+// ============================================
+
+// Get all billing records with filters
+app.get("/api/admin/billing", newAdminAuth, async (req, res) => {
+  try {
+    const { status, contractorId, startDate, endDate } = req.query;
+
+    const where = {};
+
+    if (status) where.status = status;
+    if (contractorId) where.contractorId = contractorId;
+    if (startDate || endDate) {
+      where.dateIncurred = {};
+      if (startDate) where.dateIncurred.gte = new Date(startDate);
+      if (endDate) where.dateIncurred.lte = new Date(endDate);
+    }
+
+    const billingRecords = await prisma.billingRecord.findMany({
+      where,
+      include: {
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            customerCity: true,
+            customerState: true,
+            serviceType: true,
+          },
+        },
+        contractor: {
+          select: {
+            businessName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: {
+        dateIncurred: "desc",
+      },
+    });
+
+    // Calculate summary stats
+    const summary = {
+      total: billingRecords.length,
+      totalAmount: billingRecords.reduce(
+        (sum, record) => sum + record.amountOwed,
+        0
+      ),
+      pending: billingRecords.filter((r) => r.status === "pending").length,
+      pendingAmount: billingRecords
+        .filter((r) => r.status === "pending")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+      invoiced: billingRecords.filter((r) => r.status === "invoiced").length,
+      paid: billingRecords.filter((r) => r.status === "paid").length,
+      paidAmount: billingRecords
+        .filter((r) => r.status === "paid")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+    };
+
+    res.json({
+      success: true,
+      summary,
+      records: billingRecords,
+    });
+  } catch (error) {
+    console.error("Error fetching billing records:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Rate limiters
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -793,79 +867,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   }
 });
 
-// ============================================
-// ADMIN API ENDPOINTS
-// ============================================
 
-// Get all billing records with filters
-app.get("/api/admin/billing", newAdminAuth, async (req, res) => {
-  try {
-    const { status, contractorId, startDate, endDate } = req.query;
-
-    const where = {};
-
-    if (status) where.status = status;
-    if (contractorId) where.contractorId = contractorId;
-    if (startDate || endDate) {
-      where.dateIncurred = {};
-      if (startDate) where.dateIncurred.gte = new Date(startDate);
-      if (endDate) where.dateIncurred.lte = new Date(endDate);
-    }
-
-    const billingRecords = await prisma.billingRecord.findMany({
-      where,
-      include: {
-        lead: {
-          select: {
-            customerFirstName: true,
-            customerLastName: true,
-            customerPhone: true,
-            customerCity: true,
-            customerState: true,
-            serviceType: true,
-          },
-        },
-        contractor: {
-          select: {
-            businessName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-      orderBy: {
-        dateIncurred: "desc",
-      },
-    });
-
-    // Calculate summary stats
-    const summary = {
-      total: billingRecords.length,
-      totalAmount: billingRecords.reduce(
-        (sum, record) => sum + record.amountOwed,
-        0
-      ),
-      pending: billingRecords.filter((r) => r.status === "pending").length,
-      pendingAmount: billingRecords
-        .filter((r) => r.status === "pending")
-        .reduce((sum, r) => sum + r.amountOwed, 0),
-      invoiced: billingRecords.filter((r) => r.status === "invoiced").length,
-      paid: billingRecords.filter((r) => r.status === "paid").length,
-      paidAmount: billingRecords
-        .filter((r) => r.status === "paid")
-        .reduce((sum, r) => sum + r.amountOwed, 0),
-    };
-
-    res.json({
-      success: true,
-      summary,
-      records: billingRecords,
-    });
-  } catch (error) {
-    console.error("Error fetching billing records:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
