@@ -2993,7 +2993,12 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
 
     const assignments = await prisma.leadAssignment.findMany({
       where: whereClause,
-      include: {
+      select: {
+        // ✅ FIXED: Explicitly select fields from LeadAssignment
+        id: true,
+        status: true,
+        assignedAt: true,
+        trackingNumber: true, // ✅ NOW INCLUDED!
         lead: {
           select: {
             id: true,
@@ -3026,7 +3031,7 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
       leadId: assignment.lead.id,
       status: assignment.status,
       assignedAt: assignment.assignedAt,
-      trackingNumber: assignment.trackingNumber, // This comes from LeadAssignment directly
+      trackingNumber: assignment.trackingNumber, // ✅ Now this will work!
       customer: {
         name: `${assignment.lead.customerFirstName} ${assignment.lead.customerLastName}`,
         email: assignment.lead.customerEmail,
