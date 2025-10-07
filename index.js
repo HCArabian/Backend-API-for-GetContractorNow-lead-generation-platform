@@ -86,6 +86,8 @@ app.post(
     let event;
 
     try {
+      // ✅ FIXED: Import stripe here
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
       // Verify webhook signature
       event = stripe.webhooks.constructEvent(
         req.body,
@@ -2168,7 +2170,7 @@ app.use((req, res, next) => {
       .status(404)
       .json({ error: "API endpoints must use api subdomain" });
   } */
- 
+
    // Allow API routes on BOTH api and app subdomains
   if (req.path.startsWith("/api/")) {
     // API calls work on both api. and app. subdomains
