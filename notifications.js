@@ -347,6 +347,7 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
   if (!(await shouldSendEmail(contractor.email))) {
     return { success: false, error: "Email address bounced" };
   }
+
   const portalUrl = `https://app.getcontractornow.com/contractor`;
 
   const emailHtml = `
@@ -359,42 +360,121 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
     .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
     .content { padding: 30px; background: #f9fafb; border: 1px solid #e5e7eb; }
     .credentials-box { background: #dbeafe; border: 2px solid #2563eb; padding: 20px; margin: 20px 0; border-radius: 8px; }
-    .button { display: inline-block; background: #2563eb; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .tier-card { background: white; border: 2px solid #e5e7eb; padding: 20px; margin: 15px 0; border-radius: 8px; }
+    .tier-card.recommended { border-color: #2563eb; position: relative; }
+    .recommended-badge { background: #2563eb; color: white; padding: 5px 15px; border-radius: 4px; font-size: 12px; font-weight: bold; position: absolute; top: -10px; right: 10px; }
+    .tier-name { font-size: 24px; font-weight: bold; color: #1f2937; margin-bottom: 10px; }
+    .tier-price { font-size: 32px; font-weight: bold; color: #2563eb; margin: 10px 0; }
+    .tier-features { list-style: none; padding: 0; margin: 15px 0; }
+    .tier-features li { padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .tier-features li:last-child { border-bottom: none; }
+    .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 10px 0; font-weight: bold; }
+    .button.secondary { background: #6b7280; }
+    .alert-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>Welcome to GetContractorNow!</h1>
+      <h1>🎉 Welcome to GetContractorNow!</h1>
     </div>
     <div class="content">
       <p>Hi ${contractor.businessName},</p>
-      <p>Your contractor account has been approved! You can now start receiving qualified leads in your service area.</p>
+      <p><strong>Congratulations! Your contractor account has been approved.</strong></p>
+      
+      <p>You're now ready to start receiving qualified leads in your service area. Here's how to get started:</p>
+
+      <div class="alert-box">
+        <strong>⚠️ IMPORTANT:</strong> You must change your temporary password on first login for security.
+      </div>
+
+      <h2 style="color: #1f2937; margin-top: 30px;">Step 1: Access Your Portal</h2>
       
       <div class="credentials-box">
         <h3>Your Login Credentials</h3>
         <p><strong>Portal URL:</strong> <a href="${portalUrl}">${portalUrl}</a></p>
         <p><strong>Email:</strong> ${contractor.email}</p>
-        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px;">${temporaryPassword}</code></p>
+        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px; font-weight: bold;">${temporaryPassword}</code></p>
       </div>
-      
-      <p style="color: #dc2626; font-weight: bold;">⚠️ IMPORTANT: You must change your password on first login.</p>
-      
-      <div style="text-align: center;">
-        <a href="${portalUrl}" class="button">Access Contractor Portal</a>
+
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="${portalUrl}" class="button">Access Portal Now</a>
       </div>
-      
-      <h3>Next Steps:</h3>
-      <ol>
-        <li>Login with your temporary password</li>
-        <li>Change your password immediately</li>
-        <li>Add payment method (required to receive leads)</li>
-        <li>Review your profile and service areas</li>
-        <li>Start receiving leads!</li>
+
+      <h2 style="color: #1f2937; margin-top: 40px;">Step 2: Choose Your Subscription Tier</h2>
+      <p>Select the plan that fits your business needs:</p>
+
+      <!-- STARTER TIER -->
+      <div class="tier-card">
+        <div class="tier-name">Starter</div>
+        <div class="tier-price">$99<span style="font-size: 16px; color: #6b7280;">/month</span></div>
+        <ul class="tier-features">
+          <li>✅ Up to 15 leads per month</li>
+          <li>✅ $75 per lead</li>
+          <li>✅ 3 service ZIP codes</li>
+          <li>✅ Standard priority</li>
+          <li>✅ Email & SMS notifications</li>
+        </ul>
+        <div style="text-align: center;">
+          <a href="${process.env.STRIPE_PAYMENT_LINK_STARTER}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button secondary">Choose Starter</a>
+        </div>
+      </div>
+
+      <!-- PRO TIER (RECOMMENDED) -->
+      <div class="tier-card recommended">
+        <span class="recommended-badge">⭐ RECOMMENDED</span>
+        <div class="tier-name">Pro</div>
+        <div class="tier-price">$125<span style="font-size: 16px; color: #6b7280;">/month</span></div>
+        <ul class="tier-features">
+          <li>✅ Up to 40 leads per month</li>
+          <li>✅ $100 per lead</li>
+          <li>✅ 5 service ZIP codes</li>
+          <li>✅ High priority assignment</li>
+          <li>✅ Email & SMS notifications</li>
+          <li>✅ Extended credit terms (90 days)</li>
+        </ul>
+        <div style="text-align: center;">
+          <a href="${process.env.STRIPE_PAYMENT_LINK_PRO}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button">Choose Pro</a>
+        </div>
+      </div>
+
+      <!-- ELITE TIER -->
+      <div class="tier-card">
+        <div class="tier-name">Elite</div>
+        <div class="tier-price">$200<span style="font-size: 16px; color: #6b7280;">/month</span></div>
+        <ul class="tier-features">
+          <li>✅ Unlimited leads</li>
+          <li>✅ $250 per premium lead</li>
+          <li>✅ 15 service ZIP codes</li>
+          <li>✅ Highest priority assignment</li>
+          <li>✅ Email & SMS notifications</li>
+          <li>✅ Extended credit terms (120 days)</li>
+          <li>✅ Premium lead quality</li>
+        </ul>
+        <div style="text-align: center;">
+          <a href="${process.env.STRIPE_PAYMENT_LINK_ELITE}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button secondary">Choose Elite</a>
+        </div>
+      </div>
+
+      <div class="alert-box" style="background: #d1fae5; border-left-color: #10b981;">
+        <strong>🎟️ Beta Tester?</strong> If you have a promotional code, enter it during checkout for special pricing!
+      </div>
+
+      <h2 style="color: #1f2937; margin-top: 40px;">Step 3: Add Credit ($500 minimum)</h2>
+      <p>After subscribing, you'll need to add credit to your account to start receiving leads. We require a minimum balance of $500. This credit is used to pay for leads and unused credits are refundable.</p>
+
+      <h2 style="color: #1f2937; margin-top: 40px;">What Happens Next?</h2>
+      <ol style="line-height: 2;">
+        <li>Login to your portal and change your password</li>
+        <li>Choose your subscription tier</li>
+        <li>Add credit to your account ($500 minimum)</li>
+        <li>Start receiving qualified leads!</li>
       </ol>
-      
-      <p style="font-size: 12px; color: #666; margin-top: 30px;">
-        Questions? Contact support@getcontractornow.com
+
+      <p style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e5e7eb;">
+        <strong>Need help?</strong><br>
+        Email: support@getcontractornow.com<br>
+        We're here to help you succeed!
       </p>
     </div>
   </div>
@@ -406,17 +486,36 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
     await sgMail.send({
       to: contractor.email,
       from: process.env.SENDGRID_FROM_EMAIL,
-      subject: "Welcome to GetContractorNow - Your Account is Approved",
+      subject: "Welcome to GetContractorNow - Choose Your Subscription",
       html: emailHtml,
     });
 
-    console.log("Onboarding email sent to:", contractor.email);
+    console.log("✅ Onboarding email sent to:", contractor.email);
+
+    // Log to database
+    await prisma.notificationLog.create({
+      data: {
+        contractorId: contractor.id,
+        type: "email",
+        recipient: contractor.email,
+        subject: "Welcome to GetContractorNow - Choose Your Subscription",
+        body: emailHtml,
+        status: "sent",
+        sentAt: new Date(),
+        metadata: {
+          purpose: "onboarding",
+          includesPaymentLinks: true,
+        },
+      },
+    });
+
     return { success: true };
   } catch (error) {
     console.error("Onboarding email error:", error);
     return { success: false, error: error.message };
   }
 }
+
 async function sendContractorSuspensionEmail(contractor, reason) {
   // Check bounce status first
   if (!(await shouldSendEmail(contractor.email))) {

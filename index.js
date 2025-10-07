@@ -23,12 +23,7 @@ const crypto = require("crypto");
 const { sendContractorOnboardingEmail } = require("./notifications");
 const twilio = require("twilio");
 
-const {
-  hashPassword,
-  comparePassword,
-  generateToken,
-  contractorAuth,
-} = require("./auth");
+const { hashPassword, comparePassword, generateToken } = require("./auth");
 
 const app = express();
 
@@ -216,8 +211,8 @@ app.post("/api/leads/submit", async (req, res) => {
         // Customer Info
         customerFirstName: leadData.first_name,
         customerLastName: leadData.last_name,
-        customerEmail: leadData.email,
-        customerPhone: leadData.phone,
+        customerEmail: leadData.email.toLowerCase().trim(),
+        customerPhone: leadData.phone.replace(/\D/g, ""), // Store digits only
         customerAddress: leadData.address,
         customerCity: leadData.city,
         customerState: leadData.state,
@@ -1032,7 +1027,6 @@ app.get("/api/admin/stats", adminAuth, async (req, res) => {
 // ============================================
 
 // Contractor login
-// Contractor login
 app.post("/api/contractor/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -1076,12 +1070,14 @@ app.post("/api/contractor/login", async (req, res) => {
     res.json({
       success: true,
       token,
-      requirePasswordChange: contractor.requirePasswordChange, // NEW
+      requirePasswordChange: contractor.requirePasswordChange, // ✅ ADDED
       contractor: {
         id: contractor.id,
         businessName: contractor.businessName,
         email: contractor.email,
         phone: contractor.phone,
+        subscriptionTier: contractor.subscriptionTier, // ✅ ADDED
+        subscriptionStatus: contractor.subscriptionStatus, // ✅ ADDED
       },
     });
   } catch (error) {
@@ -2522,13 +2518,32 @@ async function handleSubscriptionCreated(subscription) {
   try {
     const stripeCustomerId = subscription.customer;
 
-    // Find contractor by Stripe customer ID
-    const contractor = await prisma.contractor.findFirst({
-      where: { stripeCustomerId: stripeCustomerId },
+    // Get customer email from Stripe
+    const customer = await stripe.customers.retrieve(stripeCustomerId);
+    const email = customer.email;
+
+    if (!email) {
+      console.error("❌ No email found for Stripe customer:", stripeCustomerId);
+      return;
+    }
+
+    console.log("📧 Looking for contractor with email:", email);
+
+    // Find contractor by email (for new subscriptions) OR by stripeCustomerId (for existing)
+    let contractor = await prisma.contractor.findFirst({
+      where: {
+        OR: [
+          { email: email.toLowerCase() },
+          { stripeCustomerId: stripeCustomerId },
+        ],
+      },
     });
 
     if (!contractor) {
-      console.error("❌ Contractor not found for customer:", stripeCustomerId);
+      console.error("❌ Contractor not found for email:", email);
+      console.error(
+        "   Make sure contractor exists in database with this email before subscribing"
+      );
       return;
     }
 
@@ -2544,23 +2559,28 @@ async function handleSubscriptionCreated(subscription) {
       tier = "elite";
     }
 
-    // Check if beta tester (100% discount)
+    // Check if beta tester (100% discount with EARLYBIRDSGCN)
     const isBeta =
       subscription.discount?.coupon?.id === process.env.STRIPE_PROMO_BETA;
 
-    // Update contractor
+    console.log("✅ Found contractor:", contractor.businessName);
+    console.log("   Tier:", tier);
+    console.log("   Beta tester:", isBeta);
+
+    // Update contractor with subscription info
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
+        stripeCustomerId: stripeCustomerId,
+        stripeSubscriptionId: subscription.id,
         subscriptionStatus: "active",
         subscriptionTier: tier,
-        stripeSubscriptionId: subscription.id,
         subscriptionStartDate: new Date(
           subscription.current_period_start * 1000
         ),
         subscriptionEndDate: new Date(subscription.current_period_end * 1000),
         isBetaTester: isBeta,
-        betaTesterLeadCost: isBeta ? 50.0 : null, // $50 for beta testers
+        betaTesterLeadCost: isBeta ? 50.0 : null,
       },
     });
 
@@ -2570,8 +2590,11 @@ async function handleSubscriptionCreated(subscription) {
       } subscribed to ${tier.toUpperCase()} tier`
     );
     if (isBeta) {
-      console.log("🎟️ Beta tester discount applied");
+      console.log("🎟️ Beta tester discount applied - $50/lead pricing");
     }
+
+    // Send confirmation email (optional - can add later)
+    // await sendSubscriptionConfirmationEmail(contractor, tier, isBeta);
   } catch (error) {
     console.error("Error handling subscription created:", error);
     Sentry.captureException(error);
