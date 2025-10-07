@@ -1304,8 +1304,9 @@ app.post(
           .json({ error: "New password must be at least 8 characters" });
       }
 
+      // ✅ FIXED: Use req.contractor.id instead of req.contractorId
       const contractor = await prisma.contractor.findUnique({
-        where: { id: req.contractorId },
+        where: { id: req.contractor.id },
       });
 
       if (!contractor) {
@@ -1324,10 +1325,10 @@ app.post(
       const newPasswordHash = await hashPassword(newPassword);
 
       await prisma.contractor.update({
-        where: { id: req.contractorId },
+        where: { id: req.contractor.id }, // ✅ FIXED
         data: {
           passwordHash: newPasswordHash,
-          requirePasswordChange: false, // Clear flag after password change
+          requirePasswordChange: false,
         },
       });
 
