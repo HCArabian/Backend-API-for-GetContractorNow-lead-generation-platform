@@ -65,71 +65,7 @@ app.post(
     }
   }
 );
-app.post(
-  "/api/webhooks/stripe/subscription",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    if (!webhookSecret) {
-      console.error(
-        "❌ STRIPE_WEBHOOK_SECRET not set in environment variables!"
-      );
-      return res.status(500).json({ error: "Webhook secret not configured" });
-    }
-
-    let event;
-
-    try {
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-
-      // Verify webhook signature with raw body
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-
-      console.log("✅ Stripe webhook verified:", event.type);
-    } catch (err) {
-      console.error("⚠️ Webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    console.log(`📬 Stripe webhook event: ${event.type}`);
-
-    // Handle the event
-    try {
-      switch (event.type) {
-        case "customer.subscription.created":
-          await handleSubscriptionCreated(event.data.object);
-          break;
-
-        case "customer.subscription.updated":
-          await handleSubscriptionUpdated(event.data.object);
-          break;
-
-        case "customer.subscription.deleted":
-          await handleSubscriptionDeleted(event.data.object);
-          break;
-
-        case "invoice.payment_succeeded":
-          await handleInvoicePaymentSucceeded(event.data.object);
-          break;
-
-        case "invoice.payment_failed":
-          await handleInvoicePaymentFailed(event.data.object);
-          break;
-
-        default:
-          console.log(`ℹ️ Unhandled event type: ${event.type}`);
-      }
-
-      res.json({ received: true });
-    } catch (handlerError) {
-      console.error("❌ Error handling webhook:", handlerError);
-      Sentry.captureException(handlerError);
-      res.status(500).json({ error: "Webhook handler failed" });
-    }
-  }
-);
 
 // ============================================
 // NOW ADD ALL OTHER MIDDLEWARE
