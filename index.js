@@ -22,12 +22,91 @@ const { sendFeedbackRequestEmail } = require("./notifications");
 const crypto = require("crypto");
 const { sendContractorOnboardingEmail } = require("./notifications");
 const twilio = require("twilio");
-
 const { hashPassword, comparePassword, generateToken } = require("./auth");
 
 const app = express();
 
-// Sentry must be initialized before app handlers
+// Trust Railway proxy
+app.set("trust proxy", 1);
+
+const path = require("path");
+
+// ============================================
+// CRITICAL: STRIPE WEBHOOK MUST BE FIRST
+// BEFORE ANY MIDDLEWARE THAT PARSES BODY
+// ============================================
+
+app.post(
+  "/api/webhooks/stripe/subscription",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error(
+        "❌ STRIPE_WEBHOOK_SECRET not set in environment variables!"
+      );
+      return res.status(500).json({ error: "Webhook secret not configured" });
+    }
+
+    let event;
+
+    try {
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+
+      // Verify webhook signature with raw body
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+
+      console.log("✅ Stripe webhook verified:", event.type);
+    } catch (err) {
+      console.error("⚠️ Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`📬 Stripe webhook event: ${event.type}`);
+
+    // Handle the event
+    try {
+      switch (event.type) {
+        case "customer.subscription.created":
+          await handleSubscriptionCreated(event.data.object);
+          break;
+
+        case "customer.subscription.updated":
+          await handleSubscriptionUpdated(event.data.object);
+          break;
+
+        case "customer.subscription.deleted":
+          await handleSubscriptionDeleted(event.data.object);
+          break;
+
+        case "invoice.payment_succeeded":
+          await handleInvoicePaymentSucceeded(event.data.object);
+          break;
+
+        case "invoice.payment_failed":
+          await handleInvoicePaymentFailed(event.data.object);
+          break;
+
+        default:
+          console.log(`ℹ️ Unhandled event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (handlerError) {
+      console.error("❌ Error handling webhook:", handlerError);
+      Sentry.captureException(handlerError);
+      res.status(500).json({ error: "Webhook handler failed" });
+    }
+  }
+);
+
+// ============================================
+// NOW ADD ALL OTHER MIDDLEWARE
+// ============================================
+
+// Sentry breadcrumb tracking
 app.use((req, res, next) => {
   Sentry.addBreadcrumb({
     message: req.url,
@@ -35,30 +114,6 @@ app.use((req, res, next) => {
     level: "info",
   });
   next();
-});
-
-// Trust Railway proxy
-app.set("trust proxy", 1);
-
-const path = require("path");
-
-// Contractor route - serve the same portal
-app.get("/contractor", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
-});
-
-// Root route - serve the contractor portal
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
-});
-
-app.get("/api/debug/check-env", (req, res) => {
-  res.json({
-    hasAdminPassword: !!process.env.ADMIN_PASSWORD,
-    adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
-    hasJwtSecret: !!process.env.JWT_SECRET,
-    jwtSecretLength: process.env.JWT_SECRET?.length || 0,
-  });
 });
 
 // CORS - Allow requests from your Webflow site
@@ -73,106 +128,60 @@ app.use(
   })
 );
 
-// ============================================
-// STRIPE SUBSCRIPTION WEBHOOK
-// ============================================
-
-app.post(
-  "/api/webhooks/stripe/subscription",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-
-    let event;
-
-    try {
-      // ✅ FIXED: Import stripe here
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-      // Verify webhook signature
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error(
-        "⚠️ Stripe webhook signature verification failed:",
-        err.message
-      );
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    console.log(`📬 Stripe webhook received: ${event.type}`);
-
-    // Handle the event
-    switch (event.type) {
-      case "customer.subscription.created":
-        await handleSubscriptionCreated(event.data.object);
-        break;
-
-      case "customer.subscription.updated":
-        await handleSubscriptionUpdated(event.data.object);
-        break;
-
-      case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(event.data.object);
-        break;
-
-      case "invoice.payment_succeeded":
-        await handleInvoicePaymentSucceeded(event.data.object);
-        break;
-
-      case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(event.data.object);
-        break;
-
-      default:
-        console.log(`ℹ️ Unhandled event type: ${event.type}`);
-    }
-
-    res.json({ received: true });
-  }
-);
-
+// Body parsers (AFTER webhook)
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // IMPORTANT: For Twilio webhooks
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ADD STEP 6 CODE RIGHT HERE - AFTER express.json() BUT BEFORE YOUR ROUTES:
+// Sentry request context
 app.use((req, res, next) => {
-  // Add request context to Sentry
   if (req.headers.authorization) {
-    Sentry.setUser({
-      auth: "admin", // Don't log actual passwords
-    });
+    Sentry.setUser({ auth: "admin" });
   }
-
   Sentry.setContext("request", {
     method: req.method,
     url: req.url,
     ip: req.ip,
   });
-
   next();
+});
+
+// ============================================
+// ROUTES
+// ============================================
+
+// Contractor portal routes
+app.get("/contractor", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
+});
+
+app.get("/api/debug/check-env", (req, res) => {
+  res.json({
+    hasAdminPassword: !!process.env.ADMIN_PASSWORD,
+    adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
+    hasJwtSecret: !!process.env.JWT_SECRET,
+    jwtSecretLength: process.env.JWT_SECRET?.length || 0,
+    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
+    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0,
+  });
 });
 
 // Middleware to authenticate contractor requests
 const authenticateContractor = async (req, res, next) => {
   try {
-    // Get token from Authorization header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "No token provided" });
     }
 
-    // Extract token
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Verify token
+    const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Get contractor from database
     const contractor = await prisma.contractor.findUnique({
       where: { id: decoded.contractorId },
     });
@@ -187,7 +196,6 @@ const authenticateContractor = async (req, res, next) => {
         .json({ error: "Contractor account is not active" });
     }
 
-    // Attach contractor to request object
     req.contractor = contractor;
     next();
   } catch (error) {
@@ -205,29 +213,26 @@ const authenticateContractor = async (req, res, next) => {
   }
 };
 
-// Rate limiter for most API endpoints
+// Rate limiters
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: "Too many requests, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 100, // Increased for testing
   message: { error: "Too many login attempts, please try again later." },
 });
 
-// Apply rate limiting ONLY to public-facing endpoints
+// Apply rate limiting
 app.use("/api/leads/", apiLimiter);
 app.use("/api/contractor/login", authLimiter);
 
-// DO NOT apply rate limiting to admin or contractor authenticated routes
-
-// Serve static files from public folder
+// Serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
 // Health check endpoint
@@ -2171,7 +2176,7 @@ app.use((req, res, next) => {
       .json({ error: "API endpoints must use api subdomain" });
   } */
 
-   // Allow API routes on BOTH api and app subdomains
+  // Allow API routes on BOTH api and app subdomains
   if (req.path.startsWith("/api/")) {
     // API calls work on both api. and app. subdomains
     next();
