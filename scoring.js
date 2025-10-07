@@ -577,35 +577,41 @@ async function calculateLeadScore(leadData, prisma) {
   }
 
   // 9. Duplicate check (same email or phone in last 7 days)
-  if (prisma) {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+if (prisma) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const duplicateEmail = await prisma.lead.findFirst({
-      where: {
-        customerEmail: leadData.email,
-        createdAt: { gte: sevenDaysAgo },
-      },
-    });
+  // Normalize email to lowercase for comparison
+  const normalizedEmail = leadData.email.toLowerCase().trim();
+  
+  // Normalize phone to digits only for comparison
+  const normalizedPhone = leadData.phone.replace(/\D/g, '');
 
-    const duplicatePhone = await prisma.lead.findFirst({
-      where: {
-        customerPhone: leadData.phone,
-        createdAt: { gte: sevenDaysAgo },
-      },
-    });
+  const duplicateEmail = await prisma.lead.findFirst({
+    where: {
+      customerEmail: normalizedEmail,  // ✅ Now normalized
+      createdAt: { gte: sevenDaysAgo },
+    },
+  });
 
-    if (duplicateEmail) {
-      validationErrors.push(
-        "You already submitted a request with this email in the last 7 days"
-      );
-    }
+  const duplicatePhone = await prisma.lead.findFirst({
+    where: {
+      customerPhone: normalizedPhone,  // ✅ Now normalized
+      createdAt: { gte: sevenDaysAgo },
+    },
+  });
 
-    if (duplicatePhone && !duplicateEmail) {
-      validationErrors.push(
-        "You already submitted a request with this phone number in the last 7 days"
-      );
-    }
+  if (duplicateEmail) {
+    validationErrors.push(
+      "You already submitted a request with this email in the last 7 days"
+    );
   }
+
+  if (duplicatePhone && !duplicateEmail) {
+    validationErrors.push(
+      "You already submitted a request with this phone number in the last 7 days"
+    );
+  }
+}
 
   // 10. IP address validation (if provided)
   if (leadData.ip_address && prisma) {
