@@ -111,13 +111,11 @@ async function chargeContractorForLead(
     });
     console.error("Payment error:", error);
 
-    // Update billing record with error
-    await prisma.billingRecord.update({
+    // Update billing record with error - use updateMany to avoid errors if record doesn't exist
+    await prisma.billingRecord.updateMany({  // ✅ FIXED: Changed from update to updateMany
       where: {
-        leadId_contractorId: {
-          leadId: leadId,
-          contractorId: contractorId,
-        },
+        leadId: leadId,
+        contractorId: contractorId,
       },
       data: {
         status: "failed",
@@ -165,9 +163,32 @@ async function createSetupIntent(contractorId) {
 // Save payment method after contractor adds it
 async function savePaymentMethod(contractorId, paymentMethodId) {
   try {
+    // Get payment method details from Stripe
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    
+    // Get contractor's Stripe customer ID
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: { stripeCustomerId: true }
+    });
+    
+    // Attach payment method to customer if not already attached
+    if (contractor.stripeCustomerId) {
+      await stripe.paymentMethods.attach(paymentMethodId, {
+        customer: contractor.stripeCustomerId,
+      });
+    }
+    
+    // Save to database with card details
     await prisma.contractor.update({
       where: { id: contractorId },
-      data: { stripePaymentMethodId: paymentMethodId },
+      data: { 
+        stripePaymentMethodId: paymentMethodId,
+        paymentMethodLast4: paymentMethod.card?.last4 || null,  // ✅ ADDED
+        paymentMethodBrand: paymentMethod.card?.brand || null,  // ✅ ADDED
+        paymentMethodExpMonth: paymentMethod.card?.exp_month || null,  // ✅ ADDED
+        paymentMethodExpYear: paymentMethod.card?.exp_year || null,  // ✅ ADDED
+      },
     });
 
     console.log("Payment method saved for contractor:", contractorId);

@@ -84,13 +84,13 @@ model Lead {
 model Contractor {
   id                      String   @id @default(uuid())
   
-  // Existing fields...
+  // Basic Info
   businessName            String
   email                   String   @unique
   phone                   String
-  password                String
+  passwordHash            String   // ✅ FIXED - was "password"
   
-  // NEW VERIFICATION FIELDS
+  // Verification Fields
   licenseNumber           String?
   licenseState            String?
   licenseExpirationDate   DateTime?
@@ -98,42 +98,65 @@ model Contractor {
   businessCity            String?
   businessState           String?
   businessZip             String?
-  taxId                   String?   // EIN or SSN
+  taxId                   String?
   insuranceProvider       String?
   insurancePolicyNumber   String?
   insuranceExpirationDate DateTime?
   yearsInBusiness         Int?
   websiteUrl              String?
-  businessType            String?   // LLC, Sole Proprietor, Corporation
+  businessType            String?
   
-  // STRIPE PAYMENT METHOD INFO
+  // Payment Method Info
   paymentMethodLast4      String?
-  paymentMethodBrand      String?   // Visa, Mastercard, etc
+  paymentMethodBrand      String?
   paymentMethodExpMonth   Int?
   paymentMethodExpYear    Int?
   
-  // VERIFICATION STATUS
+  // Verification Status
   isVerified              Boolean  @default(false)
   verifiedAt              DateTime?
   verificationNotes       String?
   
-  // Existing fields...
+  // Service Coverage
   serviceZipCodes         String[]
   specializations         String[]
+  
+  // Performance Metrics
   avgResponseTime         Int?
   conversionRate          Float?
   customerRating          Float?
   totalJobsCompleted      Int?
   totalLeadsReceived      Int?
+  totalReviews            Int?     // ✅ ADDED - needed by API
+  
+  // Account Status
   status                  String   @default("active")
   isAcceptingLeads        Boolean  @default(true)
   isApproved              Boolean  @default(false)
+  requirePasswordChange   Boolean  @default(false)  // ✅ ADDED - needed by login
+  lastActiveAt            DateTime?                 // ✅ ADDED - needed by login
+  
+  // Subscription
   subscriptionTier        String?
   subscriptionStatus      String?  @default("inactive")
+  subscriptionStartDate   DateTime?
+  subscriptionEndDate     DateTime?
   creditBalance           Float    @default(0.00)
+  isBetaTester            Boolean  @default(false)
+  betaTesterLeadCost      Float?
+  
+  // Stripe
   stripeCustomerId        String?
   stripeSubscriptionId    String?
   stripePaymentMethodId   String?
+  
+  // Account Management
+  emailBounced            Boolean  @default(false)
+  emailBouncedAt          DateTime?
+  emailBounceReason       String?
+  suspensionReason        String?
+  
+  // Timestamps
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   
@@ -152,6 +175,9 @@ model Contractor {
   @@index([status])
   @@index([licenseNumber])
   @@index([isVerified])
+  @@index([subscriptionTier])
+  @@index([subscriptionStatus])
+  @@index([creditBalance])
 }
 
 model LeadAssignment {

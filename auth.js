@@ -38,6 +38,9 @@ function verifyToken(token) {
 // Middleware to protect contractor routes
 async function contractorAuth(req, res, next) {
   try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    
     // Get token from Authorization header or cookie
     const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.contractorToken;
     
@@ -52,11 +55,28 @@ async function contractorAuth(req, res, next) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
     
-    // Attach contractor ID to request
-    req.contractorId = decoded.contractorId;
+    // Get contractor from database
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: decoded.contractorId }
+    });
+    
+    if (!contractor) {
+      return res.status(401).json({ error: 'Contractor not found' });
+    }
+    
+    if (contractor.status !== 'active') {
+      return res.status(403).json({ error: 'Contractor account is not active' });
+    }
+    
+    // Attach contractor to request (matches authenticateContractor behavior)
+    req.contractor = contractor;
+    req.contractorId = contractor.id; // Also set ID for backwards compatibility
+    
+    await prisma.$disconnect();
     next();
     
   } catch (error) {
+    console.error('Auth error:', error);
     return res.status(401).json({ error: 'Authentication failed' });
   }
 }
