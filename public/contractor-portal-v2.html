@@ -1076,15 +1076,6 @@
       }
     }
 
-    // When contractor returns from Stripe Portal, refresh dashboard
-    window.addEventListener('focus', function () {
-      // If user was in portal and comes back, reload dashboard
-      const token = localStorage.getItem('contractorToken');
-      if (token && dashboardData) {
-        loadDashboard();
-      }
-    });
-
     // Render Stats
     function renderStats() {
       const stats = dashboardData.stats;
@@ -1624,6 +1615,15 @@
       window.location.reload();
     }
 
+
+    // When contractor returns from Stripe Portal, refresh dashboard
+    window.addEventListener('focus', function () {
+      // If user was in portal and comes back, reload dashboard
+      const token = localStorage.getItem('contractorToken');
+      if (token && dashboardData) {
+        loadDashboard();
+      }
+    });
     // Initialize
     window.onload = function () {
       const token = localStorage.getItem('contractorToken');
