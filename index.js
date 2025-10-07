@@ -1087,7 +1087,7 @@ app.post("/api/contractor/login", async (req, res) => {
 });
 
 // Get contractor profile
-app.get("/api/contractor/profile", contractorAuth, async (req, res) => {
+app.get("/api/contractor/profile", authenticateContractor, async (req, res) => {
   try {
     const contractor = await prisma.contractor.findUnique({
       where: { id: req.contractorId },
@@ -1132,7 +1132,7 @@ app.get("/api/contractor/profile", contractorAuth, async (req, res) => {
 });
 
 // Get contractor's assigned leads
-app.get("/api/contractor/leads", contractorAuth, async (req, res) => {
+app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
   try {
     const { status } = req.query;
 
@@ -1182,7 +1182,7 @@ app.get("/api/contractor/leads", contractorAuth, async (req, res) => {
 });
 
 // Get contractor's billing history
-app.get("/api/contractor/billing", contractorAuth, async (req, res) => {
+app.get("/api/contractor/billing", authenticateContractor, async (req, res) => {
   try {
     const billingRecords = await prisma.billingRecord.findMany({
       where: {
@@ -1229,7 +1229,7 @@ app.get("/api/contractor/billing", contractorAuth, async (req, res) => {
 // Change contractor password
 app.post(
   "/api/contractor/change-password",
-  contractorAuth,
+  authenticateContractor,
   async (req, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
@@ -1287,7 +1287,7 @@ app.post(
 );
 
 // Submit a dispute
-app.post("/api/contractor/disputes", contractorAuth, async (req, res) => {
+app.post("/api/contractor/disputes", authenticateContractor, async (req, res) => {
   try {
     const { leadId, reason, description, evidence } = req.body;
 
@@ -1349,7 +1349,7 @@ app.post("/api/contractor/disputes", contractorAuth, async (req, res) => {
 });
 
 // Get contractor's disputes
-app.get("/api/contractor/disputes", contractorAuth, async (req, res) => {
+app.get("/api/contractor/disputes", authenticateContractor, async (req, res) => {
   try {
     const disputes = await prisma.dispute.findMany({
       where: {
@@ -1713,7 +1713,7 @@ app.get("/api/admin/feedback", adminAuth, async (req, res) => {
 });
 
 // Get contractor's feedback (for their portal)
-app.get("/api/contractor/feedback", contractorAuth, async (req, res) => {
+app.get("/api/contractor/feedback", authenticateContractor, async (req, res) => {
   try {
     const feedback = await prisma.customerFeedback.findMany({
       where: {
@@ -1852,7 +1852,7 @@ app.post("/api/cron/recycle-numbers", async (req, res) => {
 // Create setup intent for adding payment method
 app.post(
   "/api/contractor/payment/setup-intent",
-  contractorAuth,
+  authenticateContractor,
   async (req, res) => {
     try {
       const setupIntent = await createSetupIntent(req.contractorId);
@@ -1871,7 +1871,7 @@ app.post(
 // Save payment method after contractor adds it
 app.post(
   "/api/contractor/payment/save-method",
-  contractorAuth,
+  authenticateContractor,
   async (req, res) => {
     try {
       const { paymentMethodId } = req.body;
@@ -1890,7 +1890,7 @@ app.post(
 );
 
 // Get contractor payment status
-app.get("/api/contractor/payment/status", contractorAuth, async (req, res) => {
+app.get("/api/contractor/payment/status", authenticateContractor, async (req, res) => {
   try {
     const contractor = await prisma.contractor.findUnique({
       where: { id: req.contractorId },
@@ -2274,7 +2274,7 @@ const {
 // Add credit to contractor account
 app.post(
   "/api/contractors/credit/deposit",
-  contractorAuth,
+  authenticateContractor,
   async (req, res) => {
     try {
       const contractorId = req.contractorId;
@@ -2396,7 +2396,7 @@ app.post(
 );
 
 // Get credit balance and transaction history
-app.get("/api/contractors/credit/balance", contractorAuth, async (req, res) => {
+app.get("/api/contractors/credit/balance", authenticateContractor, async (req, res) => {
   try {
     const contractorId = req.contractorId;
 
