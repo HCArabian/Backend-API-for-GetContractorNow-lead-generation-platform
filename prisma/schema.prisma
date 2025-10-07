@@ -169,6 +169,32 @@ model Contractor {
   feedback                CustomerFeedback[]
   creditTransactions      CreditTransaction[]
   notificationLogs        NotificationLog[]
+
+// LEGAL COMPLIANCE FIELDS
+  // ============================================
+  
+  // Terms of Service
+  acceptedTermsAt       DateTime?
+  termsVersion          String?         @default("1.0")
+  
+  // TCPA Compliance (SMS consent)
+  acceptedTCPAAt        DateTime?
+  tcpaConsentText       String?         @db.Text
+  smsOptedOut           Boolean         @default(false)
+  smsOptOutAt           DateTime?
+  
+  // Privacy Policy
+  privacyPolicyAcceptedAt DateTime?
+  privacyPolicyVersion    String?       @default("1.0")
+  
+  // Application tracking
+  ipAddress             String?
+  userAgent             String?         @db.Text
+  applicationSubmittedAt DateTime?
+  
+  // Data deletion (GDPR/CCPA)
+  deletionRequestedAt   DateTime?
+
   
   @@index([email])
   @@index([phone])
@@ -442,4 +468,15 @@ model CreditTransaction {
   @@index([expiresAt])
   @@index([createdAt])
   @@map("CreditTransaction")
+}
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("admin") // admin, super_admin
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

@@ -87,4 +87,38 @@ Respond within ${responseTime}!`;
   return await sendSMS(contractor.phone, message, lead.id, contractor.id);
 }
 
-module.exports = { sendSMS, notifyContractorSMS };
+// Check if SMS can be sent to contractor (opt-out check)
+async function canSendSMS(contractorId) {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      select: {
+        smsOptedOut: true,
+        phone: true,
+        businessName: true,
+      }
+    });
+
+    if (!contractor) {
+      console.error('❌ Contractor not found:', contractorId);
+      return false;
+    }
+
+    if (contractor.smsOptedOut) {
+      console.log(`⚠️ SMS blocked - contractor opted out: ${contractor.businessName}`);
+      return false;
+    }
+
+    if (!contractor.phone) {
+      console.log(`⚠️ SMS blocked - no phone number: ${contractor.businessName}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error checking SMS opt-out status:', error);
+    return false;
+  }
+}
+
+module.exports = { sendSMS, notifyContractorSMS, canSendSMS };

@@ -3,6 +3,13 @@
 const sgMail = require("@sendgrid/mail");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'team@getcontractornow.com';
+const FROM_NAME = 'GetContractorNow';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@getcontractornow.com';
+const PORTAL_URL = process.env.RAILWAY_URL || 'https://app.getcontractornow.com';
 
 // Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -685,10 +692,842 @@ async function sendContractorReactivationEmail(contractor) {
   }
 }
 
+// ============================================
+// 1. APPLICATION CONFIRMATION EMAIL (to applicant)
+// ============================================
+
+async function sendApplicationConfirmationEmail(contractor) {
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: 'Application Received - GetContractorNow',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; }
+    .footer { background: #f9fafb; padding: 20px; text-align: center; font-size: 14px; color: #6b7280; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+    .highlight { background: #dbeafe; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0; }
+    ul { padding-left: 20px; }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 style="margin: 0;">Application Received! ✅</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">Thank you for applying to GetContractorNow</p>
+    </div>
+    
+    <div class="content">
+      <p>Hi ${contractor.ownerFirstName},</p>
+      
+      <p>Thank you for submitting your contractor application to <strong>GetContractorNow</strong>! We've received your information and are excited to review your application.</p>
+      
+      <div class="highlight">
+        <strong>📋 Application Details:</strong><br>
+        Business: ${contractor.businessName}<br>
+        License: ${contractor.licenseState} #${contractor.licenseNumber}<br>
+        Service Areas: ${contractor.serviceZipCodes.join(', ')}<br>
+        Submitted: ${new Date().toLocaleDateString()}
+      </div>
+      
+      <h3>What Happens Next?</h3>
+      <ul>
+        <li><strong>Review Process:</strong> Our team will review your application within 24-48 hours</li>
+        <li><strong>Verification:</strong> We'll verify your license, insurance, and credentials</li>
+        <li><strong>Approval:</strong> Once approved, you'll receive login credentials and onboarding instructions</li>
+        <li><strong>Start Receiving Leads:</strong> You can begin receiving exclusive leads immediately after approval</li>
+      </ul>
+      
+      <h3>Why GetContractorNow?</h3>
+      <ul>
+        <li>💰 <strong>Exclusive Leads:</strong> No competition - every lead is yours alone</li>
+        <li>⚡ <strong>Real-Time Delivery:</strong> Get leads instantly via SMS and email</li>
+        <li>🎯 <strong>Pre-Qualified Customers:</strong> Only serious homeowners ready to hire</li>
+        <li>📊 <strong>Transparent Pricing:</strong> Pay only for qualified leads you accept</li>
+      </ul>
+      
+      <p style="margin-top: 30px;"><strong>Questions about your application?</strong><br>
+      Contact us at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></p>
+      
+      <p>We look forward to partnering with you!</p>
+      
+      <p>Best regards,<br>
+      <strong>The GetContractorNow Team</strong></p>
+    </div>
+    
+    <div class="footer">
+      <p>GetContractorNow - Premium HVAC Lead Generation<br>
+      <a href="${PORTAL_URL}">getcontractornow.com</a></p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log('✅ Application confirmation email sent to:', contractor.email);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Error sending application confirmation:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 2. ADMIN NEW APPLICATION ALERT
+// ============================================
+
+async function sendAdminNewApplicationAlert(contractor) {
+  try {
+    const msg = {
+      to: ADMIN_EMAIL,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: `🆕 New Contractor Application: ${contractor.businessName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; }
+    .content { background: #f9fafb; padding: 20px; }
+    .info-grid { background: white; padding: 15px; margin: 15px 0; border-radius: 6px; }
+    .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
+    .button.reject { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>🆕 New Contractor Application</h2>
+    </div>
+    
+    <div class="content">
+      <div class="info-grid">
+        <h3>${contractor.businessName}</h3>
+        <p><strong>Owner:</strong> ${contractor.ownerFirstName} ${contractor.ownerLastName}</p>
+        <p><strong>Email:</strong> <a href="mailto:${contractor.email}">${contractor.email}</a></p>
+        <p><strong>Phone:</strong> ${contractor.phone}</p>
+        <p><strong>Location:</strong> ${contractor.businessCity}, ${contractor.businessState} ${contractor.businessZip}</p>
+        <p><strong>License:</strong> ${contractor.licenseState} #${contractor.licenseNumber}</p>
+        <p><strong>Service ZIPs:</strong> ${contractor.serviceZipCodes.join(', ')}</p>
+        <p><strong>Specializations:</strong> ${contractor.specializations.join(', ')}</p>
+        <p><strong>Years in Business:</strong> ${contractor.yearsInBusiness || 'Not provided'}</p>
+        ${contractor.websiteUrl ? `<p><strong>Website:</strong> <a href="${contractor.websiteUrl}">${contractor.websiteUrl}</a></p>` : ''}
+        ${contractor.applicationNotes ? `<p><strong>Notes:</strong> ${contractor.applicationNotes}</p>` : ''}
+        <p><strong>Applied:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+      
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="${PORTAL_URL}/admin" class="button">Review in Admin Dashboard</a>
+      </div>
+      
+      <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
+        <strong>Action Required:</strong> Review this application in the admin dashboard and approve or reject within 24-48 hours.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log('✅ Admin alert sent for new application');
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Error sending admin alert:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 3. APPLICATION REJECTION EMAIL
+// ============================================
+
+async function sendApplicationRejectionEmail(contractor, reason) {
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: 'Application Status Update - GetContractorNow',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #f3f4f6; padding: 30px; text-align: center; }
+    .content { background: white; padding: 30px; }
+    .footer { background: #f9fafb; padding: 20px; text-align: center; font-size: 14px; color: #6b7280; }
+    .reason-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Application Status Update</h2>
+    </div>
+    
+    <div class="content">
+      <p>Hi ${contractor.ownerFirstName},</p>
+      
+      <p>Thank you for your interest in joining GetContractorNow. After reviewing your application for <strong>${contractor.businessName}</strong>, we regret to inform you that we are unable to approve your application at this time.</p>
+      
+      <div class="reason-box">
+        <strong>Reason:</strong><br>
+        ${reason}
+      </div>
+      
+      <p><strong>What You Can Do:</strong></p>
+      <ul>
+        <li>Address the issues mentioned above and reapply in the future</li>
+        <li>Contact us if you believe this decision was made in error</li>
+        <li>Ask questions about our requirements</li>
+      </ul>
+      
+      <p>If you have questions or would like to discuss this decision, please contact us at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a>.</p>
+      
+      <p>Best regards,<br>
+      The GetContractorNow Team</p>
+    </div>
+    
+    <div class="footer">
+      GetContractorNow | <a href="${PORTAL_URL}">getcontractornow.com</a>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log('✅ Rejection email sent to:', contractor.email);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Error sending rejection email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 4. REQUEST MORE INFORMATION EMAIL
+// ============================================
+
+async function sendApplicationInfoRequestEmail(contractor, message, requestedFields) {
+  try {
+    const fieldsList = requestedFields ? `
+      <div style="background: #dbeafe; padding: 15px; margin: 20px 0;">
+        <strong>Information Needed:</strong>
+        <ul>
+          ${requestedFields.map(field => `<li>${field}</li>`).join('')}
+        </ul>
+      </div>
+    ` : '';
+
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: 'Additional Information Needed - GetContractorNow Application',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Additional Information Needed</h2>
+    
+    <p>Hi ${contractor.ownerFirstName},</p>
+    
+    <p>Thank you for submitting your application to GetContractorNow. We're reviewing your application for <strong>${contractor.businessName}</strong> and need some additional information to proceed.</p>
+    
+    <div style="background: #f9fafb; padding: 20px; margin: 20px 0; border-left: 4px solid #2563eb;">
+      ${message}
+    </div>
+    
+    ${fieldsList}
+    
+    <p>Please reply to this email with the requested information, and we'll continue processing your application.</p>
+    
+    <a href="mailto:support@getcontractornow.com" class="button">Reply with Information</a>
+    
+    <p>Thank you for your patience!</p>
+    
+    <p>Best regards,<br>
+    The GetContractorNow Team</p>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log('✅ Info request email sent to:', contractor.email);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Error sending info request:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// LEGAL COMPLIANCE NOTIFICATIONS
+// ============================================
+
+// Deletion Request Alert to Admin
+async function sendDeletionRequestAlert(contractor) {
+  try {
+    const msg = {
+      to: ADMIN_EMAIL,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: `🚨 Data Deletion Request - ${contractor.businessName}`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #ffc107; color: #000; padding: 20px; text-align: center; }
+    .content { background: white; padding: 30px; border: 1px solid #e5e7eb; }
+    .alert-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>⚠️ Data Deletion Request</h2>
+    </div>
+    
+    <div class="content">
+      <div class="alert-box">
+        <strong>A contractor has requested their data be deleted per GDPR/CCPA requirements.</strong>
+      </div>
+      
+      <h3>Contractor Information:</h3>
+      <ul>
+        <li><strong>Business:</strong> ${contractor.businessName}</li>
+        <li><strong>Email:</strong> ${contractor.email}</li>
+        <li><strong>Phone:</strong> ${contractor.phone}</li>
+        <li><strong>Account Created:</strong> ${new Date(contractor.createdAt).toLocaleDateString()}</li>
+        <li><strong>Request Date:</strong> ${new Date().toLocaleDateString()}</li>
+      </ul>
+      
+      <h3>Required Actions:</h3>
+      <ol>
+        <li>Review account for pending leads or disputes</li>
+        <li>Export all data for legal retention (7 years)</li>
+        <li>Cancel Stripe subscriptions</li>
+        <li>Anonymize data after retention period</li>
+        <li>Confirm deletion to contractor within 30 days</li>
+      </ol>
+      
+      <p style="margin-top: 30px;">
+        <strong>⏰ Deadline:</strong> Must complete within 30 days (GDPR/CCPA requirement)
+      </p>
+      
+      <a href="${PORTAL_URL}/admin" style="display: inline-block; padding: 12px 24px; background: #dc2626; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+        Review Account
+      </a>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ Deletion request alert sent to admin for ${contractor.businessName}`);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Deletion request alert error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Deletion Confirmation to Contractor
+async function sendDeletionConfirmation(contractor) {
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: 'Email address bounced' };
+  }
+
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: 'Data Deletion Request Received - GetContractorNow',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+    .content { background: white; padding: 30px; }
+    .info-box { background: #dbeafe; border-left: 4px solid #2563eb; padding: 15px; margin: 20px 0; }
+    .warning-box { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Data Deletion Request Received</h2>
+    </div>
+    
+    <div class="content">
+      <p>Hello ${contractor.businessName},</p>
+      
+      <p>We have received your request to delete your personal data from GetContractorNow. This email confirms that your request is being processed.</p>
+      
+      <div class="info-box">
+        <h3 style="margin-top: 0;">What happens next:</h3>
+        <ol style="margin-bottom: 0;">
+          <li>Your account has been deactivated immediately</li>
+          <li>You will not receive any new leads</li>
+          <li>Your data will be reviewed and processed for deletion</li>
+          <li>You will receive a confirmation email within 30 days</li>
+        </ol>
+      </div>
+      
+      <h3>Important Information:</h3>
+      <ul>
+        <li><strong>Retention Period:</strong> Some data must be retained for legal compliance (typically 7 years)</li>
+        <li><strong>What's Retained:</strong> Transaction records, call recordings, billing history</li>
+        <li><strong>What's Deleted:</strong> Personal information, contact details, account access</li>
+        <li><strong>Anonymization:</strong> After retention period, all remaining data will be anonymized</li>
+      </ul>
+      
+      <div class="warning-box">
+        <strong>⚠️ This action cannot be undone.</strong> If you submitted this request by mistake, please contact us immediately at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a>
+      </div>
+      
+      <p style="margin-top: 30px; font-size: 12px; color: #666;">
+        This request is being processed in accordance with GDPR and CCPA requirements.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ Deletion confirmation sent to ${contractor.email}`);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Deletion confirmation error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// SMS Opt-Out Confirmation Email
+async function sendSMSOptOutConfirmation(contractor) {
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: 'Email address bounced' };
+  }
+
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: 'SMS Notifications Disabled - GetContractorNow',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #6b7280; color: white; padding: 20px; text-align: center; }
+    .content { background: white; padding: 30px; }
+    .warning-box { background: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>SMS Notifications Disabled</h2>
+    </div>
+    
+    <div class="content">
+      <p>Hello ${contractor.businessName},</p>
+      
+      <p>You have successfully opted out of SMS notifications from GetContractorNow.</p>
+      
+      <div class="warning-box">
+        <h3 style="margin-top: 0; color: #991b1b;">⚠️ Important Notice</h3>
+        <p style="color: #7f1d1d; margin-bottom: 0;">
+          <strong>You will no longer receive SMS notifications for new leads.</strong> This may result in delayed responses to lead opportunities. You will still receive email notifications and can view leads in your dashboard.
+        </p>
+      </div>
+      
+      <h3>What This Means:</h3>
+      <ul>
+        <li>✅ You will still receive email notifications</li>
+        <li>✅ You can still view leads in your dashboard</li>
+        <li>❌ You will NOT receive SMS text messages for new leads</li>
+        <li>❌ You will NOT receive SMS alerts for low credit balance</li>
+      </ul>
+      
+      <h3>Want to Re-Enable SMS Notifications?</h3>
+      <p>You can opt back in at any time by:</p>
+      <ol>
+        <li>Replying <strong>START</strong> to any of our SMS messages</li>
+        <li>Updating your preferences in your contractor dashboard</li>
+        <li>Contacting support at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></li>
+      </ol>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${PORTAL_URL}/contractor" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">
+          Go to Dashboard
+        </a>
+      </div>
+      
+      <p style="margin-top: 30px; font-size: 12px; color: #666;">
+        If you didn't request this change, please contact us immediately.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ SMS opt-out confirmation sent to ${contractor.email}`);
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ SMS opt-out confirmation error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// LOW CREDIT WARNING NOTIFICATIONS
+// ============================================
+
+// Low Credit Warning ($100 or $50 threshold)
+async function sendLowCreditWarning(contractor, currentBalance, threshold) {
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: 'Email address bounced' };
+  }
+
+  const isUrgent = threshold <= 50;
+  const urgencyColor = isUrgent ? '#dc2626' : '#f59e0b';
+  const urgencyBg = isUrgent ? '#fee2e2' : '#fef3c7';
+
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: `${isUrgent ? '🚨 URGENT:' : '⚠️'} Low Credit Balance - Add Funds Now`,
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: ${urgencyColor}; color: white; padding: 30px; text-align: center; }
+    .content { background: white; padding: 30px; border: 1px solid #e5e7eb; }
+    .alert-box { background: ${urgencyBg}; border-left: 4px solid ${urgencyColor}; padding: 20px; margin: 20px 0; border-radius: 6px; }
+    .balance-display { font-size: 48px; font-weight: bold; color: ${urgencyColor}; text-align: center; margin: 20px 0; }
+    .button { display: inline-block; padding: 15px 30px; background: ${urgencyColor}; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${isUrgent ? '🚨 URGENT' : '⚠️ Warning'}</h1>
+      <h2>Low Credit Balance</h2>
+    </div>
+    
+    <div class="content">
+      <p>Hello ${contractor.businessName},</p>
+      
+      <div class="alert-box">
+        <strong>${isUrgent ? 'URGENT:' : 'WARNING:'} Your credit balance is running low!</strong>
+      </div>
+      
+      <h3 style="text-align: center; color: #6b7280;">Current Balance:</h3>
+      <div class="balance-display">$${currentBalance.toFixed(2)}</div>
+      
+      ${isUrgent ? `
+      <div style="background: #fee2e2; padding: 20px; border-radius: 6px; margin: 20px 0; text-align: center;">
+        <h3 style="color: #991b1b; margin-top: 0;">⚠️ CRITICAL: Add credit immediately!</h3>
+        <p style="color: #7f1d1d; margin-bottom: 0;">
+          Your balance is critically low. You may miss leads if your balance reaches $0.
+        </p>
+      </div>
+      ` : `
+      <div style="background: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0;">
+        <p style="margin: 0; color: #78350f;">
+          <strong>Action Required:</strong> Add credit soon to ensure you don't miss any leads.
+        </p>
+      </div>
+      `}
+      
+      <h3>What happens if balance reaches $0?</h3>
+      <ul>
+        <li>❌ Your account will be paused automatically</li>
+        <li>❌ You will stop receiving new leads</li>
+        <li>❌ You'll miss out on potential business opportunities</li>
+        <li>✅ Add credit to resume receiving leads immediately</li>
+      </ul>
+      
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${PORTAL_URL}/contractor" class="button">
+          Add Credit Now
+        </a>
+      </div>
+      
+      <h3>Need Help?</h3>
+      <p>Contact us at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></p>
+      
+      <p style="margin-top: 30px; font-size: 12px; color: #6b7280;">
+        This is an automated alert to help you maintain service continuity.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ Low credit warning (${threshold}) sent to ${contractor.email}`);
+
+    // Log notification
+    await prisma.notificationLog.create({
+      data: {
+        contractorId: contractor.id,
+        type: 'email',
+        recipient: contractor.email,
+        subject: msg.subject,
+        status: 'sent',
+        sentAt: new Date(),
+        metadata: {
+          purpose: 'low_credit_warning',
+          threshold: threshold,
+          currentBalance: currentBalance,
+        },
+      },
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Low credit warning email error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Credit Depleted - Account Paused
+async function sendCreditDepletedEmail(contractor) {
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: 'Email address bounced' };
+  }
+
+  try {
+    const msg = {
+      to: contractor.email,
+      from: {
+        email: FROM_EMAIL,
+        name: FROM_NAME
+      },
+      subject: '🚨 URGENT: Credit Balance Depleted - Account Paused',
+      html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 30px; text-align: center; }
+    .content { background: white; padding: 30px; border: 1px solid #e5e7eb; }
+    .alert-box { background: #fee2e2; border: 4px solid #dc2626; padding: 30px; margin: 20px 0; border-radius: 8px; text-align: center; }
+    .button { display: inline-block; padding: 18px 40px; background: #dc2626; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚨 URGENT</h1>
+      <h2>Account Paused</h2>
+    </div>
+    
+    <div class="content">
+      <p>Hello ${contractor.businessName},</p>
+      
+      <div class="alert-box">
+        <h2 style="margin-top: 0; color: #991b1b;">⛔ Your Account Has Been Paused</h2>
+        <p style="font-size: 18px; color: #7f1d1d; margin-bottom: 0;">
+          <strong>Your credit balance has reached $0.00</strong>
+        </p>
+      </div>
+      
+      <h3>Current Status:</h3>
+      <ul style="font-size: 16px;">
+        <li><strong>Balance:</strong> $0.00</li>
+        <li><strong>Status:</strong> ⛔ Paused - Not Receiving Leads</li>
+        <li><strong>Action Required:</strong> Add credit immediately to resume service</li>
+      </ul>
+      
+      <div style="background: #fef3c7; padding: 20px; border-radius: 6px; margin: 30px 0;">
+        <h3 style="margin-top: 0; color: #78350f;">⚠️ Don't Miss Out on Leads!</h3>
+        <p style="color: #78350f; margin-bottom: 0;">
+          Other contractors in your area are receiving exclusive leads right now. 
+          Add credit to your account to resume receiving leads immediately.
+        </p>
+      </div>
+      
+      <div style="text-align: center; margin: 40px 0;">
+        <a href="${PORTAL_URL}/contractor" class="button">
+          Add Credit Now
+        </a>
+      </div>
+      
+      <h3>What You Need to Do:</h3>
+      <ol style="font-size: 16px; line-height: 1.8;">
+        <li>Login to your contractor portal</li>
+        <li>Navigate to "Manage Credits"</li>
+        <li>Add credit to your account (minimum $500 recommended)</li>
+        <li>Your account will be reactivated automatically</li>
+      </ol>
+      
+      <p style="margin-top: 30px;">
+        <strong>Need help?</strong><br>
+        Email: <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a><br>
+        Phone: ${process.env.SUPPORT_PHONE || '(555) 123-4567'}
+      </p>
+      
+      <p style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+        Your account has been automatically paused to prevent unauthorized charges. 
+        Add credit to resume receiving leads.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`✅ Credit depleted email sent to ${contractor.email}`);
+
+    // Log notification
+    await prisma.notificationLog.create({
+      data: {
+        contractorId: contractor.id,
+        type: 'email',
+        recipient: contractor.email,
+        subject: msg.subject,
+        status: 'sent',
+        sentAt: new Date(),
+        metadata: {
+          purpose: 'credit_depleted',
+          accountPaused: true,
+        },
+      },
+    });
+
+    return { success: true };
+
+  } catch (error) {
+    console.error('❌ Credit depleted email error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Send SMS for low credit (optional - only for urgent threshold)
+async function sendLowCreditSMS(contractor, currentBalance) {
+  try {
+    // Check if SMS allowed
+    const { canSendSMS } = require('./sms-notifications');
+    const canSend = await canSendSMS(contractor.id);
+    
+    if (!canSend) {
+      console.log('⚠️ SMS skipped - contractor opted out');
+      return { success: false, reason: 'opted_out' };
+    }
+
+    const { sendSMS } = require('./sms-notifications');
+    const message = `🚨 URGENT: Your GetContractorNow credit balance is critically low ($${currentBalance.toFixed(2)}). Add credit now to avoid missing leads: ${PORTAL_URL}/contractor`;
+
+    return await sendSMS(contractor.phone, message, null, contractor.id);
+
+  } catch (error) {
+    console.error('❌ Low credit SMS error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendNewLeadEmail,
   sendFeedbackRequestEmail,
   sendContractorOnboardingEmail,
   sendContractorSuspensionEmail,
-  sendContractorReactivationEmail, // ADD THIS
+  sendContractorReactivationEmail, 
+  sendApplicationConfirmationEmail,
+  sendAdminNewApplicationAlert,
+  sendApplicationRejectionEmail,
+  sendApplicationInfoRequestEmail,
+  // Legal Compliance
+  sendDeletionRequestAlert,
+  sendDeletionConfirmation,
+  sendSMSOptOutConfirmation,
+  // Low Credit Warnings - NEW
+  sendLowCreditWarning,
+  sendCreditDepletedEmail,
+  sendLowCreditSMS,
 };

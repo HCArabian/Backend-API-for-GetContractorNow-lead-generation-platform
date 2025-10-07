@@ -25,6 +25,7 @@ const twilio = require("twilio");
 const { hashPassword, comparePassword, generateToken } = require("./auth");
 const { handleSubscriptionCreated } = require("./webhook-handler");
 
+
 const app = express();
 
 // Trust Railway proxy
@@ -124,6 +125,10 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
 });
 
+app.get("/contractor-app", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-form.html"));
+});
+
 app.get("/api/debug/check-env", (req, res) => {
   res.json({
     hasAdminPassword: !!process.env.ADMIN_PASSWORD,
@@ -209,6 +214,8 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+
 
 // Lead submission endpoint
 app.post("/api/leads/submit", async (req, res) => {
@@ -604,6 +611,9 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
 
       // DEDUCT FROM CREDIT BALANCE (Database Transaction)
       try {
+        // ✅ Ensure balance doesn't go negative
+        const finalBalance = Math.max(0, newBalance);
+        
         await prisma.$transaction([
           // 1. Create credit transaction record
           prisma.creditTransaction.create({
@@ -612,7 +622,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
               type: "deduction",
               amount: -leadCost,
               balanceBefore: fullContractor.creditBalance,
-              balanceAfter: newBalance,
+              balanceAfter: finalBalance,
               leadId: lead.id,
               description: `Lead charge: ${lead.customerFirstName} ${lead.customerLastName} - ${lead.serviceType}`,
             },
@@ -622,9 +632,9 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
           prisma.contractor.update({
             where: { id: fullContractor.id },
             data: {
-              creditBalance: newBalance,
+              creditBalance: finalBalance, // ✅ Can't go below 0
               // If balance drops below minimum, stop accepting leads
-              isAcceptingLeads: newBalance >= getMinimumCreditBalance(),
+              isAcceptingLeads: finalBalance >= getMinimumCreditBalance(),
             },
           }),
 
@@ -634,11 +644,11 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
               leadId: lead.id,
               contractorId: fullContractor.id,
               amountOwed: leadCost,
-              status: "paid", // Already paid from credit
+              status: "paid",
               dateIncurred: new Date(),
               notes: `Paid from credit balance. Previous: ${formatCurrency(
                 fullContractor.creditBalance
-              )}, New: ${formatCurrency(newBalance)}`,
+              )}, New: ${formatCurrency(finalBalance)}`,
             },
           }),
 
@@ -659,17 +669,51 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
             },
           }),
 
-          // 6. Set tracking number to expire in 48 hours (instead of 7 days)
+          // 6. Set tracking number to expire in 48 hours
           prisma.trackingNumber.updateMany({
             where: {
               leadId: lead.id,
               status: "active",
             },
             data: {
-              expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours from now
+              expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
             },
           }),
         ]);
+
+        // ============================================
+        // LOW CREDIT WARNINGS (after successful deduction)
+        // ============================================
+        
+        const { sendLowCreditWarning, sendCreditDepletedEmail, sendLowCreditSMS } = require('./notifications');
+        
+        // Check thresholds and send warnings
+        const previousBalance = fullContractor.creditBalance;
+        
+        // WARNING: Crossed $100 threshold (going down)
+        if (previousBalance > 100 && finalBalance <= 100) {
+          console.log('⚠️ Credit balance dropped below $100');
+          await sendLowCreditWarning(fullContractor, finalBalance, 100);
+        }
+        
+        // URGENT WARNING: Crossed $50 threshold (going down)
+        if (previousBalance > 50 && finalBalance <= 50) {
+          console.log('🚨 Credit balance dropped below $50 - URGENT');
+          await sendLowCreditWarning(fullContractor, finalBalance, 50);
+          await sendLowCreditSMS(fullContractor, finalBalance);
+        }
+        
+        // CRITICAL: Balance reached $0 or below
+        if (finalBalance <= 0) {
+          console.log('🚨 CRITICAL: Credit depleted - account paused');
+          
+          // ✅ No need to update DB - already done in transaction above
+          // Just send notifications
+          await sendCreditDepletedEmail(fullContractor);
+          await sendLowCreditSMS(fullContractor, 0);
+          
+          console.log(`⛔ Account paused: ${fullContractor.businessName}`);
+        }
 
         console.log(
           `✅ CREDIT DEDUCTED: ${formatCurrency(leadCost)} from ${
@@ -679,9 +723,9 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         console.log(
           `   Previous balance: ${formatCurrency(fullContractor.creditBalance)}`
         );
-        console.log(`   New balance: ${formatCurrency(newBalance)}`);
+        console.log(`   New balance: ${formatCurrency(finalBalance)}`);
 
-        if (newBalance < getMinimumCreditBalance()) {
+        if (finalBalance < getMinimumCreditBalance()) {
           console.log(
             `⚠️ Balance below minimum (${formatCurrency(
               getMinimumCreditBalance()
@@ -753,20 +797,8 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
 // ADMIN API ENDPOINTS
 // ============================================
 
-// Simple auth middleware (we'll improve this later)
-const adminAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const adminPassword = process.env.ADMIN_PASSWORD || "changeme123"; // Set this in Railway variables
-
-  if (authHeader === `Bearer ${adminPassword}`) {
-    next();
-  } else {
-    res.status(401).json({ error: "Unauthorized" });
-  }
-};
-
 // Get all billing records with filters
-app.get("/api/admin/billing", adminAuth, async (req, res) => {
+app.get("/api/admin/billing", newAdminAuth, async (req, res) => {
   try {
     const { status, contractorId, startDate, endDate } = req.query;
 
@@ -842,7 +874,7 @@ app.get("/admin", (req, res) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 // Get single billing record
-app.get("/api/admin/billing/:id", adminAuth, async (req, res) => {
+app.get("/api/admin/billing/:id", newAdminAuth, async (req, res) => {
   try {
     const billingRecord = await prisma.billingRecord.findUnique({
       where: { id: req.params.id },
@@ -864,7 +896,7 @@ app.get("/api/admin/billing/:id", adminAuth, async (req, res) => {
 });
 
 // Update billing record status
-app.patch("/api/admin/billing/:id", adminAuth, async (req, res) => {
+app.patch("/api/admin/billing/:id", newAdminAuth, async (req, res) => {
   try {
     const { status, notes } = req.body;
 
@@ -903,7 +935,7 @@ app.patch("/api/admin/billing/:id", adminAuth, async (req, res) => {
 });
 
 // Get all contractors (for filter dropdown)
-app.get("/api/admin/contractors", adminAuth, async (req, res) => {
+app.get("/api/admin/contractors", newAdminAuth, async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       select: {
@@ -935,7 +967,7 @@ app.get("/api/admin/contractors", adminAuth, async (req, res) => {
 });
 
 // Suspend/revoke contractor access (admin)
-app.post("/api/admin/contractors/:id/suspend", adminAuth, async (req, res) => {
+app.post("/api/admin/contractors/:id/suspend", newAdminAuth, async (req, res) => {
   try {
     const { reason } = req.body;
 
@@ -980,7 +1012,7 @@ app.post("/api/admin/contractors/:id/suspend", adminAuth, async (req, res) => {
 // Reactivate contractor (admin)
 app.post(
   "/api/admin/contractors/:id/reactivate",
-  adminAuth,
+  newAdminAuth,
   async (req, res) => {
     try {
       const contractor = await prisma.contractor.findUnique({
@@ -1019,7 +1051,7 @@ app.post(
 );
 
 // Dashboard stats
-app.get("/api/admin/stats", adminAuth, async (req, res) => {
+app.get("/api/admin/stats", newAdminAuth, async (req, res) => {
   try {
     const [
       totalLeads,
@@ -1439,7 +1471,7 @@ app.get(
 );
 
 // Get all disputes (admin)
-app.get("/api/admin/disputes", adminAuth, async (req, res) => {
+app.get("/api/admin/disputes", newAdminAuth, async (req, res) => {
   try {
     const { status } = req.query;
 
@@ -1504,7 +1536,7 @@ app.get("/api/admin/disputes", adminAuth, async (req, res) => {
 });
 
 // Resolve a dispute (admin)
-app.patch("/api/admin/disputes/:id", adminAuth, async (req, res) => {
+app.patch("/api/admin/disputes/:id", newAdminAuth, async (req, res) => {
   try {
     const { status, resolution, resolutionNotes, creditAmount } = req.body;
 
@@ -1679,7 +1711,7 @@ app.post("/api/feedback/submit", async (req, res) => {
 });
 
 // Get feedback for admin
-app.get("/api/admin/feedback", adminAuth, async (req, res) => {
+app.get("/api/admin/feedback", newAdminAuth, async (req, res) => {
   try {
     const { contractorId, contractorCalled } = req.query;
 
@@ -2089,7 +2121,7 @@ async function logSecurityEvent(type, details) {
 }
 
 // Approve contractor and send onboarding email
-app.post("/api/admin/contractors/:id/approve", adminAuth, async (req, res) => {
+app.post("/api/admin/contractors/:id/approve", newAdminAuth, async (req, res) => {
   try {
     const contractorId = req.params.id;
 
@@ -2268,7 +2300,7 @@ app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
 });
 
 // Get bounced emails (admin)
-app.get("/api/admin/bounced-emails", adminAuth, async (req, res) => {
+app.get("/api/admin/bounced-emails", newAdminAuth, async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       where: { emailBounced: true },
@@ -2697,7 +2729,7 @@ app.use((err, req, res, next) => {
  Add to `index.js`:
 ```javascript
 // Database backup status (admin)
-app.get('/api/admin/backup-status', adminAuth, async (req, res) => {
+app.get('/api/admin/backup-status', newAdminAuth, async (req, res) => {
   try {
     // Get database stats
     const stats = await Promise.all([
@@ -3455,6 +3487,1070 @@ app.post('/api/contractor/payment/portal', authenticateContractor, async (req, r
     Sentry.captureException(error);
     res.status(500).json({ error: 'Failed to create portal session' });
   }
+});
+
+// ============================================
+// CONTRACTOR APPLICATION SYSTEM
+// Add to index.js after line 150 (after other routes)
+// ============================================
+
+// ============================================
+// PUBLIC CONTRACTOR APPLICATION ENDPOINT
+// ============================================
+
+// ============================================
+// 1. UPDATE CONTRACTOR APPLICATION ENDPOINT
+// ============================================
+// Replace your existing POST /api/contractors/apply with this:
+
+app.post('/api/contractors/apply', async (req, res) => {
+  try {
+    const applicationData = req.body;
+
+    // Validation
+    if (!applicationData.businessName || !applicationData.email || !applicationData.phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Business name, email, and phone are required'
+      });
+    }
+
+    // ✅ NEW: TCPA and TOS Validation
+    if (!applicationData.acceptedTerms) {
+      return res.status(400).json({
+        success: false,
+        error: 'You must accept the Terms of Service to continue'
+      });
+    }
+
+    if (!applicationData.acceptedTCPA) {
+      return res.status(400).json({
+        success: false,
+        error: 'You must consent to receive SMS notifications as required by TCPA'
+      });
+    }
+
+    // Check for duplicate email
+    const existingContractor = await prisma.contractor.findUnique({
+      where: { email: applicationData.email.toLowerCase() }
+    });
+
+    if (existingContractor) {
+      return res.status(400).json({
+        success: false,
+        error: 'An application already exists with this email address'
+      });
+    }
+
+    // Create contractor application with compliance fields
+    const contractor = await prisma.contractor.create({
+      data: {
+        businessName: applicationData.businessName,
+        email: applicationData.email.toLowerCase(),
+        phone: applicationData.phone,
+        businessAddress: applicationData.businessAddress || '',
+        businessCity: applicationData.businessCity || '',
+        businessState: applicationData.businessState || '',
+        businessZip: applicationData.businessZip || '',
+        licenseNumber: applicationData.licenseNumber || '',
+        yearsInBusiness: parseInt(applicationData.yearsInBusiness) || 0,
+        serviceTypes: applicationData.serviceTypes || [],
+        serviceZipCodes: applicationData.serviceZipCodes || [],
+        description: applicationData.description || '',
+        website: applicationData.website || '',
+        
+        status: 'pending',
+        applicationSubmittedAt: new Date(),
+        
+        // ✅ NEW: Legal Compliance Fields
+        acceptedTermsAt: new Date(),
+        acceptedTCPAAt: new Date(),
+        tcpaConsentText: 'I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.',
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        smsOptedOut: false,
+        
+        subscriptionTier: 'none',
+        subscriptionStatus: 'pending',
+        creditBalance: 0,
+        isActive: false,
+        isAcceptingLeads: false,
+      }
+    });
+
+    const { sendApplicationConfirmation, sendAdminApplicationAlert } = require('./notifications');
+    await sendApplicationConfirmation(contractor);
+    await sendAdminApplicationAlert(contractor);
+
+    console.log(`✅ New contractor application: ${contractor.businessName}`);
+
+    res.json({
+      success: true,
+      message: 'Application submitted successfully! You will receive a confirmation email shortly.',
+      applicationId: contractor.id
+    });
+
+  } catch (error) {
+    console.error('Contractor application error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to submit application. Please try again.'
+    });
+  }
+});
+
+// ============================================
+// LEGAL COMPLIANCE ENDPOINTS
+// ============================================
+
+// Twilio SMS Opt-Out Handler (STOP/START commands)
+app.post('/api/webhooks/twilio/sms-optout', async (req, res) => {
+  try {
+    const { From: from, Body: body } = req.body;
+    const twilioSignature = req.headers['x-twilio-signature'];
+    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    
+    const isValid = twilio.validateRequest(
+      process.env.TWILIO_AUTH_TOKEN,
+      twilioSignature,
+      url,
+      req.body
+    );
+
+    if (!isValid) {
+      console.error('❌ Invalid Twilio SMS signature');
+      return res.status(403).send('Forbidden');
+    }
+
+    const normalizedPhone = from.replace(/\D/g, '').slice(-10);
+    const message = body.trim().toUpperCase();
+
+    const contractor = await prisma.contractor.findFirst({
+      where: { phone: { endsWith: normalizedPhone } }
+    });
+
+    if (!contractor) {
+      return res.status(200).send('OK');
+    }
+
+    // Handle STOP
+    if (['STOP', 'UNSUBSCRIBE', 'CANCEL', 'QUIT', 'END'].includes(message)) {
+      await prisma.contractor.update({
+        where: { id: contractor.id },
+        data: { smsOptedOut: true, smsOptOutAt: new Date() }
+      });
+
+      console.log(`✅ SMS opt-out: ${contractor.businessName}`);
+
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>You have been unsubscribed from SMS notifications. Reply START to resubscribe.</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    // Handle START
+    if (['START', 'UNSTOP', 'SUBSCRIBE', 'YES'].includes(message)) {
+      await prisma.contractor.update({
+        where: { id: contractor.id },
+        data: { smsOptedOut: false, smsOptOutAt: null, acceptedTCPAAt: new Date() }
+      });
+
+      console.log(`✅ SMS opt-in: ${contractor.businessName}`);
+
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>You have been resubscribed to SMS notifications from GetContractorNow.</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    // Handle HELP
+    if (['HELP', 'INFO'].includes(message)) {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>GetContractorNow: Receive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel. Contact: support@getcontractornow.com</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('❌ SMS webhook error:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// Privacy Policy Acceptance Logging
+app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
+  try {
+    const { contractorId } = req.body;
+
+    if (!contractorId) {
+      return res.status(400).json({ error: 'Contractor ID required' });
+    }
+
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        privacyPolicyAcceptedAt: new Date(),
+        privacyPolicyVersion: '1.0',
+      }
+    });
+
+    console.log(`✅ Privacy policy accepted: ${contractorId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Privacy acceptance error:', error);
+    res.status(500).json({ error: 'Failed to log acceptance' });
+  }
+});
+
+// Data Export (GDPR/CCPA)
+app.get('/api/contractor/data-export', authenticateContractor, async (req, res) => {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractor.id },
+      include: {
+        leadAssignments: { include: { lead: true } },
+        creditTransactions: true,
+        billingRecords: true,
+        callLogs: true,
+      }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Contractor not found' });
+    }
+
+    const exportData = {
+      businessInfo: {
+        businessName: contractor.businessName,
+        email: contractor.email,
+        phone: contractor.phone,
+      },
+      accountInfo: {
+        creditBalance: contractor.creditBalance,
+        subscriptionTier: contractor.subscriptionTier,
+      },
+      legalCompliance: {
+        termsAcceptedAt: contractor.acceptedTermsAt,
+        tcpaAcceptedAt: contractor.acceptedTCPAAt,
+        smsOptedOut: contractor.smsOptedOut,
+      },
+      leads: contractor.leadAssignments.length,
+      transactions: contractor.creditTransactions.length,
+    };
+
+    res.json({ success: true, exportDate: new Date(), data: exportData });
+  } catch (error) {
+    console.error('❌ Data export error:', error);
+    res.status(500).json({ error: 'Failed to export data' });
+  }
+});
+
+// Data Deletion Request (GDPR)
+app.post('/api/contractor/request-deletion', authenticateContractor, async (req, res) => {
+  try {
+    await prisma.contractor.update({
+      where: { id: req.contractor.id },
+      data: {
+        deletionRequestedAt: new Date(),
+        status: 'pending_deletion',
+        isAcceptingLeads: false,
+      }
+    });
+
+    const { sendDeletionRequestAlert } = require('./notifications');
+    await sendDeletionRequestAlert(req.contractor);
+
+    console.log(`✅ Deletion request: ${req.contractor.businessName}`);
+
+    res.json({
+      success: true,
+      message: 'Deletion request received. Account will be reviewed within 30 days.'
+    });
+  } catch (error) {
+    console.error('❌ Deletion request error:', error);
+    res.status(500).json({ error: 'Failed to process deletion request' });
+  }
+});
+
+// Admin Compliance Status
+app.get('/api/admin/compliance/status', newAdminAuth, async (req, res) => {
+  try {
+    const contractors = await prisma.contractor.findMany({
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        acceptedTermsAt: true,
+        acceptedTCPAAt: true,
+        smsOptedOut: true,
+        deletionRequestedAt: true,
+      }
+    });
+
+    const summary = {
+      total: contractors.length,
+      fullyCompliant: contractors.filter(c => c.acceptedTermsAt && c.acceptedTCPAAt).length,
+      smsOptOuts: contractors.filter(c => c.smsOptedOut).length,
+      pendingDeletion: contractors.filter(c => c.deletionRequestedAt).length,
+    };
+
+    res.json({ success: true, summary, contractors });
+  } catch (error) {
+    console.error('❌ Compliance status error:', error);
+    res.status(500).json({ error: 'Failed to fetch compliance status' });
+  }
+});
+
+// ============================================
+// ADMIN APPLICATION MANAGEMENT
+// ============================================
+
+// Get all contractor applications
+app.get('/api/admin/applications', newAdminAuth, async (req, res) => {
+  try {
+    const { status, sortBy } = req.query;
+
+    const where = {};
+    if (status && status !== 'all') {
+      where.status = status;
+    } else if (!status) {
+      // Default: show only pending applications
+      where.status = 'pending';
+    }
+
+    const orderBy = sortBy === 'oldest' ? { createdAt: 'asc' } : { createdAt: 'desc' };
+
+    const applications = await prisma.contractor.findMany({
+      where,
+      orderBy,
+      select: {
+        id: true,
+        businessName: true,
+        ownerFirstName: true,
+        ownerLastName: true,
+        email: true,
+        phone: true,
+        businessCity: true,
+        businessState: true,
+        licenseNumber: true,
+        licenseState: true,
+        serviceZipCodes: true,
+        specializations: true,
+        status: true,
+        isApproved: true,
+        createdAt: true,
+        applicationNotes: true,
+        referralSource: true,
+      }
+    });
+
+    // Count by status
+    const [pending, approved, rejected] = await Promise.all([
+      prisma.contractor.count({ where: { status: 'pending' } }),
+      prisma.contractor.count({ where: { status: 'active', isApproved: true } }),
+      prisma.contractor.count({ where: { status: 'rejected' } }),
+    ]);
+
+    res.json({
+      success: true,
+      applications,
+      counts: {
+        pending,
+        approved,
+        rejected,
+        total: applications.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Get applications error:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
+// Get single application details
+app.get('/api/admin/applications/:id', newAdminAuth, async (req, res) => {
+  try {
+    const application = await prisma.contractor.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    res.json({
+      success: true,
+      application
+    });
+
+  } catch (error) {
+    console.error('Get application error:', error);
+    res.status(500).json({ error: 'Failed to fetch application' });
+  }
+});
+
+// Approve contractor application
+app.post('/api/admin/applications/:id/approve', newAdminAuth, async (req, res) => {
+  try {
+    const { subscriptionTier, initialCredit, notes } = req.body;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    if (contractor.status === 'active' && contractor.isApproved) {
+      return res.status(400).json({ error: 'Contractor already approved' });
+    }
+
+    // Generate temporary password
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+    const passwordHash = await hashPassword(tempPassword);
+
+    // Determine subscription tier (default to 'pro')
+    const tier = subscriptionTier || 'pro';
+    const credit = initialCredit || 0;
+
+    // Update contractor to active status
+    const updatedContractor = await prisma.contractor.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'active',
+        isApproved: true,
+        isVerified: true,
+        isAcceptingLeads: true,
+        passwordHash: passwordHash,
+        requirePasswordChange: true,
+        subscriptionStatus: 'active',
+        subscriptionTier: tier,
+        subscriptionStartDate: new Date(),
+        subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        creditBalance: credit,
+        approvalNotes: notes || null,
+      }
+    });
+
+    // If initial credit given, create transaction
+    if (credit > 0) {
+      await prisma.creditTransaction.create({
+        data: {
+          contractorId: updatedContractor.id,
+          type: 'deposit',
+          amount: credit,
+          balanceBefore: 0,
+          balanceAfter: credit,
+          description: 'Initial credit upon approval',
+        }
+      });
+    }
+
+    // Send onboarding email with credentials
+    await sendContractorOnboardingEmail(updatedContractor, tempPassword);
+
+    console.log('✅ Contractor approved:', updatedContractor.businessName);
+
+    res.json({
+      success: true,
+      message: 'Contractor approved and onboarding email sent',
+      contractor: {
+        id: updatedContractor.id,
+        businessName: updatedContractor.businessName,
+        email: updatedContractor.email,
+        tempPassword: tempPassword // Return for admin reference
+      }
+    });
+
+  } catch (error) {
+    console.error('Approval error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Failed to approve contractor' });
+  }
+});
+
+// Reject contractor application
+app.post('/api/admin/applications/:id/reject', newAdminAuth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ error: 'Rejection reason required' });
+    }
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Update to rejected status
+    await prisma.contractor.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'rejected',
+        isApproved: false,
+        rejectionReason: reason,
+      }
+    });
+
+    // Send rejection email
+    const { sendApplicationRejectionEmail } = require('./notifications');
+    await sendApplicationRejectionEmail(contractor, reason);
+
+    console.log('❌ Contractor rejected:', contractor.businessName);
+
+    res.json({
+      success: true,
+      message: 'Application rejected and notification sent'
+    });
+
+  } catch (error) {
+    console.error('Rejection error:', error);
+    res.status(500).json({ error: 'Failed to reject application' });
+  }
+});
+
+// Request more information from applicant
+app.post('/api/admin/applications/:id/request-info', newAdminAuth, async (req, res) => {
+  try {
+    const { message, requestedFields } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message required' });
+    }
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+
+    // Update status to under_review
+    await prisma.contractor.update({
+      where: { id: req.params.id },
+      data: {
+        status: 'under_review',
+        reviewNotes: message,
+      }
+    });
+
+    // Send email requesting more information
+    const { sendApplicationInfoRequestEmail } = require('./notifications');
+    await sendApplicationInfoRequestEmail(contractor, message, requestedFields);
+
+    console.log('📧 Info requested from:', contractor.businessName);
+
+    res.json({
+      success: true,
+      message: 'Information request sent to applicant'
+    });
+
+  } catch (error) {
+    console.error('Request info error:', error);
+    res.status(500).json({ error: 'Failed to request information' });
+  }
+});
+
+// ============================================
+// 2. TCPA COMPLIANCE - SMS OPT-OUT HANDLER
+// ============================================
+
+app.post('/api/webhooks/twilio/sms', async (req, res) => {
+  try {
+    const { From: from, Body: body } = req.body;
+
+    // Verify Twilio signature for security
+    const twilioSignature = req.headers['x-twilio-signature'];
+    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const twilio = require('twilio');
+    
+    const isValid = twilio.validateRequest(
+      process.env.TWILIO_AUTH_TOKEN,
+      twilioSignature,
+      url,
+      req.body
+    );
+
+    if (!isValid) {
+      console.error('❌ Invalid Twilio SMS signature');
+      return res.status(403).send('Forbidden');
+    }
+
+    // Normalize phone number
+    const normalizedPhone = from.replace(/\D/g, '').slice(-10);
+    const message = body.trim().toUpperCase();
+
+    // Find contractor by phone
+    const contractor = await prisma.contractor.findFirst({
+      where: {
+        phone: {
+          endsWith: normalizedPhone
+        }
+      }
+    });
+
+    if (!contractor) {
+      console.log('📱 SMS from unknown number:', from);
+      return res.status(200).send('OK');
+    }
+
+    // ✅ Handle STOP command (TCPA requirement)
+    if (message === 'STOP' || message === 'UNSUBSCRIBE' || message === 'CANCEL' || message === 'QUIT' || message === 'END') {
+      await prisma.contractor.update({
+        where: { id: contractor.id },
+        data: {
+          smsOptedOut: true,
+          smsOptOutAt: new Date(),
+        }
+      });
+
+      console.log(`✅ SMS opt-out processed for ${contractor.businessName}`);
+
+      // Send confirmation (Twilio requires this)
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>You have been unsubscribed from SMS notifications. You will no longer receive text messages from GetContractorNow. Reply START to resubscribe.</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    // ✅ Handle START command (re-opt-in)
+    if (message === 'START' || message === 'UNSTOP' || message === 'SUBSCRIBE' || message === 'YES') {
+      await prisma.contractor.update({
+        where: { id: contractor.id },
+        data: {
+          smsOptedOut: false,
+          smsOptOutAt: null,
+          acceptedTCPAAt: new Date(), // Refresh consent timestamp
+        }
+      });
+
+      console.log(`✅ SMS opt-in processed for ${contractor.businessName}`);
+
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>You have been resubscribed to SMS notifications from GetContractorNow. Reply STOP to unsubscribe.</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    // ✅ Handle HELP command (TCPA requirement)
+    if (message === 'HELP' || message === 'INFO') {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>GetContractorNow: Receive exclusive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel, HELP for help. Contact: support@getcontractornow.com</Message>
+</Response>`;
+      
+      return res.type('text/xml').send(twiml);
+    }
+
+    // For any other message, just acknowledge
+    console.log(`📱 SMS received from ${contractor.businessName}: ${body}`);
+    res.status(200).send('OK');
+
+  } catch (error) {
+    console.error('❌ SMS webhook error:', error);
+    res.status(500).send('Error');
+  }
+});
+
+// ============================================
+// 3. PRIVACY POLICY ACCEPTANCE LOGGING
+// ============================================
+
+app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
+  try {
+    const { contractorId } = req.body;
+
+    if (!contractorId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Contractor ID is required'
+      });
+    }
+
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        privacyPolicyAcceptedAt: new Date(),
+        privacyPolicyVersion: '1.0', // Update this when you update privacy policy
+      }
+    });
+
+    console.log(`✅ Privacy policy accepted by contractor: ${contractorId}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Privacy acceptance error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to log acceptance'
+    });
+  }
+});
+
+// ============================================
+// 4. DATA PRIVACY - CONTRACTOR DATA EXPORT (GDPR/CCPA)
+// ============================================
+
+app.get('/api/contractor/data-export', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+      include: {
+        leadAssignments: {
+          include: {
+            lead: true
+          }
+        },
+        creditTransactions: true,
+        billingRecords: true,
+        callLogs: true,
+      }
+    });
+
+    if (!contractor) {
+      return res.status(404).json({
+        success: false,
+        error: 'Contractor not found'
+      });
+    }
+
+    // Remove sensitive fields and format data
+    const exportData = {
+      businessInformation: {
+        businessName: contractor.businessName,
+        email: contractor.email,
+        phone: contractor.phone,
+        address: `${contractor.businessAddress}, ${contractor.businessCity}, ${contractor.businessState} ${contractor.businessZip}`,
+        licenseNumber: contractor.licenseNumber,
+        serviceZipCodes: contractor.serviceZipCodes,
+        yearsInBusiness: contractor.yearsInBusiness,
+        serviceTypes: contractor.serviceTypes,
+        website: contractor.website,
+        description: contractor.description,
+      },
+      accountInformation: {
+        accountCreated: contractor.createdAt,
+        accountStatus: contractor.status,
+        subscriptionTier: contractor.subscriptionTier,
+        subscriptionStatus: contractor.subscriptionStatus,
+        creditBalance: contractor.creditBalance,
+        isActive: contractor.isActive,
+        isAcceptingLeads: contractor.isAcceptingLeads,
+      },
+      legalCompliance: {
+        termsAcceptedAt: contractor.acceptedTermsAt,
+        tcpaAcceptedAt: contractor.acceptedTCPAAt,
+        privacyPolicyAcceptedAt: contractor.privacyPolicyAcceptedAt,
+        privacyPolicyVersion: contractor.privacyPolicyVersion,
+        smsOptedOut: contractor.smsOptedOut,
+        smsOptOutAt: contractor.smsOptOutAt,
+      },
+      leadHistory: contractor.leadAssignments.map(assignment => ({
+        assignedAt: assignment.assignedAt,
+        status: assignment.status,
+        leadType: assignment.lead?.serviceType,
+        cost: assignment.cost,
+        customerLocation: `${assignment.lead?.customerCity}, ${assignment.lead?.customerState}`,
+      })),
+      transactionHistory: contractor.creditTransactions.map(txn => ({
+        date: txn.createdAt,
+        type: txn.type,
+        amount: txn.amount,
+        description: txn.description,
+        balanceAfter: txn.balanceAfter,
+      })),
+      billingHistory: contractor.billingRecords.map(bill => ({
+        date: bill.createdAt,
+        amount: bill.amount,
+        status: bill.status,
+        type: bill.type,
+      })),
+      callHistory: contractor.callLogs.map(call => ({
+        date: call.createdAt,
+        duration: call.duration,
+        status: call.status,
+        recordingUrl: call.recordingUrl ? 'Available' : 'Not available',
+      })),
+    };
+
+    console.log(`✅ Data export generated for contractor: ${contractor.businessName}`);
+
+    res.json({
+      success: true,
+      exportDate: new Date().toISOString(),
+      data: exportData
+    });
+
+  } catch (error) {
+    console.error('❌ Data export error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export data'
+    });
+  }
+});
+
+// ============================================
+// 5. DATA DELETION REQUEST (GDPR Right to be Forgotten)
+// ============================================
+
+app.post('/api/contractor/request-deletion', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+    const contractor = req.contractor;
+
+    // Mark for deletion (don't delete immediately - need to preserve for legal/financial)
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        deletionRequestedAt: new Date(),
+        status: 'pending_deletion',
+        isAcceptingLeads: false,
+        isActive: false,
+      }
+    });
+
+    // Send email to admin for manual review
+    const { sendDeletionRequestAlert } = require('./notifications');
+    await sendDeletionRequestAlert(contractor);
+
+    console.log(`✅ Deletion request received from: ${contractor.businessName}`);
+
+    res.json({
+      success: true,
+      message: 'Deletion request received. Your account will be reviewed and deleted within 30 days as required by law. You will receive a confirmation email.'
+    });
+
+  } catch (error) {
+    console.error('❌ Deletion request error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process deletion request'
+    });
+  }
+});
+
+// ============================================
+// 6. CHECK SMS OPT-OUT STATUS BEFORE SENDING
+// ============================================
+// Add this helper function to use before sending any SMS
+
+async function canSendSMS(contractorId) {
+  const contractor = await prisma.contractor.findUnique({
+    where: { id: contractorId },
+    select: {
+      smsOptedOut: true,
+      phone: true,
+      businessName: true,
+    }
+  });
+
+  if (!contractor) {
+    console.error('❌ Contractor not found:', contractorId);
+    return false;
+  }
+
+  if (contractor.smsOptedOut) {
+    console.log(`⚠️ SMS blocked - contractor opted out: ${contractor.businessName}`);
+    return false;
+  }
+
+  if (!contractor.phone) {
+    console.log(`⚠️ SMS blocked - no phone number: ${contractor.businessName}`);
+    return false;
+  }
+
+  return true;
+}
+
+// ============================================
+// 8. ADMIN ENDPOINT TO VIEW COMPLIANCE STATUS
+// ============================================
+
+app.get('/api/admin/compliance/status', authenticateAdmin, async (req, res) => {
+  try {
+    const contractors = await prisma.contractor.findMany({
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        acceptedTermsAt: true,
+        acceptedTCPAAt: true,
+        privacyPolicyAcceptedAt: true,
+        smsOptedOut: true,
+        smsOptOutAt: true,
+        deletionRequestedAt: true,
+        status: true,
+      }
+    });
+
+    const summary = {
+      totalContractors: contractors.length,
+      fullyCompliant: contractors.filter(c => 
+        c.acceptedTermsAt && c.acceptedTCPAAt && c.privacyPolicyAcceptedAt
+      ).length,
+      smsOptOuts: contractors.filter(c => c.smsOptedOut).length,
+      pendingDeletion: contractors.filter(c => c.deletionRequestedAt).length,
+      missingConsent: contractors.filter(c => 
+        !c.acceptedTermsAt || !c.acceptedTCPAAt
+      ).length,
+    };
+
+    res.json({
+      success: true,
+      summary,
+      contractors
+    });
+
+  } catch (error) {
+    console.error('❌ Compliance status error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch compliance status'
+    });
+  }
+});
+
+// ============================================
+// ADMIN AUTHENTICATION ENDPOINTS
+// ============================================
+
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  comparePassword,
+  authenticateAdmin: newAdminAuth
+} = require('./admin-auth');
+
+// Admin login
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    // Find admin
+    const admin = await prisma.admin.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
+    if (!admin) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (!admin.isActive) {
+      return res.status(401).json({ error: 'Admin account is inactive' });
+    }
+
+    // Verify password
+    const isValid = await comparePassword(password, admin.passwordHash);
+
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Generate tokens
+    const accessToken = generateAccessToken(admin.id, admin.email, admin.role);
+    const refreshToken = generateRefreshToken(admin.id);
+
+    // Update last login
+    await prisma.admin.update({
+      where: { id: admin.id },
+      data: { lastLoginAt: new Date() }
+    });
+
+    console.log('✅ Admin logged in:', admin.email);
+
+    res.json({
+      success: true,
+      accessToken,
+      refreshToken,
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role
+      }
+    });
+
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Refresh access token
+app.post('/api/admin/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+
+    if (!decoded) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+
+    // Verify admin still exists
+    const admin = await prisma.admin.findUnique({
+      where: { id: decoded.adminId }
+    });
+
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({ error: 'Admin not found or inactive' });
+    }
+
+    // Generate new access token
+    const accessToken = generateAccessToken(admin.id, admin.email, admin.role);
+
+    res.json({
+      success: true,
+      accessToken
+    });
+
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
+  }
+});
+
+// Admin logout (optional - client-side can just delete tokens)
+app.post('/api/admin/logout', newAdminAuth, async (req, res) => {
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// Get current admin info
+app.get('/api/admin/me', newAdminAuth, async (req, res) => {
+  res.json({
+    success: true,
+    admin: req.admin
+  });
 });
 
 const PORT = process.env.PORT || 3000;

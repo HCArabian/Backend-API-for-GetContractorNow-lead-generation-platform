@@ -8,6 +8,14 @@ async function handleSubscriptionCreated(subscription) {
     const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
     const stripeCustomerId = subscription.customer;
     
+    // ✅ FIX: Get dates from subscription items (they're not on the subscription object itself)
+    const subscriptionItem = subscription.items.data[0];
+    const periodStart = subscriptionItem.current_period_start;
+    const periodEnd = subscriptionItem.current_period_end;
+    
+    console.log("📅 DEBUG - Period start:", periodStart);
+    console.log("📅 DEBUG - Period end:", periodEnd);
+    
     // Get customer email from Stripe
     const customer = await stripe.customers.retrieve(stripeCustomerId);
     const email = customer.email;
@@ -80,7 +88,7 @@ async function handleSubscriptionCreated(subscription) {
     console.log("   Tier:", tier);
     console.log("   Beta tester:", isBeta);
 
-    // Update contractor
+    // ✅ FIX: Use the dates from subscription items
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
@@ -88,8 +96,8 @@ async function handleSubscriptionCreated(subscription) {
         stripeSubscriptionId: subscription.id,
         subscriptionStatus: "active",
         subscriptionTier: tier,
-        subscriptionStartDate: new Date(subscription.current_period_start * 1000),
-        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+        subscriptionStartDate: new Date(periodStart * 1000),
+        subscriptionEndDate: new Date(periodEnd * 1000),
         isBetaTester: isBeta,
         betaTesterLeadCost: isBeta ? 50.0 : null,
         ...paymentMethodDetails,

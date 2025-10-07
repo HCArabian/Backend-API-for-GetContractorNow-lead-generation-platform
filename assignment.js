@@ -1,7 +1,8 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { sendNewLeadEmail } = require("./notifications");
-const { notifyContractorSMS } = require("./sms-notifications");
+const { notifyContractorSMS, canSendSMS } = require("./sms-notifications");
+const { canContractorReceiveLeads } = require("./subscription-helpers");
 
 async function assignContractor(lead) {
   try {
@@ -15,7 +16,7 @@ async function assignContractor(lead) {
 
     // Find eligible contractors
     console.log("🔎 Searching for eligible contractors...");
-    // Find eligible contractors
+
     const contractors = await prisma.contractor.findMany({
       where: {
         status: "active",
@@ -34,15 +35,54 @@ async function assignContractor(lead) {
       },
     });
 
-    console.log(`📊 Found ${contractors.length} eligible contractors`);
+    console.log(`📊 Found ${contractors.length} potential contractors`);
 
     if (contractors.length === 0) {
-      console.log("❌ No eligible contractors found");
+      console.log("❌ No contractors found matching service area and type");
       return null;
     }
 
-    const selectedContractor = contractors[0];
-    console.log("✅ Selected contractor:", selectedContractor.businessName);
+    // ============================================
+    // ✅ ENHANCED: Validate EACH contractor meets ALL requirements
+    // ============================================
+
+    let selectedContractor = null;
+
+    for (const contractor of contractors) {
+      const eligibility = await canContractorReceiveLeads(contractor);
+
+      console.log(
+        `🔍 Checking ${contractor.businessName}:`,
+        eligibility.reason
+      );
+
+      if (eligibility.canReceive) {
+        selectedContractor = contractor;
+        console.log("✅ Selected contractor:", contractor.businessName);
+        break; // Found eligible contractor
+      } else {
+        console.log(
+          `❌ ${contractor.businessName} not eligible: ${eligibility.reason}`
+        );
+      }
+    }
+
+    // If no contractor passed all checks
+    if (!selectedContractor) {
+      console.log("❌ No eligible contractors found after validation");
+      console.log(
+        "   All contractors failed payment method or credit requirements"
+      );
+      // Log selected contractor details for debugging
+      console.log("📋 Selected contractor details:", {
+        name: selectedContractor.businessName,
+        hasPaymentMethod: !!selectedContractor.stripePaymentMethodId,
+        creditBalance: selectedContractor.creditBalance,
+        subscriptionStatus: selectedContractor.subscriptionStatus,
+        subscriptionTier: selectedContractor.subscriptionTier,
+      });
+      return null;
+    }
 
     // Calculate response deadline (24 hours for PLATINUM/GOLD, 48 for others)
     const responseDeadline = new Date();
@@ -110,21 +150,36 @@ async function assignContractor(lead) {
       trackingNumber &&
       (lead.category === "PLATINUM" || lead.category === "GOLD")
     ) {
-      console.log("📱 Sending SMS notification for", lead.category, "lead...");
-      const smsResult = await notifyContractorSMS(
-        selectedContractor,
-        lead,
-        trackingNumber
-      );
+      console.log("📱 Checking SMS eligibility for", lead.category, "lead...");
 
-      if (smsResult && smsResult.success) {
-        console.log("✅ SMS notification sent");
-      } else {
-        console.log(
-          "⚠️ SMS notification failed:",
-          smsResult?.error || "Unknown error"
+      // ✅ NEW: Check if contractor has SMS enabled (not opted out)
+      const canSendSMSToContractor = await canSendSMS(selectedContractor.id);
+
+      if (canSendSMSToContractor) {
+        console.log("📱 Sending SMS notification...");
+        const smsResult = await notifyContractorSMS(
+          selectedContractor,
+          lead,
+          trackingNumber
         );
+
+        if (smsResult && smsResult.success) {
+          console.log("✅ SMS notification sent");
+        } else {
+          console.log(
+            "⚠️ SMS notification failed:",
+            smsResult?.error || "Unknown error"
+          );
+        }
+      } else {
+        console.log("⚠️ SMS skipped - contractor opted out or no phone number");
       }
+    } else {
+      console.log(
+        "ℹ️ SMS skipped - lead category is",
+        lead.category,
+        "or no tracking number"
+      );
     }
 
     console.log("🎉 Assignment complete!");

@@ -130,11 +130,83 @@ function formatCurrency(amount) {
   return `$${amount.toFixed(2)}`;
 }
 
+// ============================================
+// PAYMENT METHOD ENFORCEMENT
+// ============================================
+
+/**
+ * Check if contractor meets ALL requirements to receive leads
+ * Returns { canReceive: boolean, reason: string }
+ */
+async function canContractorReceiveLeads(contractor) {
+  // 1. Check account status
+  if (contractor.status !== 'active') {
+    return {
+      canReceive: false,
+      reason: `Account status is ${contractor.status}, not active`
+    };
+  }
+
+  // 2. Check if verified
+  if (!contractor.isVerified) {
+    return {
+      canReceive: false,
+      reason: 'Account is not verified'
+    };
+  }
+
+  // 3. Check if accepting leads
+  if (!contractor.isAcceptingLeads) {
+    return {
+      canReceive: false,
+      reason: 'Contractor has disabled lead acceptance'
+    };
+  }
+
+  // 4. Check subscription status
+  if (contractor.subscriptionStatus !== 'active' && !contractor.isBetaTester) {
+    return {
+      canReceive: false,
+      reason: `Subscription status is ${contractor.subscriptionStatus}, not active`
+    };
+  }
+
+  // 5. ✅ CRITICAL: Check payment method exists
+  if (!contractor.stripePaymentMethodId && !contractor.isBetaTester) {
+    return {
+      canReceive: false,
+      reason: 'No payment method on file - must add card before receiving leads'
+    };
+  }
+
+  // 6. Check Stripe customer exists
+  if (!contractor.stripeCustomerId && !contractor.isBetaTester) {
+    return {
+      canReceive: false,
+      reason: 'No Stripe customer ID - payment setup incomplete'
+    };
+  }
+
+  // 7. Check credit balance meets minimum
+  const minimumBalance = getMinimumCreditBalance();
+  if (contractor.creditBalance < minimumBalance) {
+    return {
+      canReceive: false,
+      reason: `Insufficient credit balance ($${contractor.creditBalance.toFixed(2)}) - minimum required: $${minimumBalance.toFixed(2)}`
+    };
+  }
+
+  // 8. All checks passed!
+  return {
+    canReceive: true,
+    reason: 'All requirements met'
+  };
+}
+
 module.exports = {
   getLeadCostForContractor,
-  getLeadCapForTier,
-  canContractorReceiveLeads,
   getMinimumCreditBalance,
   getCreditExpiryDate,
-  formatCurrency
+  formatCurrency,
+  canContractorReceiveLeads, // ✅ NEW
 };
