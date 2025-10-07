@@ -4395,7 +4395,7 @@ async function canSendSMS(contractorId) {
 // 8. ADMIN ENDPOINT TO VIEW COMPLIANCE STATUS
 // ============================================
 
-app.get('/api/admin/compliance/status', authenticateAdmin, async (req, res) => {
+app.get('/api/admin/compliance/status', newAdminAuth , async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       select: {
