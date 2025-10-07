@@ -4,7 +4,6 @@ const sgMail = require("@sendgrid/mail");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const sgMail = require('@sendgrid/mail');
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'team@getcontractornow.com';
 const FROM_NAME = 'GetContractorNow';
