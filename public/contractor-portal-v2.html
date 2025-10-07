@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,7 +23,7 @@
       background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
       color: white;
       padding: 1rem 1.5rem;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -55,8 +56,8 @@
     }
 
     .logout-btn {
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       color: white;
       padding: 0.5rem 1rem;
       border-radius: 6px;
@@ -65,7 +66,7 @@
     }
 
     .logout-btn:hover {
-      background: rgba(255,255,255,0.3);
+      background: rgba(255, 255, 255, 0.3);
     }
 
     /* Container */
@@ -88,7 +89,7 @@
       background: white;
       padding: 2.5rem;
       border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
       width: 100%;
       max-width: 400px;
     }
@@ -122,7 +123,8 @@
       font-weight: 500;
     }
 
-    .form-group input, .form-group select {
+    .form-group input,
+    .form-group select {
       width: 100%;
       padding: 0.75rem;
       border: 2px solid #e5e7eb;
@@ -130,7 +132,8 @@
       font-size: 1rem;
     }
 
-    .form-group input:focus, .form-group select:focus {
+    .form-group input:focus,
+    .form-group select:focus {
       outline: none;
       border-color: #2563eb;
     }
@@ -216,7 +219,7 @@
       background: white;
       border-radius: 12px;
       padding: 1.5rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       margin-bottom: 1.5rem;
     }
 
@@ -266,8 +269,8 @@
       flex: 1;
       min-width: 120px;
       padding: 0.875rem;
-      background: rgba(255,255,255,0.2);
-      border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid rgba(255, 255, 255, 0.3);
       color: white;
       border-radius: 8px;
       font-weight: 600;
@@ -276,7 +279,7 @@
     }
 
     .credit-btn:hover {
-      background: rgba(255,255,255,0.3);
+      background: rgba(255, 255, 255, 0.3);
       transform: translateY(-2px);
     }
 
@@ -304,7 +307,7 @@
 
     .plan-card:hover {
       transform: translateY(-4px);
-      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
     }
 
     .plan-name {
@@ -497,7 +500,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0, 0, 0, 0.7);
       align-items: center;
       justify-content: center;
       z-index: 1000;
@@ -614,8 +617,13 @@
     }
 
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
 
     /* Responsive */
@@ -658,26 +666,28 @@
     }
   </style>
 </head>
+
 <body>
 
   <!-- Login Screen -->
   <div id="loginScreen" class="login-container">
     <div class="login-card">
-      <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo" class="login-logo">
+      <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo"
+        class="login-logo">
       <h1>Contractor Portal</h1>
       <p>Sign in to manage your leads and account</p>
-      
+
       <form id="loginForm" onsubmit="login(event)">
         <div class="form-group">
           <label for="email">Email</label>
           <input type="email" id="email" required>
         </div>
-        
+
         <div class="form-group">
           <label for="password">Password</label>
           <input type="password" id="password" required>
         </div>
-        
+
         <button type="submit" class="btn-primary">Sign In</button>
       </form>
 
@@ -689,7 +699,8 @@
   <div id="dashboardScreen" class="dashboard">
     <div class="header">
       <div class="logo">
-        <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo" class="logo-img">
+        <img src="/images/getcontractornow-high-resolution-logo-transparent (1) (2).png" alt="GetContractorNow Logo"
+          class="logo-img">
         <span class="logo-text">GetContractorNow</span>
       </div>
       <div class="user-menu">
@@ -753,24 +764,25 @@
   <div id="passwordModal" class="modal-overlay">
     <div class="modal-content">
       <h2>Change Your Password</h2>
-      <p style="color: #6b7280; margin-bottom: 1.5rem;">For security, you must change your temporary password before continuing.</p>
-      
+      <p style="color: #6b7280; margin-bottom: 1.5rem;">For security, you must change your temporary password before
+        continuing.</p>
+
       <form id="passwordForm" onsubmit="changePassword(event)">
         <div class="form-group">
           <label for="currentPassword">Current Password</label>
           <input type="password" id="currentPassword" required>
         </div>
-        
+
         <div class="form-group">
           <label for="newPassword">New Password (min 8 characters)</label>
           <input type="password" id="newPassword" minlength="8" required>
         </div>
-        
+
         <div class="form-group">
           <label for="confirmPassword">Confirm New Password</label>
           <input type="password" id="confirmPassword" minlength="8" required>
         </div>
-        
+
         <button type="submit" class="btn-primary">Change Password</button>
       </form>
 
@@ -798,8 +810,9 @@
   <div id="cancelModal" class="modal-overlay">
     <div class="modal-content">
       <h2>Cancel Subscription</h2>
-      <p style="color: #6b7280; margin-bottom: 1rem;">We're sorry to see you go. Your subscription will remain active until the end of your billing period.</p>
-      
+      <p style="color: #6b7280; margin-bottom: 1rem;">We're sorry to see you go. Your subscription will remain active
+        until the end of your billing period.</p>
+
       <div class="form-group">
         <label for="cancelReason">Why are you cancelling? (optional)</label>
         <select id="cancelReason">
@@ -831,10 +844,10 @@
     // Login
     async function login(event) {
       event.preventDefault();
-      
+
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      
+
       try {
         const response = await fetch(`${API_URL}/api/contractor/login`, {
           method: 'POST',
@@ -846,7 +859,7 @@
 
         if (data.success) {
           localStorage.setItem('contractorToken', data.token);
-          
+
           if (data.requirePasswordChange) {
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('passwordModal').classList.add('active');
@@ -870,11 +883,11 @@
     // Change Password
     async function changePassword(event) {
       event.preventDefault();
-      
+
       const currentPassword = document.getElementById('currentPassword').value;
       const newPassword = document.getElementById('newPassword').value;
       const confirmPassword = document.getElementById('confirmPassword').value;
-      
+
       if (newPassword !== confirmPassword) {
         showPasswordError('New passwords do not match');
         return;
@@ -923,9 +936,9 @@
 
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('dashboardScreen').style.display = 'block';
-        
+
         document.getElementById('userName').textContent = data.contractor.businessName;
-        
+
         renderCreditBalance();
         renderSubscription();
         renderPaymentMethod();
@@ -995,41 +1008,88 @@
       document.getElementById('subscriptionCard').innerHTML = html;
     }
 
-    // Render Payment Method
+    // Replace the renderPaymentMethod() function with this simpler version:
     function renderPaymentMethod() {
       const pm = dashboardData.subscription.paymentMethod;
 
       let html = '';
       if (pm) {
         html = `
-          <div class="payment-method-card">
-            <h3>💳 Payment Method on File</h3>
-            <div class="card-display">
-              <span class="card-brand">${pm.brand.toUpperCase()}</span>
-              <span class="card-number">•••• •••• •••• ${pm.last4}</span>
-              <span style="color: #6b7280;">Expires: ${pm.expMonth}/${pm.expYear}</span>
-              <span class="verified-badge">✅ Verified</span>
-            </div>
-          </div>
-        `;
+      <div class="payment-method-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="margin: 0;">💳 Payment Method</h3>
+          <button class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem;" onclick="openStripePortal()">
+            Manage Payment
+          </button>
+        </div>
+        <div class="card-display">
+          <span class="card-brand">${pm.brand.toUpperCase()}</span>
+          <span class="card-number">•••• •••• •••• ${pm.last4}</span>
+          <span style="color: #6b7280;">Expires: ${pm.expMonth}/${pm.expYear}</span>
+          <span class="verified-badge">✅ Verified</span>
+        </div>
+        <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+          Update your card, view billing history, and manage subscriptions securely through Stripe.
+        </p>
+      </div>
+    `;
       } else {
         html = `
-          <div class="card">
-            <div class="alert alert-warning">
-              ⚠️ No payment method on file. Please add a card to deposit credit.
-            </div>
-          </div>
-        `;
+      <div class="card">
+        <div class="alert alert-warning">
+          ⚠️ No payment method on file. Please add a card to receive leads.
+        </div>
+        <button class="btn-primary" style="margin-top: 1rem;" onclick="openStripePortal()">
+          Add Payment Method
+        </button>
+      </div>
+    `;
       }
 
       document.getElementById('paymentMethodCard').innerHTML = html;
     }
+    // Add this new function to open Stripe Portal
+    async function openStripePortal() {
+      showSpinner();
+
+      try {
+        const response = await fetch(`${API_URL}/api/contractor/payment/portal`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Redirect to Stripe's hosted portal
+          window.location.href = data.url;
+        } else {
+          alert(data.error || 'Failed to open payment portal');
+          hideSpinner();
+        }
+      } catch (error) {
+        console.error('Portal error:', error);
+        alert('Failed to open payment portal. Please try again.');
+        hideSpinner();
+      }
+    }
+
+    // When contractor returns from Stripe Portal, refresh dashboard
+    window.addEventListener('focus', function () {
+      // If user was in portal and comes back, reload dashboard
+      const token = localStorage.getItem('contractorToken');
+      if (token && dashboardData) {
+        loadDashboard();
+      }
+    });
 
     // Render Stats
     function renderStats() {
       const stats = dashboardData.stats;
-      const percentage = stats.maxLeadsPerMonth > 0 
-        ? Math.round((stats.leadsThisMonth / stats.maxLeadsPerMonth) * 100) 
+      const percentage = stats.maxLeadsPerMonth > 0
+        ? Math.round((stats.leadsThisMonth / stats.maxLeadsPerMonth) * 100)
         : 0;
 
       const html = `
@@ -1280,7 +1340,7 @@
     // Reactivate Subscription
     async function reactivateSubscription() {
       if (!confirm('Are you sure you want to reactivate your subscription?')) return;
-      
+
       showSpinner();
 
       try {
@@ -1431,7 +1491,7 @@
       if (transactions && transactions.length > 0) {
         let html = '<table style="width: 100%; border-collapse: collapse;">';
         html += '<tr style="border-bottom: 2px solid #e5e7eb;"><th style="text-align: left; padding: 0.75rem;">Date</th><th style="text-align: left; padding: 0.75rem;">Type</th><th style="text-align: left; padding: 0.75rem;">Amount</th><th style="text-align: left; padding: 0.75rem;">Balance</th></tr>';
-        
+
         transactions.forEach(t => {
           const color = t.type === 'deposit' ? '#10b981' : '#ef4444';
           const sign = t.amount >= 0 ? '+' : '';
@@ -1461,7 +1521,7 @@
       }
 
       currentAmount = amount;
-      
+
       const expiryDays = getExpiryDays();
       const leadCost = dashboardData.subscription.leadCost;
 
@@ -1540,7 +1600,7 @@
     function showTab(tabName) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
+
       event.target.classList.add('active');
       document.getElementById(`${tabName}-tab`).classList.add('active');
 
@@ -1565,7 +1625,7 @@
     }
 
     // Initialize
-    window.onload = function() {
+    window.onload = function () {
       const token = localStorage.getItem('contractorToken');
       if (token) {
         loadDashboard();
@@ -1573,4 +1633,5 @@
     };
   </script>
 </body>
+
 </html>

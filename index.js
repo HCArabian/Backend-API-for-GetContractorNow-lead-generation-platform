@@ -3422,6 +3422,123 @@ app.get('/api/contractor/subscription/invoices', authenticateContractor, async (
   }
 });
 
+// ============================================
+// BACKEND: Add to index.js
+// ============================================
+
+// Create Stripe Customer Portal session
+app.post('/api/contractor/payment/portal', authenticateContractor, async (req, res) => {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractor.id }
+    });
+
+    if (!contractor.stripeCustomerId) {
+      return res.status(400).json({ 
+        error: 'No Stripe customer found. Please contact support.' 
+      });
+    }
+
+    // Create a portal session
+    const session = await stripe.billingPortal.sessions.create({
+      customer: contractor.stripeCustomerId,
+      return_url: `${process.env.RAILWAY_URL || 'https://app.getcontractornow.com'}/contractor`,
+    });
+
+    res.json({
+      success: true,
+      url: session.url
+    });
+
+  } catch (error) {
+    console.error('Portal session error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Failed to create portal session' });
+  }
+});
+
+// ============================================
+// FRONTEND: Update your contractor-portal-v2.html
+// ============================================
+
+// Replace the renderPaymentMethod() function with this simpler version:
+function renderPaymentMethod() {
+  const pm = dashboardData.subscription.paymentMethod;
+
+  let html = '';
+  if (pm) {
+    html = `
+      <div class="payment-method-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3 style="margin: 0;">💳 Payment Method</h3>
+          <button class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.9rem;" onclick="openStripePortal()">
+            Manage Payment
+          </button>
+        </div>
+        <div class="card-display">
+          <span class="card-brand">${pm.brand.toUpperCase()}</span>
+          <span class="card-number">•••• •••• •••• ${pm.last4}</span>
+          <span style="color: #6b7280;">Expires: ${pm.expMonth}/${pm.expYear}</span>
+          <span class="verified-badge">✅ Verified</span>
+        </div>
+        <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">
+          Update your card, view billing history, and manage subscriptions securely through Stripe.
+        </p>
+      </div>
+    `;
+  } else {
+    html = `
+      <div class="card">
+        <div class="alert alert-warning">
+          ⚠️ No payment method on file. Please add a card to receive leads.
+        </div>
+        <button class="btn-primary" style="margin-top: 1rem;" onclick="openStripePortal()">
+          Add Payment Method
+        </button>
+      </div>
+    `;
+  }
+
+  document.getElementById('paymentMethodCard').innerHTML = html;
+}
+
+// Add this new function to open Stripe Portal
+async function openStripePortal() {
+  showSpinner();
+
+  try {
+    const response = await fetch(`${API_URL}/api/contractor/payment/portal`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Redirect to Stripe's hosted portal
+      window.location.href = data.url;
+    } else {
+      alert(data.error || 'Failed to open payment portal');
+      hideSpinner();
+    }
+  } catch (error) {
+    console.error('Portal error:', error);
+    alert('Failed to open payment portal. Please try again.');
+    hideSpinner();
+  }
+}
+
+// When contractor returns from Stripe Portal, refresh dashboard
+window.addEventListener('focus', function() {
+  // If user was in portal and comes back, reload dashboard
+  const token = localStorage.getItem('contractorToken');
+  if (token && dashboardData) {
+    loadDashboard();
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
