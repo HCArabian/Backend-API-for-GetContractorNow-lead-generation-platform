@@ -42,11 +42,12 @@ const path = require("path");
 
 app.post(
   "/api/webhooks/stripe/subscription",
-  express.json(),
+  express.json({ type: "application/json" }), // ✅ Add back, but specify type
   async (req, res) => {
     console.log("📬 Webhook received");
     console.log("Event type:", req.body?.type);
-    
+    console.log("Full body:", JSON.stringify(req.body, null, 2)); // ✅ ADD THIS DEBUG LINE
+
     const event = req.body;
 
     if (!event || !event.type) {
@@ -65,7 +66,6 @@ app.post(
     }
   }
 );
-
 
 // ============================================
 // NOW ADD ALL OTHER MIDDLEWARE
@@ -130,9 +130,9 @@ app.get("/api/debug/check-env", (req, res) => {
     adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
     hasJwtSecret: !!process.env.JWT_SECRET,
     jwtSecretLength: process.env.JWT_SECRET?.length || 0,
-    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,  // ✅ ADDED
-    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0,  // ✅ ADDED
-    hasStripeKey: !!process.env.STRIPE_SECRET_KEY_TEST,  // ✅ BONUS CHECK
+    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET, // ✅ ADDED
+    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0, // ✅ ADDED
+    hasStripeKey: !!process.env.STRIPE_SECRET_KEY_TEST, // ✅ BONUS CHECK
   });
 });
 
@@ -2512,8 +2512,6 @@ app.get(
 // SUBSCRIPTION WEBHOOK HANDLERS
 // ============================================
 
-
-
 async function handleSubscriptionUpdated(subscription) {
   console.log("🔄 Subscription updated:", subscription.id);
 
@@ -3202,6 +3200,227 @@ app.post(
     }
   }
 );
+
+// ============================================
+// SUBSCRIPTION MANAGEMENT ENDPOINTS
+// ============================================
+
+// Get available subscription plans
+app.get('/api/contractor/subscription/plans', authenticateContractor, async (req, res) => {
+  try {
+    const plans = [
+      {
+        tier: 'starter',
+        name: 'Starter',
+        price: 99,
+        leadCost: 75,
+        maxLeads: 15,
+        features: ['Up to 15 leads/month', '$75 per lead', 'Basic support', 'Email notifications']
+      },
+      {
+        tier: 'pro',
+        name: 'Pro',
+        price: 125,
+        leadCost: 100,
+        maxLeads: 40,
+        features: ['Up to 40 leads/month', '$100 per lead', 'Priority support', 'SMS + Email notifications', 'Analytics dashboard']
+      },
+      {
+        tier: 'elite',
+        name: 'Elite',
+        price: 200,
+        leadCost: 250,
+        maxLeads: 999,
+        features: ['Unlimited leads', '$250 per premium lead', 'Dedicated account manager', 'All notifications', 'Advanced analytics', 'Custom integrations']
+      }
+    ];
+
+    res.json({ plans });
+  } catch (error) {
+    console.error('Get plans error:', error);
+    res.status(500).json({ error: 'Failed to load plans' });
+  }
+});
+
+// Upgrade/downgrade subscription
+app.post('/api/contractor/subscription/change-plan', authenticateContractor, async (req, res) => {
+  try {
+    const { newTier } = req.body;
+    const contractorId = req.contractor.id;
+
+    if (!['starter', 'pro', 'elite'].includes(newTier)) {
+      return res.status(400).json({ error: 'Invalid subscription tier' });
+    }
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId }
+    });
+
+    if (!contractor.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription found' });
+    }
+
+    // Get the correct price ID for the new tier
+    let priceId;
+    if (newTier === 'starter') priceId = process.env.STRIPE_PRICE_STARTER;
+    else if (newTier === 'pro') priceId = process.env.STRIPE_PRICE_PRO;
+    else if (newTier === 'elite') priceId = process.env.STRIPE_PRICE_ELITE;
+
+    // Update subscription in Stripe
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+    const subscription = await stripe.subscriptions.retrieve(contractor.stripeSubscriptionId);
+    
+    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      items: [{
+        id: subscription.items.data[0].id,
+        price: priceId,
+      }],
+      proration_behavior: 'create_prorations', // Pro-rate the change
+    });
+
+    // Update in database
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: { subscriptionTier: newTier }
+    });
+
+    console.log(`✅ Subscription changed: ${contractor.businessName} → ${newTier}`);
+
+    res.json({
+      success: true,
+      message: `Successfully changed to ${newTier.toUpperCase()} plan`,
+      newTier: newTier
+    });
+
+  } catch (error) {
+    console.error('Change plan error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Failed to change plan' });
+  }
+});
+
+// Cancel subscription
+app.post('/api/contractor/subscription/cancel', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+    const { reason } = req.body;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId }
+    });
+
+    if (!contractor.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription found' });
+    }
+
+    // Cancel subscription in Stripe (at period end)
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+      metadata: { cancellation_reason: reason || 'Not provided' }
+    });
+
+    // Update database
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        subscriptionStatus: 'cancelling', // Will become 'cancelled' at period end
+        isAcceptingLeads: false
+      }
+    });
+
+    console.log(`⚠️ Subscription cancelled: ${contractor.businessName}`);
+
+    res.json({
+      success: true,
+      message: 'Subscription will be cancelled at the end of your billing period',
+      endsAt: contractor.subscriptionEndDate
+    });
+
+  } catch (error) {
+    console.error('Cancel subscription error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// Reactivate cancelled subscription
+app.post('/api/contractor/subscription/reactivate', authenticateContractor, async (req, res) => {
+  try {
+    const contractorId = req.contractor.id;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId }
+    });
+
+    if (!contractor.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No subscription found' });
+    }
+
+    // Reactivate in Stripe
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      cancel_at_period_end: false
+    });
+
+    // Update database
+    await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        subscriptionStatus: 'active',
+        isAcceptingLeads: contractor.creditBalance >= 500
+      }
+    });
+
+    console.log(`✅ Subscription reactivated: ${contractor.businessName}`);
+
+    res.json({
+      success: true,
+      message: 'Subscription reactivated successfully'
+    });
+
+  } catch (error) {
+    console.error('Reactivate subscription error:', error);
+    Sentry.captureException(error);
+    res.status(500).json({ error: 'Failed to reactivate subscription' });
+  }
+});
+
+// Get billing invoices from Stripe
+app.get('/api/contractor/subscription/invoices', authenticateContractor, async (req, res) => {
+  try {
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: req.contractor.id }
+    });
+
+    if (!contractor.stripeCustomerId) {
+      return res.json({ invoices: [] });
+    }
+
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
+    const invoices = await stripe.invoices.list({
+      customer: contractor.stripeCustomerId,
+      limit: 12
+    });
+
+    const formattedInvoices = invoices.data.map(inv => ({
+      id: inv.id,
+      number: inv.number,
+      amount: inv.amount_paid / 100,
+      status: inv.status,
+      paidAt: inv.status_transitions.paid_at ? new Date(inv.status_transitions.paid_at * 1000) : null,
+      createdAt: new Date(inv.created * 1000),
+      invoicePdf: inv.invoice_pdf,
+      hostedUrl: inv.hosted_invoice_url
+    }));
+
+    res.json({ invoices: formattedInvoices });
+
+  } catch (error) {
+    console.error('Get invoices error:', error);
+    res.status(500).json({ error: 'Failed to load invoices' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
