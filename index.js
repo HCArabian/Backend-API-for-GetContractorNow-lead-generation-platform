@@ -2981,9 +2981,8 @@ app.get(
 app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
   try {
     const contractorId = req.contractor.id;
-    const { status } = req.query; // Optional filter by status
+    const { status } = req.query;
 
-    // Build where clause
     const whereClause = {
       contractorId: contractorId,
     };
@@ -2992,34 +2991,28 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
       whereClause.status = status;
     }
 
-    // Get all lead assignments with lead details
     const assignments = await prisma.leadAssignment.findMany({
       where: whereClause,
       include: {
         lead: {
           select: {
             id: true,
-            customerName: true,
+            customerFirstName: true,
+            customerLastName: true,
             customerEmail: true,
             customerPhone: true,
+            customerAddress: true,
+            customerCity: true,
+            customerState: true,
+            customerZip: true,
             serviceType: true,
+            serviceDescription: true,
             category: true,
             price: true,
             timeline: true,
             propertyType: true,
-            address: true,
-            city: true,
-            state: true,
-            zipCode: true,
-            projectDescription: true,
             budgetRange: true,
             createdAt: true,
-          },
-        },
-        trackingNumber: {
-          select: {
-            phoneNumber: true,
-            expiresAt: true,
           },
         },
       },
@@ -3028,21 +3021,20 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
       },
     });
 
-    // Format response
     const leads = assignments.map((assignment) => ({
       assignmentId: assignment.id,
       leadId: assignment.lead.id,
       status: assignment.status,
       assignedAt: assignment.assignedAt,
-      respondedAt: assignment.respondedAt,
+      trackingNumber: assignment.trackingNumber, // This comes from LeadAssignment directly
       customer: {
-        name: assignment.lead.customerName,
+        name: `${assignment.lead.customerFirstName} ${assignment.lead.customerLastName}`,
         email: assignment.lead.customerEmail,
         phone: assignment.lead.customerPhone,
-        address: assignment.lead.address,
-        city: assignment.lead.city,
-        state: assignment.lead.state,
-        zipCode: assignment.lead.zipCode,
+        address: assignment.lead.customerAddress,
+        city: assignment.lead.customerCity,
+        state: assignment.lead.customerState,
+        zipCode: assignment.lead.customerZip,
       },
       project: {
         serviceType: assignment.lead.serviceType,
@@ -3050,15 +3042,9 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
         price: assignment.lead.price,
         timeline: assignment.lead.timeline,
         propertyType: assignment.lead.propertyType,
-        description: assignment.lead.projectDescription,
+        description: assignment.lead.serviceDescription,
         budgetRange: assignment.lead.budgetRange,
       },
-      trackingNumber: assignment.trackingNumber
-        ? {
-            phone: assignment.trackingNumber.phoneNumber,
-            expiresAt: assignment.trackingNumber.expiresAt,
-          }
-        : null,
       createdAt: assignment.lead.createdAt,
     }));
 
