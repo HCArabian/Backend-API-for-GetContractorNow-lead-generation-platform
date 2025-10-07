@@ -1148,7 +1148,7 @@ app.post("/api/contractor/login", async (req, res) => {
 app.get("/api/contractor/profile", authenticateContractor, async (req, res) => {
   try {
     const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractorId },
+      where: { id: req.contractor.id },
       select: {
         id: true,
         businessName: true,
@@ -1173,7 +1173,7 @@ app.get("/api/contractor/profile", authenticateContractor, async (req, res) => {
 
     // Calculate actual lead count from database
     const actualLeadCount = await prisma.leadAssignment.count({
-      where: { contractorId: req.contractorId },
+      where: { contractorId: req.contractor.id },
     });
 
     res.json({
@@ -1195,7 +1195,7 @@ app.get("/api/contractor/leads", authenticateContractor, async (req, res) => {
     const { status } = req.query;
 
     const where = {
-      contractorId: req.contractorId,
+      contractorId: req.contractor.id,
     };
 
     if (status) {
@@ -1244,7 +1244,7 @@ app.get("/api/contractor/billing", authenticateContractor, async (req, res) => {
   try {
     const billingRecords = await prisma.billingRecord.findMany({
       where: {
-        contractorId: req.contractorId,
+        contractorId: req.contractor.id,
       },
       include: {
         lead: {
@@ -1304,7 +1304,7 @@ app.post(
           .json({ error: "New password must be at least 8 characters" });
       }
 
-      // ✅ FIXED: Use req.contractor.id instead of req.contractorId
+      // ✅ FIXED: Use req.contractor.id instead of req.contractor.id
       const contractor = await prisma.contractor.findUnique({
         where: { id: req.contractor.id },
       });
@@ -1362,7 +1362,7 @@ app.post(
       const assignment = await prisma.leadAssignment.findFirst({
         where: {
           leadId: leadId,
-          contractorId: req.contractorId,
+          contractorId: req.contractor.id,
         },
       });
 
@@ -1376,7 +1376,7 @@ app.post(
       const existingDispute = await prisma.dispute.findFirst({
         where: {
           leadId: leadId,
-          contractorId: req.contractorId,
+          contractorId: req.contractor.id,
         },
       });
 
@@ -1390,7 +1390,7 @@ app.post(
       const dispute = await prisma.dispute.create({
         data: {
           leadId: leadId,
-          contractorId: req.contractorId,
+          contractorId: req.contractor.id,
           reason: reason,
           description: description || null,
           evidence: evidence || null,
@@ -1419,7 +1419,7 @@ app.get(
     try {
       const disputes = await prisma.dispute.findMany({
         where: {
-          contractorId: req.contractorId,
+          contractorId: req.contractor.id,
         },
         include: {
           contractor: {
@@ -1787,7 +1787,7 @@ app.get(
     try {
       const feedback = await prisma.customerFeedback.findMany({
         where: {
-          contractorId: req.contractorId,
+          contractorId: req.contractor.id,
         },
         orderBy: {
           submittedAt: "desc",
@@ -1927,7 +1927,7 @@ app.post(
   authenticateContractor,
   async (req, res) => {
     try {
-      const setupIntent = await createSetupIntent(req.contractorId);
+      const setupIntent = await createSetupIntent(req.contractor.id);
 
       res.json({
         success: true,
@@ -1948,7 +1948,7 @@ app.post(
     try {
       const { paymentMethodId } = req.body;
 
-      await savePaymentMethod(req.contractorId, paymentMethodId);
+      await savePaymentMethod(req.contractor.id, paymentMethodId);
 
       res.json({
         success: true,
@@ -1968,7 +1968,7 @@ app.get(
   async (req, res) => {
     try {
       const contractor = await prisma.contractor.findUnique({
-        where: { id: req.contractorId },
+        where: { id: req.contractor.id },
         select: { stripePaymentMethodId: true },
       });
 
@@ -2353,7 +2353,7 @@ app.post(
   authenticateContractor,
   async (req, res) => {
     try {
-      const contractorId = req.contractorId;
+      const contractorId = req.contractor.id;
       const { amount } = req.body;
 
       // Validate amount
@@ -2477,7 +2477,7 @@ app.get(
   authenticateContractor,
   async (req, res) => {
     try {
-      const contractorId = req.contractorId;
+      const contractorId = req.contractor.id;
 
       const contractor = await prisma.contractor.findUnique({
         where: { id: contractorId },
