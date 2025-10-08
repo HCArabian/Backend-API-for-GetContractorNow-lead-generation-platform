@@ -5097,29 +5097,6 @@ app.get("/api/admin/me", newAdminAuth, async (req, res) => {
 });
 
 // ============================================
-// CONTRACTOR APPLICATION ENDPOINT - FULLY VALIDATED
-// Place this in your index.js
-// ============================================
-
-// Import validation utilities at the top of index.js
-const {
-  validateAndFormatPhone,
-  validateEmail,
-  validateLicenseNumber,
-  validateAndFormatEIN,
-  validateZipCode,
-  validateState,
-  validateCity,
-  validateServiceZipCodes,
-  validateWebsiteUrl,
-  sanitizeBusinessName,
-  validateServiceTypes,
-  validateYearsInBusiness,
-} = require("./utils/contractorValidation");
-
-
-
-// ============================================
 // SENTRY ERROR HANDLER (MUST BE LAST)
 // ============================================
 
