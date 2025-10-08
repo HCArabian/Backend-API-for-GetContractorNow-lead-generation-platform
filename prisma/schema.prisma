@@ -114,7 +114,7 @@ model Contractor {
   emailBouncedAt          DateTime?
   isBetaTester            Boolean             @default(false)
   lastActiveAt            DateTime?
-  passwordHash            String
+  passwordHash            String?
   requirePasswordChange   Boolean             @default(false)
   subscriptionEndDate     DateTime?
   subscriptionStartDate   DateTime?
