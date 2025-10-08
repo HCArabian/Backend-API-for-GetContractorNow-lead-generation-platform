@@ -4039,7 +4039,6 @@ app.post("/api/contractors/apply", async (req, res) => {
         subscriptionTier: "none",
         subscriptionStatus: "pending",
         creditBalance: 0,
-        isActive: false,
         isAcceptingLeads: false,
         
         // Additional fields - ✅ VERIFIED FIELD NAMES
