@@ -371,7 +371,25 @@
 </head>
 
 <body>
-    <!-- Login Screen -->
+    <!-- Login Form -->
+    <div id="loginSection" class="login-container">
+        <div class="login-box">
+            <h2>Admin Login</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="adminEmail" placeholder="admin@getcontractornow.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="adminPassword" placeholder="Enter password" required>
+                </div>
+                <button type="submit" class="btn-primary">Login</button>
+                <div id="loginError" style="color: red; margin-top: 10px; display: none;"></div>
+            </form>
+        </div>
+    </div>
+    <!-- Login Screen 
     <div id="loginScreen" class="login-container">
         <div class="login-box">
             <h2>Admin Login</h2>
@@ -379,7 +397,7 @@
             <button onclick="login()">Login</button>
             <div id="loginError" class="error" style="display: none; margin-top: 15px;"></div>
         </div>
-    </div>
+    </div>-->
 
     <!-- Dashboard -->
     <div id="dashboard">
@@ -568,7 +586,58 @@
             showDashboard();
         }
 
-        function login() {
+        // Admin Login Handler
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            try {
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.accessToken) {
+                    // Save token
+                    localStorage.setItem('adminToken', data.accessToken);
+
+                    // Hide login, show dashboard
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('dashboardSection').style.display = 'block';
+
+                    // Load dashboard data
+                    loadDashboard();
+                } else {
+                    errorDiv.textContent = data.error || 'Login failed';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Login failed: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        });
+
+        // Use token for all admin API calls
+        async function adminFetch(url, options = {}) {
+            const token = localStorage.getItem('adminToken');
+
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...options.headers,
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+
+        /*function login() {
             const password = document.getElementById('passwordInput').value;
             authToken = password;
 
@@ -583,7 +652,7 @@
                     document.getElementById('loginError').style.display = 'block';
                     authToken = null;
                 });
-        }
+        } */
 
         function logout() {
             localStorage.removeItem('adminToken');
