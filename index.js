@@ -5,13 +5,8 @@ const { ProfilingIntegration } = require("@sentry/profiling-node");
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || "production",
-
   // Performance Monitoring
   tracesSampleRate: 1.0, // 100% of transactions
-
-  // Profiling (find slow code)
-  profilesSampleRate: 1.0,
-  integrations: [new ProfilingIntegration()],
 
   // Enhanced error tracking
   beforeSend(event, hint) {
