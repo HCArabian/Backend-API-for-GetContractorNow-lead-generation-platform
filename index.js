@@ -1,37 +1,32 @@
 const Sentry = require("@sentry/node");
-// Initialize Sentry FIRST
-// Initialize Sentry with enhanced configuration
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || "production",
-  // Performance Monitoring
-  tracesSampleRate: 1.0, // 100% of transactions
-
-  // Enhanced error tracking
-  beforeSend(event, hint) {
-    // Add custom context
-    const error = hint.originalException;
-
-    if (error && error.statusCode) {
-      event.tags = event.tags || {};
-      event.tags.statusCode = error.statusCode;
-    }
-
-    // Don't send 404 errors (too noisy)
-    if (event.tags?.statusCode === 404) {
-      return null;
-    }
-
-    return event;
-  },
-
-  // Ignore certain errors
-  ignoreErrors: [
-    "Non-Error exception captured",
-    "Navigation cancelled",
-    "ResizeObserver loop limit exceeded",
-  ],
-});
+// Initialize Sentry with error handling
+try {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "production",
+    tracesSampleRate: 1.0,
+    beforeSend(event, hint) {
+      const error = hint.originalException;
+      if (error && error.statusCode) {
+        event.tags = event.tags || {};
+        event.tags.statusCode = error.statusCode;
+      }
+      if (event.tags?.statusCode === 404) {
+        return null;
+      }
+      return event;
+    },
+    ignoreErrors: [
+      "Non-Error exception captured",
+      "Navigation cancelled",
+      "ResizeObserver loop limit exceeded",
+    ],
+  });
+  console.log("✅ Sentry initialized successfully");
+} catch (error) {
+  console.error("⚠️ Sentry initialization failed:", error.message);
+  console.log("Continuing without Sentry monitoring...");
+}
 
 
 // ============================================
@@ -39,7 +34,16 @@ Sentry.init({
 // ============================================
 
 // Monitor webhook processing
+// Monitor webhook processing
 function monitorWebhook(webhookType, operation) {
+  if (!Sentry || !Sentry.startTransaction) {
+    // Sentry not available, return dummy object
+    return {
+      finish: () => {},
+      setData: () => {},
+    };
+  }
+
   const transaction = Sentry.startTransaction({
     op: "webhook",
     name: `${webhookType}.${operation}`,
@@ -107,10 +111,14 @@ const {
 
 const app = express();
 
-// Request handler must be the first middleware
-app.use(Sentry.Handlers.requestHandler());
-// TracingHandler creates a trace for every incoming request
-app.use(Sentry.Handlers.tracingHandler());
+// Sentry middleware (only if Sentry loaded successfully)
+if (Sentry && Sentry.Handlers) {
+  app.use(Sentry.Handlers.requestHandler());
+  app.use(Sentry.Handlers.tracingHandler());
+  console.log("✅ Sentry request handlers attached");
+} else {
+  console.log("⚠️ Sentry handlers not available - skipping");
+}
 
 // Trust Railway proxy
 app.set("trust proxy", 1);
@@ -4785,7 +4793,11 @@ app.get("/api/admin/me", newAdminAuth, async (req, res) => {
 // ============================================
 
 // The error handler must be registered before any other error middleware and after all controllers
-app.use(Sentry.Handlers.errorHandler());
+// SENTRY ERROR HANDLER (MUST BE LAST)
+if (Sentry && Sentry.Handlers) {
+  app.use(Sentry.Handlers.errorHandler());
+  console.log("✅ Sentry error handler attached");
+}
 
 // Optional fallback error handler
 app.use((err, req, res, next) => {
