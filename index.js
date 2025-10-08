@@ -33,10 +33,6 @@ Sentry.init({
   ],
 });
 
-// Request handler must be the first middleware
-app.use(Sentry.Handlers.requestHandler());
-// TracingHandler creates a trace for every incoming request
-app.use(Sentry.Handlers.tracingHandler());
 
 // ============================================
 // SENTRY MONITORING HELPERS
@@ -110,6 +106,11 @@ const {
 } = require("./admin-auth");
 
 const app = express();
+
+// Request handler must be the first middleware
+app.use(Sentry.Handlers.requestHandler());
+// TracingHandler creates a trace for every incoming request
+app.use(Sentry.Handlers.tracingHandler());
 
 // Trust Railway proxy
 app.set("trust proxy", 1);
