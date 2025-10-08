@@ -79,6 +79,7 @@ model Lead {
   @@index([createdAt])
   @@index([referralSource])
   @@index([ipAddress])
+  @@index([serviceType])
 }
 
 model Contractor {
@@ -204,6 +205,10 @@ model Contractor {
   @@index([subscriptionTier])
   @@index([subscriptionStatus])
   @@index([creditBalance])
+  @@index([status, isAcceptingLeads, isVerified])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@index([serviceZipCodes])
 }
 
 model LeadAssignment {
@@ -222,6 +227,8 @@ model LeadAssignment {
   @@index([contractorId])
   @@index([status])
   @@index([trackingNumber])
+  @@index([leadId])
+  @@index([assignedAt])
 }
 
 model BillingRecord {
@@ -246,11 +253,11 @@ model BillingRecord {
   lead          Lead      @relation(fields: [leadId], references: [id])
   contractor    Contractor @relation(fields: [contractorId], references: [id])
   
+  @@unique([leadId, contractorId])
   @@index([contractorId])
+  @@index([leadId])
   @@index([status])
   @@index([dateIncurred])
-  @@index([invoicedAt])
-  @@unique([leadId, contractorId])  // ADD THIS LINE
 
 }
 
