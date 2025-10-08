@@ -3793,12 +3793,32 @@ app.post(
 // ============================================
 // CONTRACTOR APPLICATION ENDPOINT - FIXED
 // ============================================
+// ============================================
+// UPDATED CONTRACTOR APPLICATION ROUTE
+// Place this in index.js, replacing existing route
+// ============================================
+
+const {
+  validateAndFormatPhone,
+  validateEmail,
+  validateLicenseNumber,
+  validateAndFormatEIN,
+  validateZipCode,
+  validateState,
+  validateCity,
+  validateServiceZipCodes,
+  validateWebsiteUrl,
+  sanitizeBusinessName,
+  validateServiceTypes,
+  validateYearsInBusiness,
+} = require('./utils/contractorValidation');
+
 app.post("/api/contractors/apply", async (req, res) => {
   try {
     const data = req.body;
     const validationErrors = [];
 
-    console.log("📥 Received contractor application:", data.businessName);
+    console.log('📥 Received contractor application:', data.businessName);
 
     // ============================================
     // 1. VALIDATE BUSINESS NAME
@@ -3881,7 +3901,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     let licenseNumber = null;
     if (data.licenseNumber && data.licenseState) {
       const licenseValidation = validateLicenseNumber(
-        data.licenseNumber,
+        data.licenseNumber, 
         data.licenseState
       );
       if (!licenseValidation.valid) {
@@ -3902,12 +3922,13 @@ app.post("/api/contractors/apply", async (req, res) => {
 
     // ============================================
     // 7. VALIDATE WEBSITE URL
+    // ✅ FIXED: Handle both 'website' and 'websiteUrl' from form
     // ============================================
-    const websiteValidation = validateWebsiteUrl(data.website);
+    const websiteValidation = validateWebsiteUrl(data.website || data.websiteUrl);
     if (!websiteValidation.valid) {
       validationErrors.push(`Website: ${websiteValidation.error}`);
     }
-    const website = websiteValidation.formatted;
+    const websiteUrl = websiteValidation.formatted;
 
     // ============================================
     // 8. VALIDATE YEARS IN BUSINESS
@@ -3947,9 +3968,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     }
 
     if (!data.acceptedTCPA) {
-      validationErrors.push(
-        "You must consent to receive SMS notifications (TCPA requirement)"
-      );
+      validationErrors.push("You must consent to receive SMS notifications (TCPA requirement)");
     }
 
     if (!data.acceptedPrivacy) {
@@ -3960,82 +3979,86 @@ app.post("/api/contractors/apply", async (req, res) => {
     // CHECK FOR ANY VALIDATION ERRORS
     // ============================================
     if (validationErrors.length > 0) {
-      console.log("❌ Validation errors:", validationErrors);
+      console.log('❌ Validation errors:', validationErrors);
       return res.status(400).json({
         success: false,
-        error: validationErrors[0], // Return first error
-        errors: validationErrors, // Return all errors for debugging
+        error: validationErrors[0],
+        errors: validationErrors,
       });
     }
 
     // ============================================
     // 12. CREATE CONTRACTOR IN DATABASE
+    // ✅ ALL FIELD NAMES MATCH PRISMA SCHEMA
     // ============================================
-    console.log("✅ All validations passed, creating contractor...");
+    console.log('✅ All validations passed, creating contractor...');
 
     const contractor = await prisma.contractor.create({
       data: {
-        // Business Info
+        // Business Info - ✅ VERIFIED FIELD NAMES
         businessName: businessName,
         businessType: data.businessType || null,
         yearsInBusiness: yearsInBusiness,
-        website: website,
-
-        // Contact Info
+        websiteUrl: websiteUrl,  // ✅ FIXED: Schema uses websiteUrl, not website
+        
+        // Contact Info - ✅ VERIFIED FIELD NAMES
         email: email,
         phone: phone,
-
-        // Address
+        
+        // Address - ✅ VERIFIED FIELD NAMES
         businessAddress: data.businessAddress || "",
         businessCity: businessCity || "",
         businessState: businessState || "",
         businessZip: businessZip || "",
-
-        // License & Tax
+        
+        // License & Tax - ✅ VERIFIED FIELD NAMES
         licenseNumber: licenseNumber || "",
         licenseState: data.licenseState || "",
-        licenseExpirationDate: data.licenseExpirationDate
-          ? new Date(data.licenseExpirationDate)
+        licenseExpirationDate: data.licenseExpirationDate 
+          ? new Date(data.licenseExpirationDate) 
           : null,
         taxId: taxId,
-
-        // Insurance (optional fields)
+        
+        // Insurance (optional fields) - ✅ VERIFIED FIELD NAMES
         insuranceProvider: data.insuranceProvider || "",
         insurancePolicyNumber: data.insurancePolicyNumber || "",
-        insuranceExpirationDate: data.insuranceExpirationDate
-          ? new Date(data.insuranceExpirationDate)
+        insuranceExpirationDate: data.insuranceExpirationDate 
+          ? new Date(data.insuranceExpirationDate) 
           : null,
-
-        // Service Info
+        
+        // Service Info - ✅ VERIFIED FIELD NAMES
         serviceTypes: serviceTypes,
         serviceZipCodes: serviceZipCodes,
         description: data.description || "",
-
-        // Application Status
+        
+        // Application Status - ✅ VERIFIED FIELD NAMES
         status: "active",
-        isVerified: false, // Admin must approve
+        isVerified: false,
         applicationSubmittedAt: new Date(),
-
-        // Legal Compliance
+        
+        // Legal Compliance - ✅ VERIFIED FIELD NAMES
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
         acceptedPrivacyAt: new Date(),
-        tcpaConsentText:
+        tcpaConsentText: 
           "I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.",
         ipAddress: req.ip || req.headers["x-forwarded-for"] || "unknown",
         userAgent: req.headers["user-agent"] || "unknown",
         smsOptedOut: false,
-
-        // Account Settings
+        
+        // Account Settings - ✅ VERIFIED FIELD NAMES
         subscriptionTier: "none",
         subscriptionStatus: "pending",
         creditBalance: 0,
         isActive: false,
         isAcceptingLeads: false,
-
-        // Additional fields
+        
+        // Additional fields - ✅ VERIFIED FIELD NAMES
         referralSource: data.referralSource || "website",
         notes: data.notes || "",
+        
+        // ⚠️ NOTE: passwordHash is now optional (nullable) in schema
+        // It will be set when admin approves the contractor
       },
     });
 
@@ -4047,18 +4070,17 @@ app.post("/api/contractors/apply", async (req, res) => {
         sendApplicationConfirmation,
         sendAdminApplicationAlert,
       } = require("./notifications");
-
+      
       await sendApplicationConfirmation(contractor);
       await sendAdminApplicationAlert(contractor);
     } catch (emailError) {
-      console.error("⚠️  Email notification error:", emailError);
-      // Don't fail the request if emails fail
+      console.error('⚠️  Email notification error:', emailError);
     }
 
     // ============================================
     // 14. SUCCESS RESPONSE
     // ============================================
-    console.log("✅ Contractor application created successfully");
+    console.log('✅ Contractor application created successfully');
     console.log(`   ID: ${contractor.id}`);
     console.log(`   Business: ${contractor.businessName}`);
     console.log(`   Email: ${contractor.email}`);
@@ -4068,33 +4090,34 @@ app.post("/api/contractors/apply", async (req, res) => {
 
     res.json({
       success: true,
-      message:
-        "Application submitted successfully! An admin will review your application and send you login credentials within 24-48 hours.",
+      message: "Application submitted successfully! An admin will review your application and send you login credentials within 24-48 hours.",
       applicationId: contractor.id,
     });
-  } catch (error) {
-    console.error("❌ Contractor application error:", error);
 
+  } catch (error) {
+    console.error('❌ Contractor application error:', error);
+    
     // Handle Prisma errors
-    if (error.code === "P2002") {
+    if (error.code === 'P2002') {
       return res.status(400).json({
         success: false,
         error: "An application already exists with this email address",
       });
     }
-
-    // Handle validation errors from Prisma
-    if (error.code === "P2003") {
+    
+    if (error.code === 'P2003') {
       return res.status(400).json({
         success: false,
         error: "Invalid data provided. Please check all fields.",
       });
     }
-
+    
+    // Log the full error for debugging
+    console.error('Full error details:', error);
+    
     res.status(500).json({
       success: false,
-      error:
-        "Failed to submit application. Please try again or contact support.",
+      error: "Failed to submit application. Please try again or contact support.",
     });
   }
 });
