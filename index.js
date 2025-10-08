@@ -4028,7 +4028,7 @@ app.post("/api/contractors/apply", async (req, res) => {
         // Legal Compliance - ✅ VERIFIED FIELD NAMES
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
-        acceptedPrivacyAt: new Date(),
+        privacyPolicyAcceptedAt: new Date(),  // Was: acceptedPrivacyAt
         tcpaConsentText: 
           "I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.",
         ipAddress: req.ip || req.headers["x-forwarded-for"] || "unknown",
