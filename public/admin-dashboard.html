@@ -1168,7 +1168,7 @@
                 const data = await response.json();
                 renderContractorsModal(data.contractors);
 
-                const pending = data.contractors.filter(c => !c.isVerified).length;
+                const pending = data.contractors.filter(c => !c.isVerified && c.status !== 'declined').length;
                 document.getElementById('statPendingContractors').textContent = pending;
             } catch (error) {
                 showError('Failed to load contractors');
@@ -1177,8 +1177,8 @@
 
         function renderContractorsModal(contractors) {
             document.getElementById('contractorsTotal').textContent = contractors.length;
-            document.getElementById('contractorsActive').textContent = contractors.filter(c => c.status === 'active').length;
-            document.getElementById('contractorsPending').textContent = contractors.filter(c => !c.isVerified).length;
+            document.getElementById('contractorsActive').textContent = contractors.filter(c => c.status === 'active' && c.isVerified).length;
+            document.getElementById('contractorsPending').textContent = contractors.filter(c => !c.isVerified && c.status !== 'declined').length;
 
             const container = document.getElementById('contractorsList');
 
@@ -1188,11 +1188,21 @@
             }
 
             const html = contractors.map(contractor => {
-                const statusColor = {
-                    'active': '#10b981',
-                    'inactive': '#6b7280',
-                    'suspended': '#ef4444'
-                }[contractor.status];
+                // Determine actual status
+                let displayStatus = contractor.status;
+                let statusColor = '#6b7280';
+                
+                if (contractor.status === 'declined') {
+                    displayStatus = 'declined';
+                    statusColor = '#dc2626';
+                } else if (!contractor.isVerified) {
+                    displayStatus = 'pending_approval';
+                    statusColor = '#f59e0b';
+                } else if (contractor.status === 'active') {
+                    statusColor = '#10b981';
+                } else if (contractor.status === 'suspended') {
+                    statusColor = '#ef4444';
+                }
 
                 return `
                     <div class="dispute-card" style="border-left-color: ${statusColor}">
@@ -1204,13 +1214,8 @@
                                 </div>
                                 <div style="display: flex; gap: 8px; margin-top: 8px;">
                                     <span style="background: ${statusColor}20; color: ${statusColor}; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                                        ${contractor.status.toUpperCase()}
+                                        ${displayStatus === 'pending_approval' ? 'PENDING APPROVAL' : displayStatus.toUpperCase()}
                                     </span>
-                                    ${!contractor.isVerified ? `
-                                        <span style="background: #f59e0b20; color: #f59e0b; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
-                                            PENDING APPROVAL
-                                        </span>
-                                    ` : ''}
                                     ${contractor.stripePaymentMethodId ? `
                                         <span style="background: #10b98120; color: #10b981; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
                                             PAYMENT METHOD
@@ -1219,7 +1224,7 @@
                                 </div>
                             </div>
                             <div style="text-align: right; font-size: 12px; color: #718096;">
-                                Joined: ${new Date(contractor.createdAt).toLocaleDateString()}
+                                Applied: ${new Date(contractor.applicationSubmittedAt || contractor.createdAt).toLocaleDateString()}
                             </div>
                         </div>
 
@@ -1249,10 +1254,22 @@
                             </div>
                         </div>
 
-                        ${!contractor.isVerified ? `
-                            <button onclick="approveContractor('${contractor.id}')" class="action-btn" style="background: #10b981; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
-                                Approve & Send Login Credentials
-                            </button>
+                        ${contractor.verificationNotes ? `
+                            <div style="background: #fee2e2; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                                <strong style="color: #991b1b;">Notes:</strong>
+                                <div style="margin-top: 5px; color: #7f1d1d;">${contractor.verificationNotes}</div>
+                            </div>
+                        ` : ''}
+
+                        ${!contractor.isVerified && contractor.status !== 'declined' ? `
+                            <div style="display: flex; gap: 10px;">
+                                <button onclick="approveContractor('${contractor.id}')" class="action-btn" style="background: #10b981; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; flex: 1;">
+                                    ✓ Approve & Send Login
+                                </button>
+                                <button onclick="declineContractor('${contractor.id}', '${contractor.businessName}')" class="action-btn" style="background: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; flex: 1;">
+                                    ✕ Decline Application
+                                </button>
+                            </div>
                         ` : ''}
                         ${contractor.isVerified && contractor.status === 'active' ? `
                             <button onclick="suspendContractor('${contractor.id}', '${contractor.businessName}')" class="action-btn" style="background: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 10px;">
@@ -1269,6 +1286,42 @@
             }).join('');
 
             container.innerHTML = html;
+        }
+
+        async function declineContractor(contractorId, contractorName) {
+            const reason = prompt(`Enter reason for declining ${contractorName}'s application:`);
+
+            if (!reason || reason.trim().length === 0) {
+                alert('Please provide a reason for declining this application');
+                return;
+            }
+
+            if (!confirm(`Decline ${contractorName}'s application? They will receive an email notification with the reason.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/contractors/${contractorId}/decline`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reason: reason })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('Application declined. Notification email sent to contractor.');
+                    fetchContractorsForModal();
+                    fetchStats();
+                } else {
+                    alert(data.error || 'Failed to decline application');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+            }
         }
 
         async function approveContractor(contractorId) {

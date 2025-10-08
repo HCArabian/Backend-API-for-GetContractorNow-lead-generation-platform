@@ -96,7 +96,7 @@ const {
   sanitizeBusinessName,
   validateServiceTypes,
   validateYearsInBusiness,
-} = require('./utils/contractorValidation');
+} = require("./utils/contractorValidation");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const express = require("express");
@@ -3803,7 +3803,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     const data = req.body;
     const validationErrors = [];
 
-    console.log('📥 Received contractor application:', data.businessName);
+    console.log("📥 Received contractor application:", data.businessName);
 
     // ============================================
     // 1. VALIDATE BUSINESS NAME
@@ -3886,7 +3886,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     let licenseNumber = null;
     if (data.licenseNumber && data.licenseState) {
       const licenseValidation = validateLicenseNumber(
-        data.licenseNumber, 
+        data.licenseNumber,
         data.licenseState
       );
       if (!licenseValidation.valid) {
@@ -3909,7 +3909,9 @@ app.post("/api/contractors/apply", async (req, res) => {
     // 7. VALIDATE WEBSITE URL
     // ✅ FIXED: Handle both 'website' and 'websiteUrl' from form
     // ============================================
-    const websiteValidation = validateWebsiteUrl(data.website || data.websiteUrl);
+    const websiteValidation = validateWebsiteUrl(
+      data.website || data.websiteUrl
+    );
     if (!websiteValidation.valid) {
       validationErrors.push(`Website: ${websiteValidation.error}`);
     }
@@ -3932,7 +3934,7 @@ app.post("/api/contractors/apply", async (req, res) => {
       validationErrors.push(serviceTypesValidation.error);
     }
     const serviceTypes = serviceTypesValidation.formatted;
-    
+
     // ⚠️ IMPORTANT: Schema uses 'specializations' not 'serviceTypes'
     // Rename for Prisma compatibility
     const specializations = serviceTypes;
@@ -3957,7 +3959,9 @@ app.post("/api/contractors/apply", async (req, res) => {
     }
 
     if (!data.acceptedTCPA) {
-      validationErrors.push("You must consent to receive SMS notifications (TCPA requirement)");
+      validationErrors.push(
+        "You must consent to receive SMS notifications (TCPA requirement)"
+      );
     }
 
     if (!data.acceptedPrivacy) {
@@ -3968,7 +3972,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     // CHECK FOR ANY VALIDATION ERRORS
     // ============================================
     if (validationErrors.length > 0) {
-      console.log('❌ Validation errors:', validationErrors);
+      console.log("❌ Validation errors:", validationErrors);
       return res.status(400).json({
         success: false,
         error: validationErrors[0],
@@ -3980,7 +3984,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     // 12. CREATE CONTRACTOR IN DATABASE
     // ✅ ALL FIELD NAMES MATCH PRISMA SCHEMA
     // ============================================
-    console.log('✅ All validations passed, creating contractor...');
+    console.log("✅ All validations passed, creating contractor...");
 
     const contractor = await prisma.contractor.create({
       data: {
@@ -3988,63 +3992,63 @@ app.post("/api/contractors/apply", async (req, res) => {
         businessName: businessName,
         businessType: data.businessType || null,
         yearsInBusiness: yearsInBusiness,
-        websiteUrl: websiteUrl,  // ✅ FIXED: Schema uses websiteUrl, not website
-        
+        websiteUrl: websiteUrl, // ✅ FIXED: Schema uses websiteUrl, not website
+
         // Contact Info - ✅ VERIFIED FIELD NAMES
         email: email,
         phone: phone,
-        
+
         // Address - ✅ VERIFIED FIELD NAMES
         businessAddress: data.businessAddress || "",
         businessCity: businessCity || "",
         businessState: businessState || "",
         businessZip: businessZip || "",
-        
+
         // License & Tax - ✅ VERIFIED FIELD NAMES
         licenseNumber: licenseNumber || "",
         licenseState: data.licenseState || "",
-        licenseExpirationDate: data.licenseExpirationDate 
-          ? new Date(data.licenseExpirationDate) 
+        licenseExpirationDate: data.licenseExpirationDate
+          ? new Date(data.licenseExpirationDate)
           : null,
         taxId: taxId,
-        
+
         // Insurance (optional fields) - ✅ VERIFIED FIELD NAMES
         insuranceProvider: data.insuranceProvider || "",
         insurancePolicyNumber: data.insurancePolicyNumber || "",
-        insuranceExpirationDate: data.insuranceExpirationDate 
-          ? new Date(data.insuranceExpirationDate) 
+        insuranceExpirationDate: data.insuranceExpirationDate
+          ? new Date(data.insuranceExpirationDate)
           : null,
-        
+
         // Service Info - ✅ VERIFIED FIELD NAMES
-        specializations: specializations,  // ✅ Schema uses 'specializations' not 'serviceTypes'
+        specializations: specializations, // ✅ Schema uses 'specializations' not 'serviceTypes'
         serviceZipCodes: serviceZipCodes,
         description: data.description || "",
-        
+
         // Application Status - ✅ VERIFIED FIELD NAMES
         status: "active",
         isVerified: false,
         applicationSubmittedAt: new Date(),
-        
+
         // Legal Compliance - ✅ VERIFIED FIELD NAMES
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
-        privacyPolicyAcceptedAt: new Date(),  // Was: acceptedPrivacyAt
-        tcpaConsentText: 
+        privacyPolicyAcceptedAt: new Date(), // Was: acceptedPrivacyAt
+        tcpaConsentText:
           "I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.",
         ipAddress: req.ip || req.headers["x-forwarded-for"] || "unknown",
         userAgent: req.headers["user-agent"] || "unknown",
         smsOptedOut: false,
-        
+
         // Account Settings - ✅ VERIFIED FIELD NAMES
         subscriptionTier: "none",
         subscriptionStatus: "pending",
         creditBalance: 0,
         isAcceptingLeads: false,
-        
+
         // Additional fields - ✅ VERIFIED FIELD NAMES
         referralSource: data.referralSource || "website",
         notes: data.notes || "",
-        
+
         // ⚠️ NOTE: passwordHash is now optional (nullable) in schema
         // It will be set when admin approves the contractor
       },
@@ -4058,17 +4062,17 @@ app.post("/api/contractors/apply", async (req, res) => {
         sendApplicationConfirmation,
         sendAdminApplicationAlert,
       } = require("./notifications");
-      
+
       await sendApplicationConfirmation(contractor);
       await sendAdminApplicationAlert(contractor);
     } catch (emailError) {
-      console.error('⚠️  Email notification error:', emailError);
+      console.error("⚠️  Email notification error:", emailError);
     }
 
     // ============================================
     // 14. SUCCESS RESPONSE
     // ============================================
-    console.log('✅ Contractor application created successfully');
+    console.log("✅ Contractor application created successfully");
     console.log(`   ID: ${contractor.id}`);
     console.log(`   Business: ${contractor.businessName}`);
     console.log(`   Email: ${contractor.email}`);
@@ -4078,38 +4082,38 @@ app.post("/api/contractors/apply", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Application submitted successfully! An admin will review your application and send you login credentials within 24-48 hours.",
+      message:
+        "Application submitted successfully! An admin will review your application and send you login credentials within 24-48 hours.",
       applicationId: contractor.id,
     });
-
   } catch (error) {
-    console.error('❌ Contractor application error:', error);
-    
+    console.error("❌ Contractor application error:", error);
+
     // Handle Prisma errors
-    if (error.code === 'P2002') {
+    if (error.code === "P2002") {
       return res.status(400).json({
         success: false,
         error: "An application already exists with this email address",
       });
     }
-    
-    if (error.code === 'P2003') {
+
+    if (error.code === "P2003") {
       return res.status(400).json({
         success: false,
         error: "Invalid data provided. Please check all fields.",
       });
     }
-    
+
     // Log the full error for debugging
-    console.error('Full error details:', error);
-    
+    console.error("Full error details:", error);
+
     res.status(500).json({
       success: false,
-      error: "Failed to submit application. Please try again or contact support.",
+      error:
+        "Failed to submit application. Please try again or contact support.",
     });
   }
 });
-
 
 // ============================================
 // LEGAL COMPLIANCE ENDPOINTS
@@ -4946,6 +4950,135 @@ async function canSendSMS(contractorId) {
 
   return true;
 }
+
+// ============================================
+// ADMIN: DECLINE CONTRACTOR APPLICATION
+// Add this to your index.js with other admin routes
+// ============================================
+
+app.post("/api/admin/contractors/:id/decline", async (req, res) => {
+  try {
+    // Verify admin authentication
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+    }
+
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide a reason for declining this application",
+      });
+    }
+
+    const contractorId = req.params.id;
+
+    // Get contractor details
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: contractorId },
+    });
+
+    if (!contractor) {
+      return res.status(404).json({
+        success: false,
+        error: "Contractor not found",
+      });
+    }
+
+    // Update contractor status to declined
+    const updatedContractor = await prisma.contractor.update({
+      where: { id: contractorId },
+      data: {
+        status: "declined",
+        isVerified: false,
+        isApproved: false,
+        verificationNotes: reason,
+        verifiedAt: new Date(), // Mark when decision was made
+      },
+    });
+
+    // Send decline notification email
+    try {
+      const sgMail = require("@sendgrid/mail");
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+      const msg = {
+        to: contractor.email,
+        from: "noreply@getcontractornow.com",
+        subject: "GetContractorNow - Application Update",
+        html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .info-box { background: #fee2e2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; border-radius: 4px; }
+    .button { display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Application Decision</h1>
+    </div>
+    <div class="content">
+      <p>Dear ${contractor.businessName},</p>
+      
+      <p>Thank you for your interest in joining GetContractorNow. After reviewing your application, we regret to inform you that we are unable to approve your contractor account at this time.</p>
+      
+      <div class="info-box">
+        <strong>Reason:</strong><br>
+        ${reason}
+      </div>
+      
+      <p><strong>What's Next?</strong></p>
+      <ul>
+        <li>You can reapply in the future once you've addressed the issues mentioned above</li>
+        <li>Feel free to contact us if you have questions about this decision</li>
+        <li>We appreciate your understanding and wish you success in your business</li>
+      </ul>
+      
+      <p>If you believe this decision was made in error or would like to discuss further, please contact us at <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a>.</p>
+      
+      <p>Best regards,<br>
+      The GetContractorNow Team</p>
+    </div>
+  </div>
+</body>
+</html>
+        `,
+      };
+
+      await sgMail.send(msg);
+      console.log(`✅ Decline notification sent to ${contractor.email}`);
+    } catch (emailError) {
+      console.error("⚠️  Failed to send decline email:", emailError);
+      // Don't fail the request if email fails
+    }
+
+    console.log(
+      `❌ Contractor application declined: ${contractor.businessName}`
+    );
+    console.log(`   Reason: ${reason}`);
+
+    res.json({
+      success: true,
+      message: `Application declined. Notification email sent to ${contractor.email}.`,
+      contractor: updatedContractor,
+    });
+  } catch (error) {
+    console.error("❌ Error declining contractor:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to decline application. Please try again.",
+    });
+  }
+});
 
 // ============================================
 // 8. ADMIN ENDPOINT TO VIEW COMPLIANCE STATUS
