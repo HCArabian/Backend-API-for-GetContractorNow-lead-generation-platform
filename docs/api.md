@@ -6,20 +6,20 @@
 
 **Last Updated**: October 2025
 
----
+------------------------------------------------------------------------
 
 ## Table of Contents
 
-1. [Authentication](#authentication)
-2. [Public Endpoints](#public-endpoints)
-3. [Contractor Endpoints](#contractor-endpoints)
-4. [Admin Endpoints](#admin-endpoints)
-5. [Webhook Endpoints](#webhook-endpoints)
-6. [Cron Endpoints](#cron-endpoints)
-7. [Error Codes](#error-codes)
-8. [Rate Limits](#rate-limits)
+1.  [Authentication](#authentication)
+2.  [Public Endpoints](#public-endpoints)
+3.  [Contractor Endpoints](#contractor-endpoints)
+4.  [Admin Endpoints](#admin-endpoints)
+5.  [Webhook Endpoints](#webhook-endpoints)
+6.  [Cron Endpoints](#cron-endpoints)
+7.  [Error Codes](#error-codes)
+8.  [Rate Limits](#rate-limits)
 
----
+------------------------------------------------------------------------
 
 ## Authentication
 
@@ -27,13 +27,11 @@
 
 Protected contractor endpoints require a JWT token in the Authorization header:
 
-```
-Authorization: Bearer {token}
-```
+    Authorization: Bearer {token}
 
 **Get JWT Token** (Contractor):
 
-```bash
+``` bash
 POST /api/contractors/login
 Content-Type: application/json
 
@@ -44,7 +42,8 @@ Content-Type: application/json
 ```
 
 **Response**:
-```json
+
+``` json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "contractor": {
@@ -63,14 +62,12 @@ Content-Type: application/json
 
 Admin endpoints require Basic Authentication:
 
-```
-Authorization: Basic {base64(username:password)}
-```
+    Authorization: Basic {base64(username:password)}
 
-Username: `admin`  
+Username: `admin`\
 Password: Set in `ADMIN_PASSWORD` environment variable
 
----
+------------------------------------------------------------------------
 
 ## Public Endpoints
 
@@ -81,7 +78,8 @@ Password: Set in `ADMIN_PASSWORD` environment variable
 Check API status and database connectivity.
 
 **Response**:
-```json
+
+``` json
 {
   "status": "healthy",
   "timestamp": "2025-10-05T12:00:00.000Z",
@@ -90,7 +88,7 @@ Check API status and database connectivity.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Submit Lead
 
@@ -99,7 +97,8 @@ Check API status and database connectivity.
 Submit a new HVAC service lead. This is the main entry point for lead generation.
 
 **Request Body**:
-```json
+
+``` json
 {
   "customerFirstName": "John",
   "customerLastName": "Smith",
@@ -117,25 +116,13 @@ Submit a new HVAC service lead. This is the main entry point for lead generation
 }
 ```
 
-**Required Fields**:
-- `customerFirstName` (string)
-- `customerLastName` (string)
-- `customerPhone` (string, 10 digits)
-- `customerZip` (string, 5 digits)
-- `serviceType` (enum: `ac_repair`, `heating_repair`, `installation`, `maintenance`, `emergency`)
-- `timeline` (enum: `emergency`, `within_24_hours`, `within_week`, `flexible`)
-- `budgetRange` (string)
-- `propertyType` (enum: `residential`, `commercial`)
+**Required Fields**: - `customerFirstName` (string) - `customerLastName` (string) - `customerPhone` (string, 10 digits) - `customerZip` (string, 5 digits) - `serviceType` (enum: `ac_repair`, `heating_repair`, `installation`, `maintenance`, `emergency`) - `timeline` (enum: `emergency`, `within_24_hours`, `within_week`, `flexible`) - `budgetRange` (string) - `propertyType` (enum: `residential`, `commercial`)
 
-**Optional Fields**:
-- `customerEmail` (string)
-- `customerAddress` (string)
-- `customerCity` (string)
-- `customerState` (string)
-- `serviceDescription` (string)
+**Optional Fields**: - `customerEmail` (string) - `customerAddress` (string) - `customerCity` (string) - `customerState` (string) - `serviceDescription` (string)
 
 **Response** (Success):
-```json
+
+``` json
 {
   "success": true,
   "message": "Lead submitted successfully",
@@ -147,14 +134,15 @@ Submit a new HVAC service lead. This is the main entry point for lead generation
 ```
 
 **Response** (No Contractor Available):
-```json
+
+``` json
 {
   "success": false,
   "error": "No contractors available in your area"
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Contractor Endpoints
 
@@ -167,7 +155,8 @@ All contractor endpoints require JWT authentication.
 Authenticate contractor and receive JWT token.
 
 **Request Body**:
-```json
+
+``` json
 {
   "email": "contractor@example.com",
   "password": "password123"
@@ -175,7 +164,8 @@ Authenticate contractor and receive JWT token.
 ```
 
 **Response**:
-```json
+
+``` json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "contractor": {
@@ -192,7 +182,7 @@ Authenticate contractor and receive JWT token.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Contractor Dashboard
 
@@ -200,10 +190,11 @@ Authenticate contractor and receive JWT token.
 
 **Headers**: `Authorization: Bearer {token}`
 
-Get contractor's dashboard data including stats and recent leads.
+Get contractor\'s dashboard data including stats and recent leads.
 
 **Response**:
-```json
+
+``` json
 {
   "stats": {
     "totalLeads": 45,
@@ -234,7 +225,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Contractor Leads
 
@@ -242,13 +233,11 @@ Get contractor's dashboard data including stats and recent leads.
 
 **Headers**: `Authorization: Bearer {token}`
 
-**Query Parameters**:
-- `status` (optional): Filter by status (`pending_assignment`, `assigned`, `contacted`, `qualified`)
-- `limit` (optional): Number of results (default: 50)
-- `offset` (optional): Pagination offset (default: 0)
+**Query Parameters**: - `status` (optional): Filter by status (`pending_assignment`, `assigned`, `contacted`, `qualified`) - `limit` (optional): Number of results (default: 50) - `offset` (optional): Pagination offset (default: 0)
 
 **Response**:
-```json
+
+``` json
 {
   "leads": [
     {
@@ -284,7 +273,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Update Lead Status
 
@@ -293,19 +282,18 @@ Get contractor's dashboard data including stats and recent leads.
 **Headers**: `Authorization: Bearer {token}`
 
 **Request Body**:
-```json
+
+``` json
 {
   "status": "contacted"
 }
 ```
 
-**Valid Statuses**:
-- `assigned` - Lead just assigned to contractor
-- `contacted` - Contractor reached out to customer
-- `qualified` - Valid lead (30+ second call completed)
+**Valid Statuses**: - `assigned` - Lead just assigned to contractor - `contacted` - Contractor reached out to customer - `qualified` - Valid lead (30+ second call completed)
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "lead": {
@@ -316,7 +304,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Billing History
 
@@ -324,13 +312,11 @@ Get contractor's dashboard data including stats and recent leads.
 
 **Headers**: `Authorization: Bearer {token}`
 
-**Query Parameters**:
-- `startDate` (optional): ISO date string
-- `endDate` (optional): ISO date string
-- `status` (optional): `pending`, `invoiced`, `paid`
+**Query Parameters**: - `startDate` (optional): ISO date string - `endDate` (optional): ISO date string - `status` (optional): `pending`, `invoiced`, `paid`
 
 **Response**:
-```json
+
+``` json
 {
   "billingRecords": [
     {
@@ -358,7 +344,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Submit Dispute
 
@@ -367,23 +353,19 @@ Get contractor's dashboard data including stats and recent leads.
 **Headers**: `Authorization: Bearer {token}`
 
 **Request Body**:
-```json
+
+``` json
 {
   "reason": "customer_no_contact",
   "description": "Called 3 times, customer never answered. No voicemail set up."
 }
 ```
 
-**Valid Reasons**:
-- `invalid_phone` - Phone number invalid or disconnected
-- `customer_no_contact` - Customer never answered calls
-- `wrong_info` - Lead information was incorrect
-- `duplicate` - Duplicate lead already received
-- `out_of_area` - Service area mismatch
-- `other` - Other reason (requires description)
+**Valid Reasons**: - `invalid_phone` - Phone number invalid or disconnected - `customer_no_contact` - Customer never answered calls - `wrong_info` - Lead information was incorrect - `duplicate` - Duplicate lead already received - `out_of_area` - Service area mismatch - `other` - Other reason (requires description)
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "dispute": {
@@ -398,7 +380,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Disputes
 
@@ -406,11 +388,11 @@ Get contractor's dashboard data including stats and recent leads.
 
 **Headers**: `Authorization: Bearer {token}`
 
-**Query Parameters**:
-- `status` (optional): `pending`, `under_review`, `approved`, `denied`
+**Query Parameters**: - `status` (optional): `pending`, `under_review`, `approved`, `denied`
 
 **Response**:
-```json
+
+``` json
 {
   "disputes": [
     {
@@ -433,7 +415,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Update Profile
 
@@ -442,7 +424,8 @@ Get contractor's dashboard data including stats and recent leads.
 **Headers**: `Authorization: Bearer {token}`
 
 **Request Body**:
-```json
+
+``` json
 {
   "businessName": "HVAC Pros LLC",
   "phone": "5559876543",
@@ -453,7 +436,8 @@ Get contractor's dashboard data including stats and recent leads.
 ```
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "contractor": {
@@ -467,7 +451,7 @@ Get contractor's dashboard data including stats and recent leads.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Admin Endpoints
 
@@ -480,7 +464,8 @@ All admin endpoints require Basic Authentication.
 **Headers**: `Authorization: Basic {credentials}`
 
 **Response**:
-```json
+
+``` json
 {
   "stats": {
     "totalLeads": 1250,
@@ -510,7 +495,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get All Leads
 
@@ -518,17 +503,11 @@ All admin endpoints require Basic Authentication.
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `status` (optional): Filter by status
-- `category` (optional): Filter by category (PLATINUM, GOLD, SILVER, BRONZE, NURTURE)
-- `contractorId` (optional): Filter by contractor
-- `startDate` (optional): Filter by date range
-- `endDate` (optional): Filter by date range
-- `limit` (optional): Results per page (default: 100)
-- `offset` (optional): Pagination offset
+**Query Parameters**: - `status` (optional): Filter by status - `category` (optional): Filter by category (PLATINUM, GOLD, SILVER, BRONZE, NURTURE) - `contractorId` (optional): Filter by contractor - `startDate` (optional): Filter by date range - `endDate` (optional): Filter by date range - `limit` (optional): Results per page (default: 100) - `offset` (optional): Pagination offset
 
 **Response**:
-```json
+
+``` json
 {
   "leads": [
     {
@@ -562,7 +541,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get All Contractors
 
@@ -570,13 +549,11 @@ All admin endpoints require Basic Authentication.
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `status` (optional): `active`, `inactive`, `suspended`
-- `isApproved` (optional): `true`, `false`
-- `zipCode` (optional): Filter by service area
+**Query Parameters**: - `status` (optional): `active`, `inactive`, `suspended` - `isApproved` (optional): `true`, `false` - `zipCode` (optional): Filter by service area
 
 **Response**:
-```json
+
+``` json
 {
   "contractors": [
     {
@@ -601,7 +578,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Approve Contractor
 
@@ -610,7 +587,8 @@ All admin endpoints require Basic Authentication.
 **Headers**: `Authorization: Basic {credentials}`
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "message": "Contractor approved and onboarding email sent",
@@ -623,12 +601,9 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
-**Notes**: 
-- Automatically sends onboarding email with login credentials
-- Activates contractor account
-- Contractor can now receive leads
+**Notes**: - Automatically sends onboarding email with login credentials - Activates contractor account - Contractor can now receive leads
 
----
+------------------------------------------------------------------------
 
 ### Get Billing Records
 
@@ -636,16 +611,11 @@ All admin endpoints require Basic Authentication.
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `status` (optional): `pending`, `invoiced`, `paid`
-- `contractorId` (optional): Filter by contractor
-- `startDate` (optional): ISO date string
-- `endDate` (optional): ISO date string
-- `limit` (optional): Number of records (default: 100)
-- `offset` (optional): Pagination offset
+**Query Parameters**: - `status` (optional): `pending`, `invoiced`, `paid` - `contractorId` (optional): Filter by contractor - `startDate` (optional): ISO date string - `endDate` (optional): ISO date string - `limit` (optional): Number of records (default: 100) - `offset` (optional): Pagination offset
 
 **Response**:
-```json
+
+``` json
 {
   "billingRecords": [
     {
@@ -684,7 +654,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Update Billing Record
 
@@ -693,7 +663,8 @@ All admin endpoints require Basic Authentication.
 **Headers**: `Authorization: Basic {credentials}`
 
 **Request Body**:
-```json
+
+``` json
 {
   "status": "invoiced",
   "invoiceNumber": "INV-2025-001",
@@ -701,13 +672,11 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
-**Valid Status Values**:
-- `pending` - Charge incurred, not yet invoiced
-- `invoiced` - Invoice sent to contractor
-- `paid` - Payment received
+**Valid Status Values**: - `pending` - Charge incurred, not yet invoiced - `invoiced` - Invoice sent to contractor - `paid` - Payment received
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "billingRecord": {
@@ -720,7 +689,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Disputes
 
@@ -728,12 +697,11 @@ All admin endpoints require Basic Authentication.
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `status` (optional): `pending`, `under_review`, `approved`, `denied`
-- `contractorId` (optional): Filter by contractor
+**Query Parameters**: - `status` (optional): `pending`, `under_review`, `approved`, `denied` - `contractorId` (optional): Filter by contractor
 
 **Response**:
-```json
+
+``` json
 {
   "disputes": [
     {
@@ -764,7 +732,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Resolve Dispute
 
@@ -773,7 +741,8 @@ All admin endpoints require Basic Authentication.
 **Headers**: `Authorization: Basic {credentials}`
 
 **Request Body**:
-```json
+
+``` json
 {
   "resolution": "approved",
   "creditAmount": 250.00,
@@ -781,14 +750,11 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
-**Valid Resolutions**:
-- `approved` - Dispute valid, credit contractor
-- `partial_credit` - Partial credit issued
-- `replacement_lead` - Offer replacement lead instead
-- `denied` - Dispute denied, charge stands
+**Valid Resolutions**: - `approved` - Dispute valid, credit contractor - `partial_credit` - Partial credit issued - `replacement_lead` - Offer replacement lead instead - `denied` - Dispute denied, charge stands
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "dispute": {
@@ -807,7 +773,7 @@ All admin endpoints require Basic Authentication.
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Export Data (CSV)
 
@@ -815,21 +781,16 @@ All admin endpoints require Basic Authentication.
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `startDate` (optional): ISO date string
-- `endDate` (optional): ISO date string
-- `status` (optional): Filter by status
-- `category` (optional): Filter by category
+**Query Parameters**: - `startDate` (optional): ISO date string - `endDate` (optional): ISO date string - `status` (optional): Filter by status - `category` (optional): Filter by category
 
 **Response**: CSV file download
 
 **CSV Format**:
-```
-Lead ID,Customer Name,Email,Phone,City,State,Zip,Service Type,Timeline,Status,Category,Price,Score,Created At,Assigned At
-clxyz789,John Smith,john@example.com,5551234567,Beverly Hills,CA,90210,ac_repair,within_24_hours,qualified,PLATINUM,250.00,145,2025-10-05T10:30:00.000Z,2025-10-05T10:31:00.000Z
-```
 
----
+    Lead ID,Customer Name,Email,Phone,City,State,Zip,Service Type,Timeline,Status,Category,Price,Score,Created At,Assigned At
+    clxyz789,John Smith,john@example.com,5551234567,Beverly Hills,CA,90210,ac_repair,within_24_hours,qualified,PLATINUM,250.00,145,2025-10-05T10:30:00.000Z,2025-10-05T10:31:00.000Z
+
+------------------------------------------------------------------------
 
 **GET** `/api/admin/export/contractors`
 
@@ -838,32 +799,26 @@ clxyz789,John Smith,john@example.com,5551234567,Beverly Hills,CA,90210,ac_repair
 **Response**: CSV file download
 
 **CSV Format**:
-```
-Contractor ID,Business Name,Email,Phone,Service Zip Codes,Status,Approved,Total Leads,Conversion Rate,Customer Rating,Total Revenue,Created At
-clxyz123,HVAC Pros,contractor@example.com,5559876543,"90210,90211",active,true,45,67.5,4.8,2250.00,2025-08-01T00:00:00.000Z
-```
 
----
+    Contractor ID,Business Name,Email,Phone,Service Zip Codes,Status,Approved,Total Leads,Conversion Rate,Customer Rating,Total Revenue,Created At
+    clxyz123,HVAC Pros,contractor@example.com,5559876543,"90210,90211",active,true,45,67.5,4.8,2250.00,2025-08-01T00:00:00.000Z
+
+------------------------------------------------------------------------
 
 **GET** `/api/admin/export/billing`
 
 **Headers**: `Authorization: Basic {credentials}`
 
-**Query Parameters**:
-- `startDate` (optional): ISO date string
-- `endDate` (optional): ISO date string
-- `status` (optional): Filter by status
-- `contractorId` (optional): Filter by contractor
+**Query Parameters**: - `startDate` (optional): ISO date string - `endDate` (optional): ISO date string - `status` (optional): Filter by status - `contractorId` (optional): Filter by contractor
 
 **Response**: CSV file download
 
 **CSV Format**:
-```
-Billing ID,Date Incurred,Contractor,Contractor Email,Customer Name,Phone,City,State,Service Type,Amount,Status,Invoice Number,Invoiced At,Paid At
-clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,5551234567,Beverly Hills,CA,ac_repair,250.00,paid,INV-2025-001,2025-10-06T00:00:00.000Z,2025-10-10T15:00:00.000Z
-```
 
----
+    Billing ID,Date Incurred,Contractor,Contractor Email,Customer Name,Phone,City,State,Service Type,Amount,Status,Invoice Number,Invoiced At,Paid At
+    clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,5551234567,Beverly Hills,CA,ac_repair,250.00,paid,INV-2025-001,2025-10-06T00:00:00.000Z,2025-10-10T15:00:00.000Z
+
+------------------------------------------------------------------------
 
 ### Get Bounced Emails
 
@@ -872,7 +827,8 @@ clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,55
 **Headers**: `Authorization: Basic {credentials}`
 
 **Response**:
-```json
+
+``` json
 {
   "bounced": [
     {
@@ -886,7 +842,7 @@ clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,55
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ### Get Backup Status
 
@@ -895,7 +851,8 @@ clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,55
 **Headers**: `Authorization: Basic {credentials}`
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "backup": {
@@ -921,7 +878,7 @@ clxyz999,2025-10-05T12:00:00.000Z,HVAC Pros,contractor@example.com,John Smith,55
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Webhook Endpoints
 
@@ -933,42 +890,29 @@ Receives call status updates from Twilio (signature verified).
 
 **Used for**: Automatic billing when calls exceed 30 seconds.
 
-**Events**:
-- `initiated` - Call started
-- `ringing` - Phone ringing
-- `in-progress` - Call answered
-- `completed` - Call ended (triggers billing if 30+ seconds)
-- `failed` - Call failed
-- `busy` - Line busy
-- `no-answer` - No answer
+**Events**: - `initiated` - Call started - `ringing` - Phone ringing - `in-progress` - Call answered - `completed` - Call ended (triggers billing if 30+ seconds) - `failed` - Call failed - `busy` - Line busy - `no-answer` - No answer
 
 **Request Body** (from Twilio):
-```
-CallSid=CAxxxxxxxxxxxxx
-CallStatus=completed
-CallDuration=45
-From=+15551234567
-To=+15559876543
-RecordingUrl=https://...
-RecordingSid=RExxxxxxxxxxxxx
-Direction=outbound-api
-```
+
+    CallSid=CAxxxxxxxxxxxxx
+    CallStatus=completed
+    CallDuration=45
+    From=+15551234567
+    To=+15559876543
+    RecordingUrl=https://...
+    RecordingSid=RExxxxxxxxxxxxx
+    Direction=outbound-api
 
 **Response**:
-```xml
+
+``` xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Response></Response>
 ```
 
-**Notes**: 
-- Webhook signature is verified using Twilio Auth Token
-- Invalid signatures return 403 Forbidden
-- Creates CallLog record for every call
-- Creates BillingRecord if call duration ≥ 30 seconds
-- Updates lead status to "contacted" on first call
-- Security events logged to database
+**Notes**: - Webhook signature is verified using Twilio Auth Token - Invalid signatures return 403 Forbidden - Creates CallLog record for every call - Creates BillingRecord if call duration ≥ 30 seconds - Updates lead status to \"contacted\" on first call - Security events logged to database
 
----
+------------------------------------------------------------------------
 
 ### Stripe Payment Events
 
@@ -976,12 +920,11 @@ Direction=outbound-api
 
 Receives payment events from Stripe (signature verified).
 
-**Events Handled**:
-- `payment_intent.succeeded` - Payment successful
-- `payment_intent.payment_failed` - Payment failed
+**Events Handled**: - `payment_intent.succeeded` - Payment successful - `payment_intent.payment_failed` - Payment failed
 
 **Request Body** (from Stripe):
-```json
+
+``` json
 {
   "type": "payment_intent.succeeded",
   "data": {
@@ -998,13 +941,9 @@ Receives payment events from Stripe (signature verified).
 }
 ```
 
-**Notes**:
-- Webhook signature verified using Stripe webhook secret
-- Updates billing record status automatically
-- Sends confirmation emails to contractors
-- Records payment in system
+**Notes**: - Webhook signature verified using Stripe webhook secret - Updates billing record status automatically - Sends confirmation emails to contractors - Records payment in system
 
----
+------------------------------------------------------------------------
 
 ### SendGrid Email Events
 
@@ -1012,13 +951,11 @@ Receives payment events from Stripe (signature verified).
 
 Receives email bounce and spam events (signature verified).
 
-**Events Handled**:
-- `bounce` - Email bounced (hard bounce)
-- `dropped` - Email dropped by SendGrid
-- `spamreport` - Marked as spam
+**Events Handled**: - `bounce` - Email bounced (hard bounce) - `dropped` - Email dropped by SendGrid - `spamreport` - Marked as spam
 
 **Request Body** (from SendGrid):
-```json
+
+``` json
 [
   {
     "email": "contractor@example.com",
@@ -1030,13 +967,9 @@ Receives email bounce and spam events (signature verified).
 ]
 ```
 
-**Notes**:
-- Signature verified using SendGrid verification key
-- Marks email addresses as bounced in Contractor table
-- Prevents future emails to bounced addresses
-- Admin can view bounced emails in dashboard
+**Notes**: - Signature verified using SendGrid verification key - Marks email addresses as bounced in Contractor table - Prevents future emails to bounced addresses - Admin can view bounced emails in dashboard
 
----
+------------------------------------------------------------------------
 
 ## Cron Endpoints
 
@@ -1048,11 +981,11 @@ Releases tracking numbers from leads older than 7 days to make them available fo
 
 **Schedule**: Daily at midnight UTC (GitHub Actions)
 
-**Query Parameters**:
-- `secret` (required): Must match `CRON_SECRET` environment variable
+**Query Parameters**: - `secret` (required): Must match `CRON_SECRET` environment variable
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "recycled": 12,
@@ -1060,13 +993,9 @@ Releases tracking numbers from leads older than 7 days to make them available fo
 }
 ```
 
-**Notes**:
-- Finds TrackingNumber records older than 7 days
-- Updates status from "active" to "expired"
-- Makes numbers available for new leads
-- Logs recycling activity
+**Notes**: - Finds TrackingNumber records older than 7 days - Updates status from \"active\" to \"expired\" - Makes numbers available for new leads - Logs recycling activity
 
----
+------------------------------------------------------------------------
 
 ### Send Feedback Emails
 
@@ -1076,11 +1005,11 @@ Sends feedback request emails to customers 24 hours after first contact.
 
 **Schedule**: Daily at noon UTC (GitHub Actions)
 
-**Query Parameters**:
-- `secret` (required): Must match `CRON_SECRET` environment variable
+**Query Parameters**: - `secret` (required): Must match `CRON_SECRET` environment variable
 
 **Response**:
-```json
+
+``` json
 {
   "success": true,
   "sent": 8,
@@ -1088,31 +1017,27 @@ Sends feedback request emails to customers 24 hours after first contact.
 }
 ```
 
-**Notes**:
-- Finds leads contacted 24 hours ago
-- Sends email with feedback form link
-- Records email sent in NotificationLog
-- Skips if customer email bounced
-- One-time send per lead
+**Notes**: - Finds leads contacted 24 hours ago - Sends email with feedback form link - Records email sent in NotificationLog - Skips if customer email bounced - One-time send per lead
 
----
+------------------------------------------------------------------------
 
 ## Error Codes
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request - Invalid input or missing required fields |
-| 401 | Unauthorized - Missing or invalid authentication |
-| 403 | Forbidden - Access denied or invalid signature |
-| 404 | Not Found - Resource doesn't exist |
-| 409 | Conflict - Duplicate resource |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error - Something went wrong |
+  Code   Description
+  ------ --------------------------------------------------------
+  200    Success
+  201    Created
+  400    Bad Request - Invalid input or missing required fields
+  401    Unauthorized - Missing or invalid authentication
+  403    Forbidden - Access denied or invalid signature
+  404    Not Found - Resource doesn\'t exist
+  409    Conflict - Duplicate resource
+  429    Too Many Requests - Rate limit exceeded
+  500    Internal Server Error - Something went wrong
 
 **Error Response Format**:
-```json
+
+``` json
 {
   "error": "Error message description",
   "details": "Additional context if available"
@@ -1121,62 +1046,58 @@ Sends feedback request emails to customers 24 hours after first contact.
 
 **Example Error Responses**:
 
-```json
+``` json
 {
   "error": "Missing required fields",
   "details": "customerPhone and customerZip are required"
 }
 ```
 
-```json
+``` json
 {
   "error": "No contractors available in your area",
   "details": "Zip code: 99999"
 }
 ```
 
-```json
+``` json
 {
   "error": "Invalid authentication credentials"
 }
 ```
 
-```json
+``` json
 {
   "error": "Lead not found",
   "details": "Lead ID: clxyz789 does not exist"
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Rate Limits
 
-**Notes**:
-- Finds leads contacted 24 hours ago (status = "contacted", firstContactAt = 24hrs ago)
-- Sends email with feedback form link
-- Records email sent in NotificationLog
-- Skips if customer email bounced
-- One-time send per lead
+**Notes**: - Finds leads contacted 24 hours ago (status = \"contacted\", firstContactAt = 24hrs ago) - Sends email with feedback form link - Records email sent in NotificationLog - Skips if customer email bounced - One-time send per lead
 
----
+------------------------------------------------------------------------
 
 ## Error Codes
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request - Invalid input or missing required fields |
-| 401 | Unauthorized - Missing or invalid authentication |
-| 403 | Forbidden - Access denied or invalid webhook signature |
-| 404 | Not Found - Resource doesn't exist |
-| 409 | Conflict - Duplicate resource |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error - Something went wrong |
+  Code   Description
+  ------ --------------------------------------------------------
+  200    Success
+  201    Created
+  400    Bad Request - Invalid input or missing required fields
+  401    Unauthorized - Missing or invalid authentication
+  403    Forbidden - Access denied or invalid webhook signature
+  404    Not Found - Resource doesn\'t exist
+  409    Conflict - Duplicate resource
+  429    Too Many Requests - Rate limit exceeded
+  500    Internal Server Error - Something went wrong
 
 **Error Response Format**:
-```json
+
+``` json
 {
   "error": "Error message description",
   "details": "Additional context if available"
@@ -1186,7 +1107,8 @@ Sends feedback request emails to customers 24 hours after first contact.
 **Example Error Responses**:
 
 **Missing Required Fields**:
-```json
+
+``` json
 {
   "error": "Missing required fields",
   "details": "customerPhone and customerZip are required"
@@ -1194,7 +1116,8 @@ Sends feedback request emails to customers 24 hours after first contact.
 ```
 
 **No Contractors Available**:
-```json
+
+``` json
 {
   "error": "No contractors available in your area",
   "details": "Zip code: 99999"
@@ -1202,14 +1125,16 @@ Sends feedback request emails to customers 24 hours after first contact.
 ```
 
 **Invalid Authentication**:
-```json
+
+``` json
 {
   "error": "Invalid authentication credentials"
 }
 ```
 
 **Resource Not Found**:
-```json
+
+``` json
 {
   "error": "Lead not found",
   "details": "Lead ID: clxyz789 does not exist"
@@ -1217,71 +1142,63 @@ Sends feedback request emails to customers 24 hours after first contact.
 ```
 
 **Duplicate Entry**:
-```json
+
+``` json
 {
   "error": "Duplicate billing record",
   "details": "Billing record already exists for this call"
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Rate Limits
 
-**Public Endpoints**:
-- 100 requests per 15 minutes per IP address
-- Lead submission: 10 per hour per IP
+**Public Endpoints**: - 100 requests per 15 minutes per IP address - Lead submission: 10 per hour per IP
 
-**Authentication Endpoints** (Login):
-- 5 login attempts per 15 minutes per IP
+**Authentication Endpoints** (Login): - 5 login attempts per 15 minutes per IP
 
-**Authenticated Endpoints**:
-- No rate limit (protected by authentication)
+**Authenticated Endpoints**: - No rate limit (protected by authentication)
 
-**Webhook Endpoints**:
-- No rate limit (signature verified)
+**Webhook Endpoints**: - No rate limit (signature verified)
 
-**Cron Endpoints**:
-- 1 request per scheduled run (secret-protected)
+**Cron Endpoints**: - 1 request per scheduled run (secret-protected)
 
 **Rate Limit Headers**:
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1696512000
-```
+
+    X-RateLimit-Limit: 100
+    X-RateLimit-Remaining: 95
+    X-RateLimit-Reset: 1696512000
 
 **Rate Limit Exceeded Response**:
-```json
+
+``` json
 {
   "error": "Rate limit exceeded",
   "details": "Too many requests. Please try again in 15 minutes."
 }
 ```
 
----
+------------------------------------------------------------------------
 
 ## Security
 
 ### Authentication Methods
 
-1. **JWT Tokens** (Contractor Portal)
-   - Issued on login via `/api/contractors/login`
-   - Expires in 24 hours
-   - Include in Authorization header: `Bearer {token}`
-
-2. **Basic Auth** (Admin Portal)
-   - Username: `admin`
-   - Password: From `ADMIN_PASSWORD` environment variable
-   - Base64 encoded in Authorization header
-
-3. **Webhook Signatures**
-   - **Twilio**: X-Twilio-Signature header (verified using Auth Token)
-   - **Stripe**: Stripe-Signature header (verified using webhook secret)
-   - **SendGrid**: X-Twilio-Email-Event-Webhook-Signature header
-
-4. **Cron Secrets**
-   - Query parameter `secret` must match `CRON_SECRET` environment variable
+1.  **JWT Tokens** (Contractor Portal)
+    - Issued on login via `/api/contractors/login`
+    - Expires in 24 hours
+    - Include in Authorization header: `Bearer {token}`
+2.  **Basic Auth** (Admin Portal)
+    - Username: `admin`
+    - Password: From `ADMIN_PASSWORD` environment variable
+    - Base64 encoded in Authorization header
+3.  **Webhook Signatures**
+    - **Twilio**: X-Twilio-Signature header (verified using Auth Token)
+    - **Stripe**: Stripe-Signature header (verified using webhook secret)
+    - **SendGrid**: X-Twilio-Email-Event-Webhook-Signature header
+4.  **Cron Secrets**
+    - Query parameter `secret` must match `CRON_SECRET` environment variable
 
 ### HTTPS Only
 
@@ -1289,10 +1206,7 @@ All endpoints require HTTPS. HTTP requests are automatically redirected to HTTPS
 
 ### CORS
 
-CORS is enabled for:
-- `https://getcontractornow.com`
-- `https://www.getcontractornow.com`
-- `https://app.getcontractornow.com`
+CORS is enabled for: - `https://getcontractornow.com` - `https://www.getcontractornow.com` - `https://app.getcontractornow.com`
 
 ### Data Privacy
 
@@ -1304,52 +1218,31 @@ CORS is enabled for:
 
 ### Security Headers
 
-All responses include security headers:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `X-XSS-Protection: 1; mode=block`
-- `Strict-Transport-Security: max-age=31536000`
+All responses include security headers: - `X-Content-Type-Options: nosniff` - `X-Frame-Options: DENY` - `X-XSS-Protection: 1; mode=block` - `Strict-Transport-Security: max-age=31536000`
 
----
+------------------------------------------------------------------------
 
 ## Monitoring
 
 ### Error Tracking
 
-All errors are automatically sent to Sentry:
-- **Dashboard**: https://sentry.io
-- **Project**: `getcontractornow-backend`
-- **Environment**: `production`
-- **DSN**: Set in `SENTRY_DSN` environment variable
+All errors are automatically sent to Sentry: - **Dashboard**: https://sentry.io - **Project**: `getcontractornow-backend` - **Environment**: `production` - **DSN**: Set in `SENTRY_DSN` environment variable
 
-**Error Capture**:
-- All uncaught exceptions
-- All promise rejections
-- Manual captures via `Sentry.captureException()`
-- Request context included (URL, method, headers)
+**Error Capture**: - All uncaught exceptions - All promise rejections - Manual captures via `Sentry.captureException()` - Request context included (URL, method, headers)
 
 ### Logging
 
-Application logs available in Railway:
-- **Access**: Railway Dashboard → Service → Logs
-- **Filters**: Error level, timestamp, keyword
-- **Retention**: 7 days
+Application logs available in Railway: - **Access**: Railway Dashboard → Service → Logs - **Filters**: Error level, timestamp, keyword - **Retention**: 7 days
 
-**Log Levels**:
-- `error`: Critical failures
-- `warn`: Non-critical issues
-- `info`: General information
-- `debug`: Detailed debugging (not in production)
+**Log Levels**: - `error`: Critical failures - `warn`: Non-critical issues - `info`: General information - `debug`: Detailed debugging (not in production)
 
 ### Health Monitoring
 
-Monitor API health via `/health` endpoint:
-- Returns 200 status when healthy
-- Checks database connectivity
-- Returns current timestamp and version
+Monitor API health via `/health` endpoint: - Returns 200 status when healthy - Checks database connectivity - Returns current timestamp and version
 
 **Health Check Response**:
-```json
+
+``` json
 {
   "status": "healthy",
   "timestamp": "2025-10-05T12:00:00.000Z",
@@ -1360,26 +1253,23 @@ Monitor API health via `/health` endpoint:
 
 ### Database Monitoring
 
-Database metrics available in Railway:
-- **Access**: Railway Dashboard → PostgreSQL → Metrics
-- **Metrics**: Connections, queries/sec, storage usage
-- **Alerts**: Configure in Railway settings
+Database metrics available in Railway: - **Access**: Railway Dashboard → PostgreSQL → Metrics - **Metrics**: Connections, queries/sec, storage usage - **Alerts**: Configure in Railway settings
 
----
+------------------------------------------------------------------------
 
 ## Database Schema
 
 ### Models Overview
 
-1. **Lead** - Customer service requests
-2. **Contractor** - Service provider profiles
-3. **LeadAssignment** - Connects leads to contractors
-4. **BillingRecord** - Tracks amounts owed
-5. **TrackingNumber** - Twilio phone number assignments
-6. **CallLog** - Call tracking and recordings
-7. **SMSLog** - Text message tracking
-8. **Dispute** - Contractor billing disputes
-9. **CustomerFeedback** - Post-service feedback
+1.  **Lead** - Customer service requests
+2.  **Contractor** - Service provider profiles
+3.  **LeadAssignment** - Connects leads to contractors
+4.  **BillingRecord** - Tracks amounts owed
+5.  **TrackingNumber** - Twilio phone number assignments
+6.  **CallLog** - Call tracking and recordings
+7.  **SMSLog** - Text message tracking
+8.  **Dispute** - Contractor billing disputes
+9.  **CustomerFeedback** - Post-service feedback
 10. **NotificationLog** - Email/SMS tracking
 
 ### Key Relationships
@@ -1393,60 +1283,29 @@ Database metrics available in Railway:
 
 ### Lead Scoring
 
-Leads are automatically scored on submission:
-- **Score Range**: 0-200 points
-- **Categories**:
-  - PLATINUM: 150+ points ($250)
-  - GOLD: 120-149 points ($175)
-  - SILVER: 90-119 points ($125)
-  - BRONZE: 60-89 points ($85)
-  - NURTURE: <60 points ($0 - not assigned)
+Leads are automatically scored on submission: - **Score Range**: 0-200 points - **Categories**: - PLATINUM: 150+ points (\$250) - GOLD: 120-149 points (\$175) - SILVER: 90-119 points (\$125) - BRONZE: 60-89 points (\$85) - NURTURE: \<60 points (\$0 - not assigned)
 
-**Scoring Factors**:
-- Budget range (higher = more points)
-- Timeline urgency (faster = more points)
-- Property type (commercial > residential)
-- Email provided (bonus points)
-- Service type complexity
-- Zip code (service availability)
+**Scoring Factors**: - Budget range (higher = more points) - Timeline urgency (faster = more points) - Property type (commercial \> residential) - Email provided (bonus points) - Service type complexity - Zip code (service availability)
 
----
+------------------------------------------------------------------------
 
 ## Support
 
 ### Technical Issues
 
-**Error Tracking**:
-- Check Sentry dashboard for stack traces
-- Review Railway logs for deployment issues
-- Test with `/health` endpoint
+**Error Tracking**: - Check Sentry dashboard for stack traces - Review Railway logs for deployment issues - Test with `/health` endpoint
 
-**Database Issues**:
-- See `docs/database-backup.md` for backup procedures
-- Contact Railway support for infrastructure issues
-- Use Prisma Studio for data inspection
+**Database Issues**: - See `docs/database-backup.md` for backup procedures - Contact Railway support for infrastructure issues - Use Prisma Studio for data inspection
 
-**API Questions**:
-- Refer to this documentation
-- Check `docs/QUICK_START.md` for common tasks
-- Review schema in `prisma/schema.prisma`
+**API Questions**: - Refer to this documentation - Check `docs/QUICK_START.md` for common tasks - Review schema in `prisma/schema.prisma`
 
 ### Integration Support
 
-**Twilio Issues**:
-- Verify webhook URLs in Twilio Console
-- Check signature verification is enabled
-- Review call logs in Twilio Console
+**Twilio Issues**: - Verify webhook URLs in Twilio Console - Check signature verification is enabled - Review call logs in Twilio Console
 
-**Stripe Issues**:
-- Verify webhook secret matches Stripe dashboard
-- Check test vs live mode keys
-- Review events in Stripe dashboard
+**Stripe Issues**: - Verify webhook secret matches Stripe dashboard - Check test vs live mode keys - Review events in Stripe dashboard
 
-**SendGrid Issues**:
-- Verify sender email is verified
-- Check API key permissions
-- Review activity feed for bounces
+**SendGrid Issues**: - Verify sender email is verified - Check API key permissions - Review activity feed for bounces
 
 ### Contact
 
@@ -1454,79 +1313,59 @@ Leads are automatically scored on submission:
 - **Database Admin**: See backup documentation
 - **Billing Questions**: Review admin dashboard
 
----
+------------------------------------------------------------------------
 
 ## Changelog
 
 ### Version 1.0 (October 2025)
 
-**Initial Production Release**:
-- Complete lead routing system
-- Automated billing via Twilio call tracking
-- SMS notifications (pending A2P approval)
-- Email notifications via SendGrid
-- Contractor and admin portals
-- Webhook security (signature verification)
-- Error monitoring with Sentry
-- Automated backups (Railway managed)
-- Custom domain support
-- Rate limiting
-- JWT authentication
-- Dispute resolution system
-- Customer feedback collection
-- CSV export functionality
+**Initial Production Release**: - Complete lead routing system - Automated billing via Twilio call tracking - SMS notifications (pending A2P approval) - Email notifications via SendGrid - Contractor and admin portals - Webhook security (signature verification) - Error monitoring with Sentry - Automated backups (Railway managed) - Custom domain support - Rate limiting - JWT authentication - Dispute resolution system - Customer feedback collection - CSV export functionality
 
----
+------------------------------------------------------------------------
 
 ## API Versioning
 
 **Current Version**: 1.0
 
-**Versioning Strategy**:
-- Major versions for breaking changes
-- Minor versions for new features
-- Patch versions for bug fixes
+**Versioning Strategy**: - Major versions for breaking changes - Minor versions for new features - Patch versions for bug fixes
 
-**Future Versions**:
-- Version endpoints will be prefixed: `/api/v2/`
-- Current endpoints remain at `/api/` for backwards compatibility
-- Deprecation notices provided 90 days before removal
+**Future Versions**: - Version endpoints will be prefixed: `/api/v2/` - Current endpoints remain at `/api/` for backwards compatibility - Deprecation notices provided 90 days before removal
 
----
+------------------------------------------------------------------------
 
 ## Best Practices
 
 ### For Integrators
 
-1. **Always handle errors gracefully**
-2. **Implement exponential backoff for retries**
-3. **Validate input before sending**
-4. **Store webhook signatures for audit**
-5. **Use HTTPS only**
-6. **Keep API keys secure** (never commit to git)
-7. **Monitor rate limits** in response headers
+1.  **Always handle errors gracefully**
+2.  **Implement exponential backoff for retries**
+3.  **Validate input before sending**
+4.  **Store webhook signatures for audit**
+5.  **Use HTTPS only**
+6.  **Keep API keys secure** (never commit to git)
+7.  **Monitor rate limits** in response headers
 
 ### For Contractors
 
-1. **Change default password on first login**
-2. **Keep contact information updated**
-3. **Respond to leads within response deadline**
-4. **Document disputes with evidence**
-5. **Provide feedback on lead quality**
+1.  **Change default password on first login**
+2.  **Keep contact information updated**
+3.  **Respond to leads within response deadline**
+4.  **Document disputes with evidence**
+5.  **Provide feedback on lead quality**
 
 ### For Administrators
 
-1. **Review disputes promptly** (within 24-48 hours)
-2. **Monitor backup status weekly**
-3. **Export billing data monthly**
-4. **Review contractor performance metrics**
-5. **Approve new contractors within 24 hours**
-6. **Keep admin password secure and rotate quarterly**
+1.  **Review disputes promptly** (within 24-48 hours)
+2.  **Monitor backup status weekly**
+3.  **Export billing data monthly**
+4.  **Review contractor performance metrics**
+5.  **Approve new contractors within 24 hours**
+6.  **Keep admin password secure and rotate quarterly**
 
----
+------------------------------------------------------------------------
 
-**Version**: 1.0  
-**Last Updated**: October 2025  
+**Version**: 1.0\
+**Last Updated**: October 2025\
 **Maintained by**: GetContractorNow Development Team
 
 **Need more help?** Refer to `docs/QUICK_START.md` for quick reference guide and common tasks.

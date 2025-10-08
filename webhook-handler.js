@@ -54,10 +54,6 @@ async function handleSubscriptionCreated(subscription) {
   }
 }
 
-module.exports = {
-  handleSubscriptionCreated,
-  // ... other exports
-};
 
 module.exports = {
   handleSubscriptionCreated

@@ -228,8 +228,8 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label>Business Type <span class="required">*</span></label>
-            <select name="businessType" required>
+            <label>Business Type</label>
+            <select name="businessType">
               <option value="">Select...</option>
               <option value="Sole Proprietor">Sole Proprietor</option>
               <option value="LLC">LLC</option>
@@ -246,7 +246,7 @@
 
         <div class="form-group">
           <label>Website URL (if applicable)</label>
-          <input type="url" name="websiteUrl" placeholder="https://yourcompany.com">
+          <input type="url" name="website" placeholder="https://yourcompany.com">
         </div>
       </div>
 
@@ -256,13 +256,13 @@
         
         <div class="form-row">
           <div class="form-group">
-            <label>First Name <span class="required">*</span></label>
-            <input type="text" name="ownerFirstName" required>
+            <label>First Name</label>
+            <input type="text" name="ownerFirstName">
           </div>
 
           <div class="form-group">
-            <label>Last Name <span class="required">*</span></label>
-            <input type="text" name="ownerLastName" required>
+            <label>Last Name</label>
+            <input type="text" name="ownerLastName">
           </div>
         </div>
 
@@ -285,19 +285,19 @@
         <h2 class="section-title">Business Address</h2>
         
         <div class="form-group">
-          <label>Street Address <span class="required">*</span></label>
-          <input type="text" name="businessAddress" required>
+          <label>Street Address</label>
+          <input type="text" name="businessAddress">
         </div>
 
         <div class="form-row">
           <div class="form-group">
-            <label>City <span class="required">*</span></label>
-            <input type="text" name="businessCity" required>
+            <label>City</label>
+            <input type="text" name="businessCity">
           </div>
 
           <div class="form-group">
-            <label>State <span class="required">*</span></label>
-            <select name="businessState" required>
+            <label>State</label>
+            <select name="businessState">
               <option value="">Select State...</option>
               <option value="AL">Alabama</option>
               <option value="AK">Alaska</option>
@@ -309,14 +309,13 @@
               <option value="DE">Delaware</option>
               <option value="FL">Florida</option>
               <option value="GA">Georgia</option>
-              <!-- Add all states -->
             </select>
           </div>
         </div>
 
         <div class="form-group">
-          <label>ZIP Code <span class="required">*</span></label>
-          <input type="text" name="businessZip" required pattern="[0-9]{5}">
+          <label>ZIP Code</label>
+          <input type="text" name="businessZip" pattern="[0-9]{5}">
         </div>
       </div>
 
@@ -326,18 +325,17 @@
         
         <div class="form-row">
           <div class="form-group">
-            <label>License Number <span class="required">*</span></label>
-            <input type="text" name="licenseNumber" required>
+            <label>License Number</label>
+            <input type="text" name="licenseNumber">
           </div>
 
           <div class="form-group">
-            <label>License State <span class="required">*</span></label>
-            <select name="licenseState" required>
+            <label>License State</label>
+            <select name="licenseState">
               <option value="">Select State...</option>
               <option value="CA">California</option>
               <option value="TX">Texas</option>
               <option value="FL">Florida</option>
-              <!-- Add all states -->
             </select>
           </div>
         </div>
@@ -345,39 +343,6 @@
         <div class="form-group">
           <label>License Expiration Date</label>
           <input type="date" name="licenseExpirationDate">
-        </div>
-      </div>
-
-      <!-- Insurance Information -->
-      <div class="section">
-        <h2 class="section-title">Insurance Information</h2>
-        
-        <div class="form-group">
-          <label>Insurance Provider</label>
-          <input type="text" name="insuranceProvider">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>Policy Number</label>
-            <input type="text" name="insurancePolicyNumber">
-          </div>
-
-          <div class="form-group">
-            <label>Policy Expiration Date</label>
-            <input type="date" name="insuranceExpirationDate">
-          </div>
-        </div>
-      </div>
-
-      <!-- Tax Information -->
-      <div class="section">
-        <h2 class="section-title">Tax Information</h2>
-        
-        <div class="form-group">
-          <label>Tax ID / EIN</label>
-          <input type="text" name="taxId" placeholder="12-3456789">
-          <small>Required for payment processing</small>
         </div>
       </div>
 
@@ -393,55 +358,41 @@
 
         <div class="form-group">
           <label>HVAC Services Offered <span class="required">*</span></label>
+          <small style="color: #dc2626; font-weight: 600;">Select at least 2 services</small>
           <div class="checkbox-group">
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="hvac_installation" checked>
-              <label>Installation</label>
+              <input type="checkbox" name="serviceTypes" value="ac_repair">
+              <label>AC Repair</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="hvac_repair" checked>
-              <label>Repair</label>
+              <input type="checkbox" name="serviceTypes" value="hvac_installation">
+              <label>HVAC Installation</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="hvac_maintenance">
-              <label>Maintenance</label>
+              <input type="checkbox" name="serviceTypes" value="system_replacement">
+              <label>System Replacement</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="ac_installation">
-              <label>AC Installation</label>
+              <input type="checkbox" name="serviceTypes" value="emergency_repair">
+              <label>Emergency Repair</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="heating_installation">
-              <label>Heating Installation</label>
+              <input type="checkbox" name="serviceTypes" value="heating_repair">
+              <label>Heating Repair</label>
             </div>
             <div class="checkbox-item">
-              <input type="checkbox" name="specializations" value="emergency_service">
-              <label>Emergency Service</label>
+              <input type="checkbox" name="serviceTypes" value="maintenance_tuneups">
+              <label>Maintenance/Tune-ups</label>
             </div>
           </div>
         </div>
-      </div>
-
-      <!-- Additional Information -->
-      <div class="section">
-        <h2 class="section-title">Additional Information</h2>
-        
-        <div class="form-group">
-          <label>Why do you want to join GetContractorNow?</label>
-          <textarea name="notes" placeholder="Tell us about your business and why you'd like to receive exclusive leads..."></textarea>
-        </div>
 
         <div class="form-group">
-          <label>How did you hear about us?</label>
-          <select name="referralSource">
-            <option value="website">Website</option>
-            <option value="google">Google Search</option>
-            <option value="referral">Referral</option>
-            <option value="social_media">Social Media</option>
-            <option value="other">Other</option>
-          </select>
+          <label>Additional Information</label>
+          <textarea name="description" placeholder="Tell us about your business and why you'd like to receive exclusive leads..."></textarea>
         </div>
       </div>
+
       <!-- Legal Compliance -->
       <div class="section">
         <h2 class="section-title">⚖️ Legal Requirements</h2>
@@ -485,7 +436,7 @@
 </div>
 
 <script>
-  const API_URL = 'https://api.getcontractornow.com/contractor-app'; // Change to your API URL
+  const API_URL = 'https://api.getcontractornow.com';
   
   document.getElementById('applicationForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -496,32 +447,27 @@
     const successAlert = document.getElementById('successAlert');
     const errorAlert = document.getElementById('errorAlert');
     
-    // Hide alerts
     successAlert.style.display = 'none';
     errorAlert.style.display = 'none';
     
-    // Show spinner
     spinner.style.display = 'block';
     submitBtn.disabled = true;
     
-    // Collect form data
     const formData = new FormData(form);
     const data = {};
     
-    // Convert form data to object
     for (let [key, value] of formData.entries()) {
-      if (key === 'specializations') {
-        if (!data.specializations) {
-          data.specializations = [];
+      if (key === 'serviceTypes') {
+        if (!data.serviceTypes) {
+          data.serviceTypes = [];
         }
-        data.specializations.push(value);
+        data.serviceTypes.push(value);
       } else {
         data[key] = value;
       }
     }
     
-    // Ensure at least 2 specializations are selected
-    if (!data.specializations || data.specializations.length < 2) {
+    if (!data.serviceTypes || data.serviceTypes.length < 2) {
       errorAlert.textContent = 'Please select at least 2 HVAC services offered';
       errorAlert.style.display = 'block';
       spinner.style.display = 'none';
@@ -529,7 +475,6 @@
       return;
     }
 
-    // Validate legal compliance checkboxes
     const termsCheckbox = document.getElementById('acceptedTerms');
     const tcpaCheckbox = document.getElementById('acceptedTCPA');
     const privacyCheckbox = document.getElementById('acceptedPrivacy');
@@ -564,7 +509,6 @@
       return;
     }
 
-    // Reset error styling
     document.getElementById('termsCheckbox').style.borderColor = '#e5e7eb';
     document.getElementById('termsCheckbox').style.background = '#f9fafb';
     document.getElementById('tcpaCheckbox').style.borderColor = '#e5e7eb';
@@ -572,10 +516,16 @@
     document.getElementById('privacyCheckbox').style.borderColor = '#e5e7eb';
     document.getElementById('privacyCheckbox').style.background = '#f9fafb';
 
-    // Convert checkboxes to boolean for API
-    data.acceptedTerms = termsCheckbox.checked;
-    data.acceptedTCPA = tcpaCheckbox.checked;
-    data.acceptedPrivacy = privacyCheckbox.checked;
+    data.acceptedTerms = true;
+    data.acceptedTCPA = true;
+    data.acceptedPrivacy = true;
+    
+    if (data.serviceZipCodes) {
+      data.serviceZipCodes = data.serviceZipCodes
+        .split(',')
+        .map(zip => zip.trim())
+        .filter(zip => zip.length > 0);
+    }
     
     try {
       const response = await fetch(`${API_URL}/api/contractors/apply`, {
@@ -595,8 +545,6 @@
         successAlert.textContent = result.message;
         successAlert.style.display = 'block';
         form.reset();
-        
-        // Scroll to top to see success message
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         errorAlert.textContent = result.error || 'Failed to submit application. Please try again.';
@@ -607,7 +555,7 @@
       console.error('Submission error:', error);
       spinner.style.display = 'none';
       submitBtn.disabled = false;
-      errorAlert.textContent = 'Network error. Please check your connection and try again.';
+      errorAlert.textContent = 'Submission error: ' + error.message;
       errorAlert.style.display = 'block';
     }
   });

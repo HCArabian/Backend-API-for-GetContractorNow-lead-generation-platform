@@ -3780,6 +3780,9 @@ app.post(
 // ============================================
 // Replace your existing POST /api/contractors/apply with this:
 
+// ============================================
+// CONTRACTOR APPLICATION ENDPOINT - FIXED
+// ============================================
 app.post("/api/contractors/apply", async (req, res) => {
   try {
     const applicationData = req.body;
@@ -3796,7 +3799,7 @@ app.post("/api/contractors/apply", async (req, res) => {
       });
     }
 
-    // ✅ NEW: TCPA and TOS Validation
+    // ✅ TCPA and TOS Validation
     if (!applicationData.acceptedTerms) {
       return res.status(400).json({
         success: false,
@@ -3812,6 +3815,22 @@ app.post("/api/contractors/apply", async (req, res) => {
       });
     }
 
+    // ✅ Validate serviceTypes
+    if (!applicationData.serviceTypes || applicationData.serviceTypes.length < 2) {
+      return res.status(400).json({
+        success: false,
+        error: "Please select at least 2 HVAC services offered",
+      });
+    }
+
+    // ✅ Validate serviceZipCodes
+    if (!applicationData.serviceZipCodes || applicationData.serviceZipCodes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide at least one service ZIP code",
+      });
+    }
+
     // Check for duplicate email
     const existingContractor = await prisma.contractor.findUnique({
       where: { email: applicationData.email.toLowerCase() },
@@ -3824,7 +3843,7 @@ app.post("/api/contractors/apply", async (req, res) => {
       });
     }
 
-    // Create contractor application with compliance fields
+    // ✅ Create contractor application with ALL fields
     const contractor = await prisma.contractor.create({
       data: {
         businessName: applicationData.businessName,
@@ -3836,15 +3855,21 @@ app.post("/api/contractors/apply", async (req, res) => {
         businessZip: applicationData.businessZip || "",
         licenseNumber: applicationData.licenseNumber || "",
         yearsInBusiness: parseInt(applicationData.yearsInBusiness) || 0,
+        
+        // ✅ FIXED: Use serviceTypes instead of specializations
         serviceTypes: applicationData.serviceTypes || [],
+        
+        // ✅ FIXED: serviceZipCodes is now an array
         serviceZipCodes: applicationData.serviceZipCodes || [],
+        
         description: applicationData.description || "",
         website: applicationData.website || "",
 
-        status: "pending",
+        status: "active", // Changed from "pending" so they can be approved
+        isVerified: false, // Admin must approve
         applicationSubmittedAt: new Date(),
 
-        // ✅ NEW: Legal Compliance Fields
+        // ✅ Legal Compliance Fields
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
         tcpaConsentText:
@@ -3861,30 +3886,42 @@ app.post("/api/contractors/apply", async (req, res) => {
       },
     });
 
+    // ✅ Send confirmation emails
     const {
       sendApplicationConfirmation,
       sendAdminApplicationAlert,
     } = require("./notifications");
+    
     await sendApplicationConfirmation(contractor);
     await sendAdminApplicationAlert(contractor);
 
     console.log(`✅ New contractor application: ${contractor.businessName}`);
+    console.log(`   Service Types: ${contractor.serviceTypes.join(", ")}`);
+    console.log(`   Service ZIPs: ${contractor.serviceZipCodes.join(", ")}`);
 
     res.json({
       success: true,
       message:
-        "Application submitted successfully! You will receive a confirmation email shortly.",
+        "Application submitted successfully! You will receive a confirmation email shortly. An admin will review your application.",
       applicationId: contractor.id,
     });
   } catch (error) {
     console.error("Contractor application error:", error);
+    
+    // Better error logging
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        error: "An application already exists with this email address",
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: "Failed to submit application. Please try again.",
     });
   }
 });
-
 // ============================================
 // LEGAL COMPLIANCE ENDPOINTS
 // ============================================
