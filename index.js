@@ -533,7 +533,7 @@ app.post("/api/leads/submit", async (req, res) => {
 // TWILIO WEBHOOK - NUMBER-BASED ROUTING
 // ============================================
 // Twilio webhook with signature verification
-app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+/* app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   const monitor = monitorWebhook("twilio", "call_status");
 
   try {
@@ -582,7 +582,74 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       from,
       to: to,
       direction,
+    }); */
+
+    app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+  const monitor = monitorWebhook("twilio", "call_status");
+
+  try {
+    // ✅ TEST MODE: Skip signature verification if test secret matches
+    const testSecret = req.query.test;
+    const isTestMode = testSecret && testSecret === process.env.CRON_SECRET;
+    
+    console.log("🔍 Test mode check:", { 
+      hasTestParam: !!testSecret, 
+      isTestMode 
     });
+
+    if (!isTestMode) {
+      // Verify the request came from Twilio
+      const twilioSignature = req.headers["x-twilio-signature"];
+      const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
+      const isValid = twilio.validateRequest(
+        process.env.TWILIO_AUTH_TOKEN,
+        twilioSignature,
+        url,
+        req.body
+      );
+
+      if (!isValid) {
+        await logSecurityEvent("invalid_twilio_signature", {
+          ip: req.ip,
+          url: url,
+          timestamp: new Date(),
+        });
+        console.error("Invalid Twilio signature - possible fraud attempt");
+        monitor.finish(false);
+        return res.status(403).json({ error: "Invalid signature" });
+      }
+      
+      console.log("✅ Twilio signature verified");
+    } else {
+      console.log("🧪 TEST MODE ACTIVE: Signature verification bypassed");
+    }
+
+    // Extract Twilio data
+    const {
+      CallSid: callSid,
+      CallStatus: callStatus,
+      CallDuration: callDuration,
+      From: from,
+      To: to,
+      Direction: direction,
+      RecordingUrl: recordingUrl,
+      RecordingSid: recordingSid,
+    } = req.body;
+
+    monitor.setData("callSid", callSid);
+    monitor.setData("callStatus", callStatus);
+
+    console.log("📞 TWILIO WEBHOOK:", {
+      callSid,
+      callStatus,
+      from,
+      to: to,
+      direction,
+      isTestMode
+    });
+
+    // ... rest of your existing webhook code continues here
 
     // ============================================
     // HANDLE INCOMING CALLS - ROUTE BY NUMBER
@@ -4808,19 +4875,6 @@ app.use((err, req, res, next) => {
     error: "Internal server error",
     message: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
-});
-
-// TEMPORARY - Test Sentry (remove after testing)
-app.get('/api/test-sentry', (req, res) => {
-  try {
-    throw new Error('Test error for Sentry monitoring');
-  } catch (error) {
-    Sentry.captureException(error, {
-      tags: { test: true },
-      extra: { message: 'This is a test error' }
-    });
-    res.json({ message: 'Error sent to Sentry - check your dashboard!' });
-  }
 });
 
 const PORT = process.env.PORT || 3000;
