@@ -1,5 +1,4 @@
 const Sentry = require("@sentry/node");
-const { ProfilingIntegration } = require("@sentry/profiling-node");
 // Initialize Sentry FIRST
 // Initialize Sentry with enhanced configuration
 Sentry.init({
