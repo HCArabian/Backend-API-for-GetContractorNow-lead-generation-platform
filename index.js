@@ -2921,57 +2921,80 @@ app.get(
       const contractor = await prisma.contractor.findUnique({
         where: { id: contractorId },
         select: {
-          id: true,
-          businessName: true,
-          email: true,
-          phone: true,
-          creditBalance: true,
+          // ... all your existing fields ...
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
           subscriptionTier: true,
           subscriptionStatus: true,
-          stripeSubscriptionId: true,
-          stripeCustomerId: true,
-          stripePaymentMethodId: true,
-          serviceZipCodes: true,
-          specializations: true,
-          status: true,
-          // Verification fields - ADDED
-          licenseNumber: true,
-          licenseState: true,
-          licenseExpirationDate: true,
-          businessAddress: true,
-          businessCity: true,
-          businessState: true,
-          businessZip: true,
-          taxId: true,
-          insuranceProvider: true,
-          insurancePolicyNumber: true,
-          insuranceExpirationDate: true,
-          yearsInBusiness: true,
-          websiteUrl: true,
-          businessType: true,
-          // Payment method info - ADDED
           paymentMethodLast4: true,
           paymentMethodBrand: true,
           paymentMethodExpMonth: true,
           paymentMethodExpYear: true,
-          isVerified: true,
-          verifiedAt: true,
-          // Performance
-          avgResponseTime: true,
-          conversionRate: true,
-          customerRating: true,
-          totalJobsCompleted: true,
-          totalLeadsReceived: true,
-          isAcceptingLeads: true,
-          isApproved: true,
-          isBetaTester: true,
-          betaTesterLeadCost: true,
-          createdAt: true,
+          // ... rest of fields ...
         },
       });
 
       if (!contractor) {
         return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // ✅ NEW: Try to sync with Stripe if data is missing
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      let stripeCustomerId = contractor.stripeCustomerId;
+      let paymentMethod = null;
+
+      // If no stripeCustomerId, try to find it
+      if (!stripeCustomerId) {
+        console.log("🔍 Searching for Stripe customer by email...");
+        const customers = await stripe.customers.list({
+          email: contractor.email,
+          limit: 1,
+        });
+
+        if (customers.data.length > 0) {
+          stripeCustomerId = customers.data[0].id;
+          console.log("✅ Found Stripe customer:", stripeCustomerId);
+
+          // Update database
+          await prisma.contractor.update({
+            where: { id: contractorId },
+            data: { stripeCustomerId: stripeCustomerId },
+          });
+        }
+      }
+
+      // If we have a customer ID, get latest payment method
+      if (stripeCustomerId) {
+        try {
+          const customer = await stripe.customers.retrieve(stripeCustomerId, {
+            expand: ['invoice_settings.default_payment_method'],
+          });
+
+          if (customer.invoice_settings?.default_payment_method) {
+            const pm = customer.invoice_settings.default_payment_method;
+            paymentMethod = {
+              last4: pm.card?.last4,
+              brand: pm.card?.brand,
+              expMonth: pm.card?.exp_month,
+              expYear: pm.card?.exp_year,
+            };
+
+            // Update database if changed
+            if (pm.card?.last4 !== contractor.paymentMethodLast4) {
+              await prisma.contractor.update({
+                where: { id: contractorId },
+                data: {
+                  paymentMethodLast4: pm.card?.last4,
+                  paymentMethodBrand: pm.card?.brand,
+                  paymentMethodExpMonth: pm.card?.exp_month,
+                  paymentMethodExpYear: pm.card?.exp_year,
+                },
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching Stripe customer:", error);
+        }
       }
 
       // Calculate subscription pricing
@@ -3042,14 +3065,15 @@ app.get(
           leadCost: leadCost,
           isBetaTester: contractor.isBetaTester || false,
           stripeSubscriptionId: contractor.stripeSubscriptionId,
-          paymentMethod: contractor.paymentMethodLast4
+          stripeCustomerId: stripeCustomerId, // ✅ Include this
+          paymentMethod: paymentMethod || (contractor.paymentMethodLast4
             ? {
                 last4: contractor.paymentMethodLast4,
                 brand: contractor.paymentMethodBrand,
                 expMonth: contractor.paymentMethodExpMonth,
                 expYear: contractor.paymentMethodExpYear,
               }
-            : null,
+            : null),
         },
         profile: {
           licenseNumber: contractor.licenseNumber,
@@ -3566,18 +3590,52 @@ app.post(
         where: { id: req.contractor.id },
       });
 
+      // ✅ CHECK: If no Stripe customer, try to find it by email
       if (!contractor.stripeCustomerId) {
+        console.log("⚠️ No stripeCustomerId found, searching by email...");
+        
+        const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+        
+        // Search for customer by email
+        const customers = await stripe.customers.list({
+          email: contractor.email,
+          limit: 1,
+        });
+
+        if (customers.data.length > 0) {
+          const stripeCustomer = customers.data[0];
+          console.log("✅ Found Stripe customer:", stripeCustomer.id);
+          
+          // Update database with found customer ID
+          await prisma.contractor.update({
+            where: { id: contractor.id },
+            data: { stripeCustomerId: stripeCustomer.id },
+          });
+
+          // Create portal session
+          const session = await stripe.billingPortal.sessions.create({
+            customer: stripeCustomer.id,
+            return_url: `${process.env.RAILWAY_URL || "https://app.getcontractornow.com"}/contractor`,
+          });
+
+          return res.json({
+            success: true,
+            url: session.url,
+          });
+        }
+
+        // Still no customer found
+        console.error("❌ No Stripe customer found for:", contractor.email);
         return res.status(400).json({
-          error: "No Stripe customer found. Please contact support.",
+          error: "No payment method found. Please contact support to link your account.",
         });
       }
 
-      // Create a portal session
+      // Has stripeCustomerId - create portal normally
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
       const session = await stripe.billingPortal.sessions.create({
         customer: contractor.stripeCustomerId,
-        return_url: `${
-          process.env.RAILWAY_URL || "https://app.getcontractornow.com"
-        }/contractor`,
+        return_url: `${process.env.RAILWAY_URL || "https://app.getcontractornow.com"}/contractor`,
       });
 
       res.json({
@@ -3587,7 +3645,10 @@ app.post(
     } catch (error) {
       console.error("Portal session error:", error);
       Sentry.captureException(error);
-      res.status(500).json({ error: "Failed to create portal session" });
+      res.status(500).json({ 
+        error: "Failed to create portal session",
+        details: error.message 
+      });
     }
   }
 );
