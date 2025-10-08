@@ -537,6 +537,8 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   const monitor = monitorWebhook("twilio", "call_status");
 
   try {
+    // ✅ TEST MODE: Skip signature verification if test parameter provided
+    const isTestMode = req.query.test === process.env.CRON_SECRET;
     // Verify the request came from Twilio
     const twilioSignature = req.headers["x-twilio-signature"];
     const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
