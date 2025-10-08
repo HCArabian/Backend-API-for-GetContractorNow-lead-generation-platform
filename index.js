@@ -2983,6 +2983,11 @@ app.post(
 );
 
 // Get Contractor Dashboard Data
+// ============================================
+// CONTRACTOR DASHBOARD ENDPOINT - BULLETPROOF VERSION
+// Replace your existing /api/contractor/dashboard with this
+// ============================================
+
 app.get(
   "/api/contractor/dashboard",
   authenticateContractor,
@@ -2990,54 +2995,102 @@ app.get(
     try {
       const contractorId = req.contractor.id;
 
+      console.log("📊 Loading dashboard for contractor:", contractorId);
+
       const contractor = await prisma.contractor.findUnique({
         where: { id: contractorId },
         select: {
-          // ... all your existing fields ...
-          stripeCustomerId: true,
-          stripeSubscriptionId: true,
+          id: true,
+          businessName: true,
+          email: true,
+          phone: true,
+          creditBalance: true,
           subscriptionTier: true,
           subscriptionStatus: true,
+          stripeCustomerId: true,
+          stripeSubscriptionId: true,
+          stripePaymentMethodId: true,
           paymentMethodLast4: true,
           paymentMethodBrand: true,
           paymentMethodExpMonth: true,
           paymentMethodExpYear: true,
-          // ... rest of fields ...
+          serviceZipCodes: true,
+          specializations: true,
+          status: true,
+          licenseNumber: true,
+          licenseState: true,
+          licenseExpirationDate: true,
+          businessAddress: true,
+          businessCity: true,
+          businessState: true,
+          businessZip: true,
+          taxId: true,
+          insuranceProvider: true,
+          insurancePolicyNumber: true,
+          insuranceExpirationDate: true,
+          yearsInBusiness: true,
+          websiteUrl: true,
+          businessType: true,
+          isVerified: true,
+          verifiedAt: true,
+          avgResponseTime: true,
+          conversionRate: true,
+          customerRating: true,
+          totalJobsCompleted: true,
+          totalLeadsReceived: true,
+          isAcceptingLeads: true,
+          isApproved: true,
+          isBetaTester: true,
+          betaTesterLeadCost: true,
+          createdAt: true,
         },
       });
 
       if (!contractor) {
+        console.error("❌ Contractor not found:", contractorId);
         return res.status(404).json({ error: "Contractor not found" });
       }
 
-      // ✅ NEW: Try to sync with Stripe if data is missing
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      console.log("✅ Contractor found:", contractor.businessName);
+
+      // ============================================
+      // SYNC WITH STRIPE (if data missing)
+      // ============================================
       let stripeCustomerId = contractor.stripeCustomerId;
       let paymentMethod = null;
 
-      // If no stripeCustomerId, try to find it
       if (!stripeCustomerId) {
-        console.log("🔍 Searching for Stripe customer by email...");
-        const customers = await stripe.customers.list({
-          email: contractor.email,
-          limit: 1,
-        });
-
-        if (customers.data.length > 0) {
-          stripeCustomerId = customers.data[0].id;
-          console.log("✅ Found Stripe customer:", stripeCustomerId);
-
-          // Update database
-          await prisma.contractor.update({
-            where: { id: contractorId },
-            data: { stripeCustomerId: stripeCustomerId },
+        console.log("🔍 No stripeCustomerId, searching Stripe...");
+        
+        try {
+          const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+          const customers = await stripe.customers.list({
+            email: contractor.email,
+            limit: 1,
           });
+
+          if (customers.data.length > 0) {
+            stripeCustomerId = customers.data[0].id;
+            console.log("✅ Found Stripe customer:", stripeCustomerId);
+
+            // Update database
+            await prisma.contractor.update({
+              where: { id: contractorId },
+              data: { stripeCustomerId: stripeCustomerId },
+            });
+          } else {
+            console.log("⚠️ No Stripe customer found for:", contractor.email);
+          }
+        } catch (stripeError) {
+          console.error("⚠️ Stripe lookup error:", stripeError.message);
+          // Continue anyway - don't fail the whole request
         }
       }
 
-      // If we have a customer ID, get latest payment method
+      // Get payment method from Stripe
       if (stripeCustomerId) {
         try {
+          const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
           const customer = await stripe.customers.retrieve(stripeCustomerId, {
             expand: ['invoice_settings.default_payment_method'],
           });
@@ -3045,31 +3098,51 @@ app.get(
           if (customer.invoice_settings?.default_payment_method) {
             const pm = customer.invoice_settings.default_payment_method;
             paymentMethod = {
-              last4: pm.card?.last4,
-              brand: pm.card?.brand,
-              expMonth: pm.card?.exp_month,
-              expYear: pm.card?.exp_year,
+              last4: pm.card?.last4 || contractor.paymentMethodLast4,
+              brand: pm.card?.brand || contractor.paymentMethodBrand,
+              expMonth: pm.card?.exp_month || contractor.paymentMethodExpMonth,
+              expYear: pm.card?.exp_year || contractor.paymentMethodExpYear,
             };
 
-            // Update database if changed
-            if (pm.card?.last4 !== contractor.paymentMethodLast4) {
+            // Update database if different
+            if (pm.card?.last4 && pm.card.last4 !== contractor.paymentMethodLast4) {
               await prisma.contractor.update({
                 where: { id: contractorId },
                 data: {
-                  paymentMethodLast4: pm.card?.last4,
-                  paymentMethodBrand: pm.card?.brand,
-                  paymentMethodExpMonth: pm.card?.exp_month,
-                  paymentMethodExpYear: pm.card?.exp_year,
+                  paymentMethodLast4: pm.card.last4,
+                  paymentMethodBrand: pm.card.brand,
+                  paymentMethodExpMonth: pm.card.exp_month,
+                  paymentMethodExpYear: pm.card.exp_year,
                 },
               });
+              console.log("✅ Payment method synced from Stripe");
             }
           }
-        } catch (error) {
-          console.error("Error fetching Stripe customer:", error);
+        } catch (stripeError) {
+          console.error("⚠️ Failed to fetch payment method:", stripeError.message);
+          // Use database values as fallback
+          if (contractor.paymentMethodLast4) {
+            paymentMethod = {
+              last4: contractor.paymentMethodLast4,
+              brand: contractor.paymentMethodBrand,
+              expMonth: contractor.paymentMethodExpMonth,
+              expYear: contractor.paymentMethodExpYear,
+            };
+          }
         }
+      } else if (contractor.paymentMethodLast4) {
+        // Use database values if no Stripe customer
+        paymentMethod = {
+          last4: contractor.paymentMethodLast4,
+          brand: contractor.paymentMethodBrand,
+          expMonth: contractor.paymentMethodExpMonth,
+          expYear: contractor.paymentMethodExpYear,
+        };
       }
 
-      // Calculate subscription pricing
+      // ============================================
+      // CALCULATE SUBSCRIPTION PRICING
+      // ============================================
       let monthlyPrice = 0;
       let leadCost = 0;
 
@@ -3087,7 +3160,9 @@ app.get(
         leadCost = 250;
       }
 
-      // Get lead count for current month
+      // ============================================
+      // GET LEADS THIS MONTH
+      // ============================================
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -3099,7 +3174,9 @@ app.get(
         },
       });
 
-      // Get recent transactions
+      // ============================================
+      // GET RECENT TRANSACTIONS
+      // ============================================
       const recentTransactions = await prisma.creditTransaction.findMany({
         where: { contractorId: contractorId },
         orderBy: { createdAt: "desc" },
@@ -3119,15 +3196,18 @@ app.get(
       if (contractor.subscriptionTier === "pro") maxLeads = 40;
       if (contractor.subscriptionTier === "elite") maxLeads = 999;
 
-      res.json({
+      // ============================================
+      // BUILD RESPONSE
+      // ============================================
+      const response = {
         contractor: {
           id: contractor.id,
           businessName: contractor.businessName,
           email: contractor.email,
           phone: contractor.phone,
           creditBalance: contractor.creditBalance || 0,
-          serviceZipCodes: contractor.serviceZipCodes,
-          specializations: contractor.specializations,
+          serviceZipCodes: contractor.serviceZipCodes || [],
+          specializations: contractor.specializations || [],
           status: contractor.status,
         },
         subscription: {
@@ -3136,43 +3216,34 @@ app.get(
           monthlyPrice: monthlyPrice,
           leadCost: leadCost,
           isBetaTester: contractor.isBetaTester || false,
-          stripeSubscriptionId: contractor.stripeSubscriptionId,
-          stripeCustomerId: stripeCustomerId, // ✅ Include this
-          paymentMethod: paymentMethod || (contractor.paymentMethodLast4
-            ? {
-                last4: contractor.paymentMethodLast4,
-                brand: contractor.paymentMethodBrand,
-                expMonth: contractor.paymentMethodExpMonth,
-                expYear: contractor.paymentMethodExpYear,
-              }
-            : null),
+          stripeSubscriptionId: contractor.stripeSubscriptionId || null,
+          stripeCustomerId: stripeCustomerId || null,
+          paymentMethod: paymentMethod,
         },
         profile: {
-          licenseNumber: contractor.licenseNumber,
-          licenseState: contractor.licenseState,
+          licenseNumber: contractor.licenseNumber || "",
+          licenseState: contractor.licenseState || "",
           licenseExpirationDate: contractor.licenseExpirationDate,
-          businessAddress: contractor.businessAddress,
-          businessCity: contractor.businessCity,
-          businessState: contractor.businessState,
-          businessZip: contractor.businessZip,
-          taxId: contractor.taxId
-            ? "***-**-" + contractor.taxId.slice(-4)
-            : null,
-          insuranceProvider: contractor.insuranceProvider,
-          insurancePolicyNumber: contractor.insurancePolicyNumber,
+          businessAddress: contractor.businessAddress || "",
+          businessCity: contractor.businessCity || "",
+          businessState: contractor.businessState || "",
+          businessZip: contractor.businessZip || "",
+          taxId: contractor.taxId ? "***-**-" + contractor.taxId.slice(-4) : null,
+          insuranceProvider: contractor.insuranceProvider || "",
+          insurancePolicyNumber: contractor.insurancePolicyNumber || "",
           insuranceExpirationDate: contractor.insuranceExpirationDate,
           yearsInBusiness: contractor.yearsInBusiness,
-          websiteUrl: contractor.websiteUrl,
-          businessType: contractor.businessType,
-          isVerified: contractor.isVerified,
+          websiteUrl: contractor.websiteUrl || "",
+          businessType: contractor.businessType || "",
+          isVerified: contractor.isVerified || false,
           verifiedAt: contractor.verifiedAt,
           avgResponseTime: contractor.avgResponseTime,
           conversionRate: contractor.conversionRate,
           customerRating: contractor.customerRating,
-          totalJobsCompleted: contractor.totalJobsCompleted,
-          totalLeadsReceived: contractor.totalLeadsReceived,
-          isAcceptingLeads: contractor.isAcceptingLeads,
-          isApproved: contractor.isApproved,
+          totalJobsCompleted: contractor.totalJobsCompleted || 0,
+          totalLeadsReceived: contractor.totalLeadsReceived || 0,
+          isAcceptingLeads: contractor.isAcceptingLeads || false,
+          isApproved: contractor.isApproved || false,
           memberSince: contractor.createdAt,
         },
         stats: {
@@ -3180,10 +3251,28 @@ app.get(
           maxLeadsPerMonth: maxLeads,
         },
         recentTransactions: recentTransactions,
-      });
+      };
+
+      console.log("✅ Dashboard data prepared successfully");
+      console.log(`   Subscription: ${response.subscription.tier} (${response.subscription.status})`);
+      console.log(`   Payment Method: ${paymentMethod ? `${paymentMethod.brand} ****${paymentMethod.last4}` : 'None'}`);
+      console.log(`   Credit Balance: $${response.contractor.creditBalance}`);
+
+      res.json(response);
     } catch (error) {
-      console.error("Dashboard error:", error);
-      res.status(500).json({ error: "Failed to load dashboard data" });
+      console.error("❌ Dashboard error:", error);
+      console.error("Stack trace:", error.stack);
+      
+      // Send detailed error in development
+      if (process.env.NODE_ENV === "development") {
+        res.status(500).json({ 
+          error: "Failed to load dashboard data",
+          details: error.message,
+          stack: error.stack,
+        });
+      } else {
+        res.status(500).json({ error: "Failed to load dashboard data" });
+      }
     }
   }
 );
