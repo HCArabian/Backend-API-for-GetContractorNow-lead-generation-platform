@@ -630,7 +630,7 @@ app.use((req, res, next) => {
 // Static files
 app.use(express.static("public"));
 
-// Stripe webhook handler
+/* // Stripe webhook handler
 // Stripe webhook handler with signature verification
 app.post(
   "/api/webhooks/stripe",
@@ -689,7 +689,7 @@ app.post(
 
     res.json({ received: true });
   }
-);
+); */
 
 // Body parsers (AFTER webhook)
 app.use(express.json());

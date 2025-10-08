@@ -1515,16 +1515,24 @@ module.exports = {
   sendFeedbackRequestEmail,
   sendContractorOnboardingEmail,
   sendContractorSuspensionEmail,
-  sendContractorReactivationEmail, 
+  sendContractorReactivationEmail,
+  
+  // Application emails (full names)
   sendApplicationConfirmationEmail,
   sendAdminNewApplicationAlert,
   sendApplicationRejectionEmail,
   sendApplicationInfoRequestEmail,
+  
+  // ✅ ALIASES for index.js (short names)
+  sendApplicationConfirmation: sendApplicationConfirmationEmail,
+  sendAdminApplicationAlert: sendAdminNewApplicationAlert,
+  
   // Legal Compliance
   sendDeletionRequestAlert,
   sendDeletionConfirmation,
   sendSMSOptOutConfirmation,
-  // Low Credit Warnings - NEW
+  
+  // Low Credit Warnings
   sendLowCreditWarning,
   sendCreditDepletedEmail,
   sendLowCreditSMS,
