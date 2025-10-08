@@ -3932,6 +3932,10 @@ app.post("/api/contractors/apply", async (req, res) => {
       validationErrors.push(serviceTypesValidation.error);
     }
     const serviceTypes = serviceTypesValidation.formatted;
+    
+    // ⚠️ IMPORTANT: Schema uses 'specializations' not 'serviceTypes'
+    // Rename for Prisma compatibility
+    const specializations = serviceTypes;
 
     // ============================================
     // 10. VALIDATE SERVICE ZIP CODES
@@ -4012,7 +4016,7 @@ app.post("/api/contractors/apply", async (req, res) => {
           : null,
         
         // Service Info - ✅ VERIFIED FIELD NAMES
-        serviceTypes: serviceTypes,
+        specializations: specializations,  // ✅ Schema uses 'specializations' not 'serviceTypes'
         serviceZipCodes: serviceZipCodes,
         description: data.description || "",
         
@@ -4070,7 +4074,7 @@ app.post("/api/contractors/apply", async (req, res) => {
     console.log(`   Business: ${contractor.businessName}`);
     console.log(`   Email: ${contractor.email}`);
     console.log(`   Phone: ${contractor.phone}`);
-    console.log(`   Service Types: ${contractor.serviceTypes.join(", ")}`);
+    console.log(`   Specializations: ${contractor.specializations.join(", ")}`);
     console.log(`   Service ZIPs: ${contractor.serviceZipCodes.join(", ")}`);
 
     res.json({
@@ -4106,6 +4110,8 @@ app.post("/api/contractors/apply", async (req, res) => {
     });
   }
 });
+
+
 // ============================================
 // LEGAL COMPLIANCE ENDPOINTS
 // ============================================
