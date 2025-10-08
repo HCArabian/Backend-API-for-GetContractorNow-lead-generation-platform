@@ -2409,14 +2409,6 @@ app.get("/api/admin/bounced-emails", newAdminAuth, async (req, res) => {
   }
 });
 
-const {
-  getLeadCostForContractor,
-  canContractorReceiveLeads,
-  getMinimumCreditBalance,
-  getCreditExpiryDate,
-  formatCurrency,
-} = require("./subscription-helpers");
-
 // ============================================
 // CREDIT MANAGEMENT ENDPOINTS
 // ============================================
