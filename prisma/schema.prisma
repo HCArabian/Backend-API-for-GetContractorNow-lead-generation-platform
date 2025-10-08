@@ -140,6 +140,10 @@ model Contractor {
   assignments             LeadAssignment[]
   notificationLogs        NotificationLog[]
   smsLogs                 SMSLog[]
+  // ✅ ADD THESE NEW FIELDS:
+  description             String?             // Contractor's business description
+  referralSource          String?             // How they heard about us
+  notes                   String? 
 
   @@index([email])
   @@index([phone])
