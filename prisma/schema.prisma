@@ -8,69 +8,51 @@ datasource db {
 }
 
 model Lead {
-  id                String   @id @default(uuid())
-  
-  // Customer Info
-  customerFirstName String
-  customerLastName  String
-  customerEmail     String
-  customerEmailBounced Boolean  @default(false)
-  customerPhone     String
-  customerAddress   String
-  customerCity      String
-  customerState     String
-  customerZip       String
-  
-  // Service Details
-  serviceType       String
-  serviceDescription String?
-  timeline          String
-  budgetRange       String
-  propertyType      String
-  propertyAge       String?   // 0-5, 5-10, 10-20, 20+ years
-  existingSystem    String?   // central_air, window_units, heat_pump, none
-  systemIssue       String?   // not_cooling, strange_noise, not_heating, complete_failure
-  
-  // Contact Preferences
-  preferredContactTime String? // anytime, morning, afternoon, evening
-  preferredContactMethod String? @default("phone") // phone, email, sms
-  
-  // Marketing/Tracking
-  referralSource    String?   // google, facebook, referral, direct, other
-  utmSource         String?   // Track ad campaigns
-  utmMedium         String?   // Track ad campaigns
-  utmCampaign       String?   // Track ad campaigns
-  
-  // Form Metadata (fraud detection)
-  formCompletionTime Int?    // Seconds to complete form
-  ipAddress         String?   // For duplicate/fraud detection
-  userAgent         String?   // Browser/device info
-  deviceFingerprint String?   // Unique device ID
-  
-  // Scoring
-  score             Int
-  category          String
-  price             Float
-  qualityFlags      Json?
-  confidenceLevel   Int?      // Confidence in conversion (0-100%)
-  
-  // Status
-  status            String   @default("pending_assignment")
-  rejectionReason   String?   // Why lead was rejected (if auto-rejected)
-  
-  // Timestamps
-  createdAt         DateTime @default(now())
-  assignedAt        DateTime?
-  firstContactAt    DateTime?
-  outcomeConfirmedAt DateTime?
-  
-  // Relations
-  assignment        LeadAssignment?
-  billingRecords    BillingRecord[]
-  callLogs          CallLog[]
-  smsLogs           SMSLog[]
-  feedback          CustomerFeedback[]
-  
+  id                     String             @id @default(uuid())
+  customerFirstName      String
+  customerLastName       String
+  customerEmail          String
+  customerPhone          String
+  customerAddress        String
+  customerCity           String
+  customerState          String
+  customerZip            String
+  serviceType            String
+  serviceDescription     String?
+  timeline               String
+  budgetRange            String
+  propertyType           String
+  propertyAge            String?
+  existingSystem         String?
+  systemIssue            String?
+  preferredContactTime   String?
+  preferredContactMethod String?            @default("phone")
+  referralSource         String?
+  utmSource              String?
+  utmMedium              String?
+  utmCampaign            String?
+  formCompletionTime     Int?
+  ipAddress              String?
+  userAgent              String?
+  deviceFingerprint      String?
+  score                  Int
+  category               String
+  price                  Float
+  qualityFlags           Json?
+  confidenceLevel        Int?
+  status                 String             @default("pending_assignment")
+  rejectionReason        String?
+  createdAt              DateTime           @default(now())
+  assignedAt             DateTime?
+  firstContactAt         DateTime?
+  outcomeConfirmedAt     DateTime?
+  customerEmailBounced   Boolean            @default(false)
+  billingRecords         BillingRecord[]
+  callLogs               CallLog[]
+  feedback               CustomerFeedback[]
+  assignment             LeadAssignment?
+  smsLogs                SMSLog[]
+
   @@index([customerEmail])
   @@index([customerPhone])
   @@index([customerZip])
@@ -83,120 +65,82 @@ model Lead {
 }
 
 model Contractor {
-  id                      String   @id @default(uuid())
-  
-  // Basic Info
+  id                      String              @id @default(uuid())
   businessName            String
-  email                   String   @unique
+  email                   String              @unique
   phone                   String
-  passwordHash            String   // ✅ FIXED - was "password"
-  
-  // Verification Fields
-  licenseNumber           String?
-  licenseState            String?
-  licenseExpirationDate   DateTime?
   businessAddress         String?
   businessCity            String?
   businessState           String?
   businessZip             String?
-  taxId                   String?
-  insuranceProvider       String?
-  insurancePolicyNumber   String?
-  insuranceExpirationDate DateTime?
+  licenseNumber           String?
   yearsInBusiness         Int?
-  websiteUrl              String?
-  businessType            String?
-  
-  // Payment Method Info
-  paymentMethodLast4      String?
-  paymentMethodBrand      String?
-  paymentMethodExpMonth   Int?
-  paymentMethodExpYear    Int?
-  
-  // Verification Status
-  isVerified              Boolean  @default(false)
-  verifiedAt              DateTime?
-  verificationNotes       String?
-  
-  // Service Coverage
   serviceZipCodes         String[]
   specializations         String[]
-  
-  // Performance Metrics
   avgResponseTime         Int?
   conversionRate          Float?
   customerRating          Float?
-  totalJobsCompleted      Int?
   totalLeadsReceived      Int?
-  totalReviews            Int?     // ✅ ADDED - needed by API
-  
-  // Account Status
-  status                  String   @default("active")
-  isAcceptingLeads        Boolean  @default(true)
-  isApproved              Boolean  @default(false)
-  requirePasswordChange   Boolean  @default(false)  // ✅ ADDED - needed by login
-  lastActiveAt            DateTime?                 // ✅ ADDED - needed by login
-  
-  // Subscription
-  subscriptionTier        String?
-  subscriptionStatus      String?  @default("inactive")
-  subscriptionStartDate   DateTime?
-  subscriptionEndDate     DateTime?
-  creditBalance           Float    @default(0.00)
-  isBetaTester            Boolean  @default(false)
-  betaTesterLeadCost      Float?
-  
-  // Stripe
+  totalJobsCompleted      Int?
+  status                  String              @default("active")
+  isAcceptingLeads        Boolean             @default(true)
+  isVerified              Boolean             @default(false)
+  createdAt               DateTime            @default(now())
   stripeCustomerId        String?
-  stripeSubscriptionId    String?
   stripePaymentMethodId   String?
-  
-  // Account Management
-  emailBounced            Boolean  @default(false)
-  emailBouncedAt          DateTime?
+  businessType            String?
+  creditBalance           Float               @default(0.00)
+  insuranceExpirationDate DateTime?
+  insurancePolicyNumber   String?
+  insuranceProvider       String?
+  isApproved              Boolean             @default(false)
+  licenseExpirationDate   DateTime?
+  licenseState            String?
+  paymentMethodBrand      String?
+  paymentMethodExpMonth   Int?
+  paymentMethodExpYear    Int?
+  paymentMethodLast4      String?
+  stripeSubscriptionId    String?
+  subscriptionStatus      String?             @default("inactive")
+  subscriptionTier        String?
+  taxId                   String?
+  updatedAt               DateTime            @updatedAt
+  verificationNotes       String?
+  verifiedAt              DateTime?
+  websiteUrl              String?
+  betaTesterLeadCost      Float?
   emailBounceReason       String?
+  emailBounced            Boolean             @default(false)
+  emailBouncedAt          DateTime?
+  isBetaTester            Boolean             @default(false)
+  lastActiveAt            DateTime?
+  passwordHash            String
+  requirePasswordChange   Boolean             @default(false)
+  subscriptionEndDate     DateTime?
+  subscriptionStartDate   DateTime?
   suspensionReason        String?
-  
-  // Timestamps
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  
-  // Relations
-  assignments             LeadAssignment[]
+  totalReviews            Int?
+  acceptedTCPAAt          DateTime?
+  acceptedTermsAt         DateTime?
+  applicationSubmittedAt  DateTime?
+  deletionRequestedAt     DateTime?
+  ipAddress               String?
+  privacyPolicyAcceptedAt DateTime?
+  privacyPolicyVersion    String?             @default("1.0")
+  smsOptOutAt             DateTime?
+  smsOptedOut             Boolean             @default(false)
+  tcpaConsentText         String?
+  termsVersion            String?             @default("1.0")
+  userAgent               String?
   billingRecords          BillingRecord[]
   callLogs                CallLog[]
-  smsLogs                 SMSLog[]
-  disputes                Dispute[]
-  feedback                CustomerFeedback[]
   creditTransactions      CreditTransaction[]
+  feedback                CustomerFeedback[]
+  disputes                Dispute[]
+  assignments             LeadAssignment[]
   notificationLogs        NotificationLog[]
+  smsLogs                 SMSLog[]
 
-// LEGAL COMPLIANCE FIELDS
-  // ============================================
-  
-  // Terms of Service
-  acceptedTermsAt       DateTime?
-  termsVersion          String?         @default("1.0")
-  
-  // TCPA Compliance (SMS consent)
-  acceptedTCPAAt        DateTime?
-  tcpaConsentText       String?         @db.Text
-  smsOptedOut           Boolean         @default(false)
-  smsOptOutAt           DateTime?
-  
-  // Privacy Policy
-  privacyPolicyAcceptedAt DateTime?
-  privacyPolicyVersion    String?       @default("1.0")
-  
-  // Application tracking
-  ipAddress             String?
-  userAgent             String?         @db.Text
-  applicationSubmittedAt DateTime?
-  
-  // Data deletion (GDPR/CCPA)
-  deletionRequestedAt   DateTime?
-
-  
   @@index([email])
   @@index([phone])
   @@index([status])
@@ -212,18 +156,16 @@ model Contractor {
 }
 
 model LeadAssignment {
-  id               String   @id @default(uuid())
-  leadId           String   @unique
+  id               String     @id @default(uuid())
+  leadId           String     @unique
   contractorId     String
-  
-  trackingNumber   String?  // Now from the pool
-  assignedAt       DateTime @default(now())
+  assignedAt       DateTime   @default(now())
   responseDeadline DateTime
-  status           String   @default("assigned")
-  
-  lead             Lead      @relation(fields: [leadId], references: [id])
+  status           String     @default("assigned")
+  trackingNumber   String?
   contractor       Contractor @relation(fields: [contractorId], references: [id])
-  
+  lead             Lead       @relation(fields: [leadId], references: [id])
+
   @@index([contractorId])
   @@index([status])
   @@index([trackingNumber])
@@ -232,52 +174,40 @@ model LeadAssignment {
 }
 
 model BillingRecord {
-  id            String   @id @default(uuid())
-  leadId        String
-  contractorId  String
-  
-  // Billing Details
-  amountOwed    Float
-  status        String   @default("pending") // pending, invoiced, paid, credited
-  notes         String?
-  invoiceNumber String?  // Your invoice number when sent
+  id              String     @id @default(uuid())
+  leadId          String
+  contractorId    String
+  amountOwed      Float
+  status          String     @default("pending")
+  notes           String?
+  invoiceNumber   String?
+  dateIncurred    DateTime   @default(now())
+  invoicedAt      DateTime?
+  paidAt          DateTime?
   stripePaymentId String?
+  contractor      Contractor @relation(fields: [contractorId], references: [id])
+  lead            Lead       @relation(fields: [leadId], references: [id])
 
-  
-  // Timestamps
-  dateIncurred  DateTime @default(now())
-  invoicedAt    DateTime?
-  paidAt        DateTime?
-  
-  // Relations
-  lead          Lead      @relation(fields: [leadId], references: [id])
-  contractor    Contractor @relation(fields: [contractorId], references: [id])
-  
   @@unique([leadId, contractorId])
   @@index([contractorId])
   @@index([leadId])
   @@index([status])
   @@index([dateIncurred])
-
 }
 
 model TrackingNumber {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   leadId           String
   contractorId     String
-  
-  // Twilio Numbers
   twilioNumber     String
-  twilioSid        String?  // Twilio phone number SID
+  twilioSid        String?
   customerNumber   String
   contractorNumber String
-  
-  // Status
-  status           String   @default("active") // active, expired, released
-  createdAt        DateTime @default(now())
+  status           String    @default("active")
+  createdAt        DateTime  @default(now())
   expiresAt        DateTime
   releasedAt       DateTime?
-  
+
   @@index([leadId])
   @@index([twilioNumber])
   @@index([status])
@@ -285,32 +215,24 @@ model TrackingNumber {
 }
 
 model CallLog {
-  id              String   @id @default(uuid())
-  leadId          String
-  contractorId    String
-  
-  // Call Details
-  callSid         String   @unique
-  callDirection   String   // contractor_to_customer, customer_to_contractor
-  trackingNumber  String
-  
-  // Call Metrics
-  callStartedAt   DateTime
-  callEndedAt     DateTime?
-  callDuration    Int?      // Seconds
-  callStatus      String    // completed, no-answer, busy, failed
-  recordingUrl    String?
-  recordingSid    String?
-  
-  // Analysis (optional - for future AI features)
-  transcript      String?
-  sentiment       String?   // positive, neutral, negative
-  keywordsDetected String[] // ["schedule", "quote", "price"]
-  
-  // Relations
-  lead            Lead      @relation(fields: [leadId], references: [id])
-  contractor      Contractor @relation(fields: [contractorId], references: [id])
-  
+  id               String     @id @default(uuid())
+  leadId           String
+  contractorId     String
+  callSid          String     @unique
+  callDirection    String
+  trackingNumber   String
+  callStartedAt    DateTime
+  callEndedAt      DateTime?
+  callDuration     Int?
+  callStatus       String
+  recordingUrl     String?
+  recordingSid     String?
+  transcript       String?
+  sentiment        String?
+  keywordsDetected String[]
+  contractor       Contractor @relation(fields: [contractorId], references: [id])
+  lead             Lead       @relation(fields: [leadId], references: [id])
+
   @@index([leadId])
   @@index([contractorId])
   @@index([callSid])
@@ -318,55 +240,41 @@ model CallLog {
 }
 
 model SMSLog {
-  id              String   @id @default(uuid())
-  leadId          String
-  contractorId    String
-  
-  // SMS Details
-  messageSid      String   @unique
-  fromNumber      String
-  toNumber        String
-  messageBody     String
-  direction       String   // contractor_to_customer, customer_to_contractor
-  
-  // Status
-  status          String   // sent, delivered, failed
-  sentAt          DateTime @default(now())
-  deliveredAt     DateTime?
-  
-  // Relations
-  lead            Lead      @relation(fields: [leadId], references: [id])
-  contractor      Contractor @relation(fields: [contractorId], references: [id])
-  
+  id           String     @id @default(uuid())
+  leadId       String
+  contractorId String
+  messageSid   String     @unique
+  fromNumber   String
+  toNumber     String
+  messageBody  String
+  direction    String
+  status       String
+  sentAt       DateTime   @default(now())
+  deliveredAt  DateTime?
+  contractor   Contractor @relation(fields: [contractorId], references: [id])
+  lead         Lead       @relation(fields: [leadId], references: [id])
+
   @@index([leadId])
   @@index([contractorId])
   @@index([messageSid])
 }
 
 model Dispute {
-  id              String   @id @default(uuid())
+  id              String     @id @default(uuid())
   leadId          String
   contractorId    String
-  
-  // Dispute Details
-  reason          String   // invalid_phone, customer_no_contact, wrong_info, etc.
+  reason          String
   description     String?
-  evidence        Json?    // Screenshots, notes, etc.
-  status          String   @default("pending") // pending, under_review, approved, denied
-  
-  // Resolution
-  resolution      String?  // full_credit, partial_credit, replacement_lead, denied
+  evidence        Json?
+  status          String     @default("pending")
+  resolution      String?
   resolutionNotes String?
-  creditAmount    Float?   // If credit given
-  
-  // Timestamps
-  submittedAt     DateTime @default(now())
+  creditAmount    Float?
+  submittedAt     DateTime   @default(now())
   reviewedAt      DateTime?
   resolvedAt      DateTime?
-  
-  // Relations
   contractor      Contractor @relation(fields: [contractorId], references: [id])
-  
+
   @@index([contractorId])
   @@index([leadId])
   @@index([status])
@@ -374,37 +282,25 @@ model Dispute {
 }
 
 model CustomerFeedback {
-  id                String   @id @default(uuid())
-  leadId            String
-  contractorId      String
-  
-  // Contact Confirmation
-  contractorCalled  Boolean?  // Did contractor call?
-  contactMethod     String?   // phone, sms, email
-  
-  // Outcome
-  outcome           String?   // job_completed, job_scheduled, quote_provided, no_conversion
-  jobValue          Float?    // How much the job cost (if completed)
-  outcomeNotes      String?
-  
-  // Rating
-  rating            Int?      // 1-5 stars
-  feedbackText      String?
-  wouldRecommend    Boolean?
-  
-  // Specific Ratings (optional detailed feedback)
-  professionalismRating Int?  // 1-5
-  qualityRating        Int?   // 1-5
-  valueRating          Int?   // 1-5
-  timelinessRating     Int?   // 1-5
-  
-  // Timestamps
-  submittedAt       DateTime @default(now())
-  
-  // Relations
-  lead              Lead      @relation(fields: [leadId], references: [id])
-  contractor        Contractor @relation(fields: [contractorId], references: [id])
-  
+  id                    String     @id @default(uuid())
+  leadId                String
+  contractorId          String
+  contractorCalled      Boolean?
+  contactMethod         String?
+  outcome               String?
+  jobValue              Float?
+  outcomeNotes          String?
+  rating                Int?
+  feedbackText          String?
+  wouldRecommend        Boolean?
+  professionalismRating Int?
+  qualityRating         Int?
+  valueRating           Int?
+  timelinessRating      Int?
+  submittedAt           DateTime   @default(now())
+  contractor            Contractor @relation(fields: [contractorId], references: [id])
+  lead                  Lead       @relation(fields: [leadId], references: [id])
+
   @@index([leadId])
   @@index([contractorId])
   @@index([rating])
@@ -413,23 +309,20 @@ model CustomerFeedback {
 
 model NotificationLog {
   id           String      @id @default(uuid())
-  contractorId String?     // ADD THIS - optional relation to contractor
-  
-  type         String      // email, sms
-  recipient    String
+  type         String
   subject      String?
   body         String?
-  status       String      // sent, failed
+  status       String
   sentAt       DateTime    @default(now())
-  metadata     Json?       // Store leadId, contractorId, etc.
-  
-  // ADD THIS RELATION
-  contractor   Contractor? @relation(fields: [contractorId], references: [id], onDelete: SetNull)
-  
+  metadata     Json?
+  recipient    String
+  contractorId String?
+  contractor   Contractor? @relation(fields: [contractorId], references: [id])
+
   @@index([type])
   @@index([status])
   @@index([sentAt])
-  @@index([contractorId])  // ADD THIS INDEX
+  @@index([contractorId])
 }
 
 model TwilioNumberPool {
@@ -440,50 +333,44 @@ model TwilioNumberPool {
   assignedAt    DateTime?
   expiresAt     DateTime?
   createdAt     DateTime  @default(now())
-  
+
   @@index([status])
   @@index([phoneNumber])
   @@index([expiresAt])
 }
+
 model CreditTransaction {
-  id                String   @id @default(uuid())
-  contractorId      String
-  
-  // Transaction Details
-  type              String   // deposit, deduction, refund, expiration_refund, adjustment
-  amount            Float    // Positive for deposits, negative for deductions
-  balanceBefore     Float
-  balanceAfter      Float
-  
-  // For Deposits
-  stripePaymentId   String?  // pi_xxxxx for deposits
-  expiresAt         DateTime? // 60 days from deposit
-  
-  // For Deductions
-  leadId            String?
-  billingRecordId   String?
-  
-  // Metadata
-  description       String
-  createdAt         DateTime @default(now())
-  
-  // Relations
-  contractor        Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
-  
+  id              String     @id @default(uuid())
+  contractorId    String
+  type            String
+  amount          Float
+  balanceBefore   Float
+  balanceAfter    Float
+  stripePaymentId String?
+  expiresAt       DateTime?
+  leadId          String?
+  billingRecordId String?
+  description     String
+  createdAt       DateTime   @default(now())
+  contractor      Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
   @@index([contractorId])
   @@index([type])
   @@index([expiresAt])
   @@index([createdAt])
   @@map("CreditTransaction")
 }
+
 model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
   name         String
-  role         String   @default("admin") // admin, super_admin
-  isActive     Boolean  @default(true)
+  role         String    @default("admin")
+  isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+
+  @@map("Admin")
 }
