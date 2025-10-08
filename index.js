@@ -1,11 +1,90 @@
 const Sentry = require("@sentry/node");
-
+const { ProfilingIntegration } = require("@sentry/profiling-node");
 // Initialize Sentry FIRST
+// Initialize Sentry with enhanced configuration
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   environment: process.env.NODE_ENV || "production",
-  tracesSampleRate: 1.0,
+
+  // Performance Monitoring
+  tracesSampleRate: 1.0, // 100% of transactions
+
+  // Profiling (find slow code)
+  profilesSampleRate: 1.0,
+  integrations: [new ProfilingIntegration()],
+
+  // Enhanced error tracking
+  beforeSend(event, hint) {
+    // Add custom context
+    const error = hint.originalException;
+
+    if (error && error.statusCode) {
+      event.tags = event.tags || {};
+      event.tags.statusCode = error.statusCode;
+    }
+
+    // Don't send 404 errors (too noisy)
+    if (event.tags?.statusCode === 404) {
+      return null;
+    }
+
+    return event;
+  },
+
+  // Ignore certain errors
+  ignoreErrors: [
+    "Non-Error exception captured",
+    "Navigation cancelled",
+    "ResizeObserver loop limit exceeded",
+  ],
 });
+
+// ============================================
+// SENTRY MONITORING HELPERS
+// ============================================
+
+// Monitor webhook processing
+function monitorWebhook(webhookType, operation) {
+  const transaction = Sentry.startTransaction({
+    op: "webhook",
+    name: `${webhookType}.${operation}`,
+  });
+
+  return {
+    finish: (success = true) => {
+      transaction.setStatus(success ? "ok" : "error");
+      transaction.finish();
+    },
+    setData: (key, value) => {
+      transaction.setData(key, value);
+    },
+  };
+}
+
+// Monitor lead assignment
+function monitorLeadAssignment(leadId) {
+  const transaction = Sentry.startTransaction({
+    op: "lead_assignment",
+    name: "Assign Lead to Contractor",
+  });
+
+  transaction.setData("leadId", leadId);
+
+  return transaction;
+}
+
+// Monitor credit deduction
+function monitorCreditDeduction(contractorId, amount) {
+  const transaction = Sentry.startTransaction({
+    op: "billing",
+    name: "Credit Deduction",
+  });
+
+  transaction.setData("contractorId", contractorId);
+  transaction.setData("amount", amount);
+
+  return transaction;
+}
 
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
@@ -28,9 +107,8 @@ const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  authenticateAdmin: newAdminAuth
-} = require('./admin-auth');
-
+  authenticateAdmin: newAdminAuth,
+} = require("./admin-auth");
 
 const app = express();
 
@@ -47,10 +125,18 @@ const path = require("path");
 // STRIPE SUBSCRIPTION WEBHOOK
 // ============================================
 
+// Request handler must be the first middleware
+app.use(Sentry.Handlers.requestHandler());
+
+// TracingHandler creates a trace for every incoming request
+app.use(Sentry.Handlers.tracingHandler());
+
 app.post(
   "/api/webhooks/stripe/subscription",
   express.json({ type: "application/json" }), // ✅ Add back, but specify type
   async (req, res) => {
+    const monitor = monitorWebhook("stripe", "subscription"); // ✅ ADD THIS LINE
+
     console.log("📬 Webhook received");
     console.log("Event type:", req.body?.type);
     console.log("Full body:", JSON.stringify(req.body, null, 2)); // ✅ ADD THIS DEBUG LINE
@@ -58,16 +144,34 @@ app.post(
     const event = req.body;
 
     if (!event || !event.type) {
+      monitor.finish(false); // ✅ ADD THIS
+
       return res.status(400).json({ error: "Invalid payload" });
     }
+
+    monitor.setData("eventType", event.type); // ✅ ADD THIS
 
     try {
       if (event.type === "customer.subscription.created") {
         await handleSubscriptionCreated(event.data.object);
       }
 
+      monitor.finish(true); // ✅ ADD THIS
+
       res.json({ received: true });
     } catch (error) {
+      monitor.finish(false); // ✅ ADD THIS
+      Sentry.captureException(error, {
+        // ✅ ADD THIS BLOCK
+        tags: {
+          webhook: "stripe",
+          eventType: event.type,
+        },
+        extra: {
+          eventId: event.id,
+        },
+      });
+
       console.error("Webhook error:", error);
       res.status(500).json({ error: error.message });
     }
@@ -295,8 +399,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-
-
 // Lead submission endpoint
 app.post("/api/leads/submit", async (req, res) => {
   try {
@@ -428,6 +530,8 @@ app.post("/api/leads/submit", async (req, res) => {
 // ============================================
 // Twilio webhook with signature verification
 app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+  const monitor = monitorWebhook("twilio", "call_status");
+
   try {
     // Verify the request came from Twilio
     const twilioSignature = req.headers["x-twilio-signature"];
@@ -447,6 +551,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         timestamp: new Date(),
       });
       console.error("Invalid Twilio signature - possible fraud attempt");
+      monitor.finish(false); // ✅ ADD THIS
       return res.status(403).json({ error: "Invalid signature" });
     }
 
@@ -461,6 +566,9 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       RecordingUrl: recordingUrl,
       RecordingSid: recordingSid,
     } = req.body;
+
+    monitor.setData("callSid", callSid); // ✅ ADD THIS
+    monitor.setData("callStatus", callStatus); // ✅ ADD THIS
 
     console.log("📞 TWILIO WEBHOOK (verified):", {
       callSid,
@@ -495,10 +603,10 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       if (!assignment) {
         console.error("❌ No assignment found for tracking number:", to);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">This tracking number is not currently assigned. Please contact support.</Say>
-  <Hangup/>
-</Response>`;
+        <Response>
+        <Say voice="alice">This tracking number is not currently assigned. Please contact support.</Say>
+        <Hangup/>
+        </Response>`;
         return res.type("text/xml").send(twiml);
       }
 
@@ -514,10 +622,10 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
           `   Expected: ${normalizedContractorPhone}, Got: ${normalizedFrom}`
         );
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">This number is assigned to a different contractor.</Say>
-  <Hangup/>
-</Response>`;
+        <Response>
+        <Say voice="alice">This number is assigned to a different contractor.</Say>
+        <Hangup/>
+        </Response>`;
         return res.type("text/xml").send(twiml);
       }
 
@@ -526,12 +634,12 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
 
       // Forward call and record
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Connecting your call, please wait.</Say>
-  <Dial record="record-from-answer" recordingStatusCallback="${process.env.RAILWAY_URL}/api/webhooks/twilio/call-status">
-    ${customerPhone}
-  </Dial>
-</Response>`;
+      <Response>
+      <Say voice="alice">Connecting your call, please wait.</Say>
+      <Dial record="record-from-answer" recordingStatusCallback="${process.env.RAILWAY_URL}/api/webhooks/twilio/call-status">
+        ${customerPhone}
+        </Dial>
+      </Response>`;
 
       return res.type("text/xml").send(twiml);
     }
@@ -693,7 +801,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
       try {
         // ✅ Ensure balance doesn't go negative
         const finalBalance = Math.max(0, newBalance);
-        
+
         await prisma.$transaction([
           // 1. Create credit transaction record
           prisma.creditTransaction.create({
@@ -764,34 +872,38 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         // ============================================
         // LOW CREDIT WARNINGS (after successful deduction)
         // ============================================
-        
-        const { sendLowCreditWarning, sendCreditDepletedEmail, sendLowCreditSMS } = require('./notifications');
-        
+
+        const {
+          sendLowCreditWarning,
+          sendCreditDepletedEmail,
+          sendLowCreditSMS,
+        } = require("./notifications");
+
         // Check thresholds and send warnings
         const previousBalance = fullContractor.creditBalance;
-        
+
         // WARNING: Crossed $100 threshold (going down)
         if (previousBalance > 100 && finalBalance <= 100) {
-          console.log('⚠️ Credit balance dropped below $100');
+          console.log("⚠️ Credit balance dropped below $100");
           await sendLowCreditWarning(fullContractor, finalBalance, 100);
         }
-        
+
         // URGENT WARNING: Crossed $50 threshold (going down)
         if (previousBalance > 50 && finalBalance <= 50) {
-          console.log('🚨 Credit balance dropped below $50 - URGENT');
+          console.log("🚨 Credit balance dropped below $50 - URGENT");
           await sendLowCreditWarning(fullContractor, finalBalance, 50);
           await sendLowCreditSMS(fullContractor, finalBalance);
         }
-        
+
         // CRITICAL: Balance reached $0 or below
         if (finalBalance <= 0) {
-          console.log('🚨 CRITICAL: Credit depleted - account paused');
-          
+          console.log("🚨 CRITICAL: Credit depleted - account paused");
+
           // ✅ No need to update DB - already done in transaction above
           // Just send notifications
           await sendCreditDepletedEmail(fullContractor);
           await sendLowCreditSMS(fullContractor, 0);
-          
+
           console.log(`⛔ Account paused: ${fullContractor.businessName}`);
         }
 
@@ -844,11 +956,11 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         });
       }
     }
-
     // Call did not qualify for billing (less than 30 seconds or not completed)
     console.log("ℹ️ Call did not qualify for billing");
     console.log(`   Status: ${callStatus}, Duration: ${callDuration}s`);
 
+    monitor.finish(true); // End of try block
     return res.json({
       success: true,
       message: "Call logged - no billing",
@@ -858,6 +970,7 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
         : "No duration recorded",
     });
   } catch (error) {
+    monitor.finish(false); // In catch block
     Sentry.captureException(error, {
       tags: { webhook: "twilio" },
       extra: {
@@ -872,8 +985,6 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
     });
   }
 });
-
-
 
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
@@ -975,47 +1086,51 @@ app.get("/api/admin/contractors", newAdminAuth, async (req, res) => {
 });
 
 // Suspend/revoke contractor access (admin)
-app.post("/api/admin/contractors/:id/suspend", newAdminAuth, async (req, res) => {
-  try {
-    const { reason } = req.body;
+app.post(
+  "/api/admin/contractors/:id/suspend",
+  newAdminAuth,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
 
-    if (!reason) {
-      return res.status(400).json({ error: "Suspension reason required" });
+      if (!reason) {
+        return res.status(400).json({ error: "Suspension reason required" });
+      }
+
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.params.id },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Update contractor status
+      await prisma.contractor.update({
+        where: { id: req.params.id },
+        data: {
+          status: "suspended",
+          isAcceptingLeads: false,
+          suspensionReason: reason,
+        },
+      });
+
+      // Send suspension email
+      const { sendContractorSuspensionEmail } = require("./notifications");
+      await sendContractorSuspensionEmail(contractor, reason);
+
+      console.log("Contractor suspended:", contractor.businessName);
+
+      res.json({
+        success: true,
+        message: "Contractor suspended and notification sent",
+      });
+    } catch (error) {
+      console.error("Suspension error:", error);
+      res.status(500).json({ error: "Failed to suspend contractor" });
     }
-
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.params.id },
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: "Contractor not found" });
-    }
-
-    // Update contractor status
-    await prisma.contractor.update({
-      where: { id: req.params.id },
-      data: {
-        status: "suspended",
-        isAcceptingLeads: false,
-        suspensionReason: reason,
-      },
-    });
-
-    // Send suspension email
-    const { sendContractorSuspensionEmail } = require("./notifications");
-    await sendContractorSuspensionEmail(contractor, reason);
-
-    console.log("Contractor suspended:", contractor.businessName);
-
-    res.json({
-      success: true,
-      message: "Contractor suspended and notification sent",
-    });
-  } catch (error) {
-    console.error("Suspension error:", error);
-    res.status(500).json({ error: "Failed to suspend contractor" });
   }
-});
+);
 
 // Reactivate contractor (admin)
 app.post(
@@ -2129,47 +2244,54 @@ async function logSecurityEvent(type, details) {
 }
 
 // Approve contractor and send onboarding email
-app.post("/api/admin/contractors/:id/approve", newAdminAuth, async (req, res) => {
-  try {
-    const contractorId = req.params.id;
+app.post(
+  "/api/admin/contractors/:id/approve",
+  newAdminAuth,
+  async (req, res) => {
+    try {
+      const contractorId = req.params.id;
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId },
-    });
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
 
-    if (!contractor) {
-      return res.status(404).json({ error: "Contractor not found" });
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
+      }
+
+      // Generate temporary password
+      const tempPassword = crypto.randomBytes(8).toString("hex");
+      const hashedPassword = await hashPassword(tempPassword);
+
+      // Update contractor
+      await prisma.contractor.update({
+        where: { id: contractorId },
+        data: {
+          status: "active",
+          isVerified: true,
+          passwordHash: hashedPassword,
+          requirePasswordChange: true,
+        },
+      });
+
+      // Send onboarding email
+      await sendContractorOnboardingEmail(contractor, tempPassword);
+
+      console.log(
+        "Contractor approved and onboarded:",
+        contractor.businessName
+      );
+
+      res.json({
+        success: true,
+        message: "Contractor approved and onboarding email sent",
+      });
+    } catch (error) {
+      console.error("Contractor approval error:", error);
+      res.status(500).json({ error: "Failed to approve contractor" });
     }
-
-    // Generate temporary password
-    const tempPassword = crypto.randomBytes(8).toString("hex");
-    const hashedPassword = await hashPassword(tempPassword);
-
-    // Update contractor
-    await prisma.contractor.update({
-      where: { id: contractorId },
-      data: {
-        status: "active",
-        isVerified: true,
-        passwordHash: hashedPassword,
-        requirePasswordChange: true,
-      },
-    });
-
-    // Send onboarding email
-    await sendContractorOnboardingEmail(contractor, tempPassword);
-
-    console.log("Contractor approved and onboarded:", contractor.businessName);
-
-    res.json({
-      success: true,
-      message: "Contractor approved and onboarding email sent",
-    });
-  } catch (error) {
-    console.error("Contractor approval error:", error);
-    res.status(500).json({ error: "Failed to approve contractor" });
   }
-});
+);
 
 // Allow both api and app subdomains
 app.use((req, res, next) => {
@@ -3246,256 +3368,304 @@ app.post(
 // ============================================
 
 // Get available subscription plans
-app.get('/api/contractor/subscription/plans', authenticateContractor, async (req, res) => {
-  try {
-    const plans = [
-      {
-        tier: 'starter',
-        name: 'Starter',
-        price: 99,
-        leadCost: 75,
-        maxLeads: 15,
-        features: ['Up to 15 leads/month', '$75 per lead', 'Basic support', 'Email notifications']
-      },
-      {
-        tier: 'pro',
-        name: 'Pro',
-        price: 125,
-        leadCost: 100,
-        maxLeads: 40,
-        features: ['Up to 40 leads/month', '$100 per lead', 'Priority support', 'SMS + Email notifications', 'Analytics dashboard']
-      },
-      {
-        tier: 'elite',
-        name: 'Elite',
-        price: 200,
-        leadCost: 250,
-        maxLeads: 999,
-        features: ['Unlimited leads', '$250 per premium lead', 'Dedicated account manager', 'All notifications', 'Advanced analytics', 'Custom integrations']
-      }
-    ];
+app.get(
+  "/api/contractor/subscription/plans",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const plans = [
+        {
+          tier: "starter",
+          name: "Starter",
+          price: 99,
+          leadCost: 75,
+          maxLeads: 15,
+          features: [
+            "Up to 15 leads/month",
+            "$75 per lead",
+            "Basic support",
+            "Email notifications",
+          ],
+        },
+        {
+          tier: "pro",
+          name: "Pro",
+          price: 125,
+          leadCost: 100,
+          maxLeads: 40,
+          features: [
+            "Up to 40 leads/month",
+            "$100 per lead",
+            "Priority support",
+            "SMS + Email notifications",
+            "Analytics dashboard",
+          ],
+        },
+        {
+          tier: "elite",
+          name: "Elite",
+          price: 200,
+          leadCost: 250,
+          maxLeads: 999,
+          features: [
+            "Unlimited leads",
+            "$250 per premium lead",
+            "Dedicated account manager",
+            "All notifications",
+            "Advanced analytics",
+            "Custom integrations",
+          ],
+        },
+      ];
 
-    res.json({ plans });
-  } catch (error) {
-    console.error('Get plans error:', error);
-    res.status(500).json({ error: 'Failed to load plans' });
+      res.json({ plans });
+    } catch (error) {
+      console.error("Get plans error:", error);
+      res.status(500).json({ error: "Failed to load plans" });
+    }
   }
-});
+);
 
 // Upgrade/downgrade subscription
-app.post('/api/contractor/subscription/change-plan', authenticateContractor, async (req, res) => {
-  try {
-    const { newTier } = req.body;
-    const contractorId = req.contractor.id;
+app.post(
+  "/api/contractor/subscription/change-plan",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const { newTier } = req.body;
+      const contractorId = req.contractor.id;
 
-    if (!['starter', 'pro', 'elite'].includes(newTier)) {
-      return res.status(400).json({ error: 'Invalid subscription tier' });
+      if (!["starter", "pro", "elite"].includes(newTier)) {
+        return res.status(400).json({ error: "Invalid subscription tier" });
+      }
+
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
+
+      if (!contractor.stripeSubscriptionId) {
+        return res.status(400).json({ error: "No active subscription found" });
+      }
+
+      // Get the correct price ID for the new tier
+      let priceId;
+      if (newTier === "starter") priceId = process.env.STRIPE_PRICE_STARTER;
+      else if (newTier === "pro") priceId = process.env.STRIPE_PRICE_PRO;
+      else if (newTier === "elite") priceId = process.env.STRIPE_PRICE_ELITE;
+
+      // Update subscription in Stripe
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      const subscription = await stripe.subscriptions.retrieve(
+        contractor.stripeSubscriptionId
+      );
+
+      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            price: priceId,
+          },
+        ],
+        proration_behavior: "create_prorations", // Pro-rate the change
+      });
+
+      // Update in database
+      await prisma.contractor.update({
+        where: { id: contractorId },
+        data: { subscriptionTier: newTier },
+      });
+
+      console.log(
+        `✅ Subscription changed: ${contractor.businessName} → ${newTier}`
+      );
+
+      res.json({
+        success: true,
+        message: `Successfully changed to ${newTier.toUpperCase()} plan`,
+        newTier: newTier,
+      });
+    } catch (error) {
+      console.error("Change plan error:", error);
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to change plan" });
     }
-
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId }
-    });
-
-    if (!contractor.stripeSubscriptionId) {
-      return res.status(400).json({ error: 'No active subscription found' });
-    }
-
-    // Get the correct price ID for the new tier
-    let priceId;
-    if (newTier === 'starter') priceId = process.env.STRIPE_PRICE_STARTER;
-    else if (newTier === 'pro') priceId = process.env.STRIPE_PRICE_PRO;
-    else if (newTier === 'elite') priceId = process.env.STRIPE_PRICE_ELITE;
-
-    // Update subscription in Stripe
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
-    const subscription = await stripe.subscriptions.retrieve(contractor.stripeSubscriptionId);
-    
-    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
-      items: [{
-        id: subscription.items.data[0].id,
-        price: priceId,
-      }],
-      proration_behavior: 'create_prorations', // Pro-rate the change
-    });
-
-    // Update in database
-    await prisma.contractor.update({
-      where: { id: contractorId },
-      data: { subscriptionTier: newTier }
-    });
-
-    console.log(`✅ Subscription changed: ${contractor.businessName} → ${newTier}`);
-
-    res.json({
-      success: true,
-      message: `Successfully changed to ${newTier.toUpperCase()} plan`,
-      newTier: newTier
-    });
-
-  } catch (error) {
-    console.error('Change plan error:', error);
-    Sentry.captureException(error);
-    res.status(500).json({ error: 'Failed to change plan' });
   }
-});
+);
 
 // Cancel subscription
-app.post('/api/contractor/subscription/cancel', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
-    const { reason } = req.body;
+app.post(
+  "/api/contractor/subscription/cancel",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
+      const { reason } = req.body;
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId }
-    });
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
 
-    if (!contractor.stripeSubscriptionId) {
-      return res.status(400).json({ error: 'No active subscription found' });
-    }
-
-    // Cancel subscription in Stripe (at period end)
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
-    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
-      cancel_at_period_end: true,
-      metadata: { cancellation_reason: reason || 'Not provided' }
-    });
-
-    // Update database
-    await prisma.contractor.update({
-      where: { id: contractorId },
-      data: {
-        subscriptionStatus: 'cancelling', // Will become 'cancelled' at period end
-        isAcceptingLeads: false
+      if (!contractor.stripeSubscriptionId) {
+        return res.status(400).json({ error: "No active subscription found" });
       }
-    });
 
-    console.log(`⚠️ Subscription cancelled: ${contractor.businessName}`);
+      // Cancel subscription in Stripe (at period end)
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+        metadata: { cancellation_reason: reason || "Not provided" },
+      });
 
-    res.json({
-      success: true,
-      message: 'Subscription will be cancelled at the end of your billing period',
-      endsAt: contractor.subscriptionEndDate
-    });
+      // Update database
+      await prisma.contractor.update({
+        where: { id: contractorId },
+        data: {
+          subscriptionStatus: "cancelling", // Will become 'cancelled' at period end
+          isAcceptingLeads: false,
+        },
+      });
 
-  } catch (error) {
-    console.error('Cancel subscription error:', error);
-    Sentry.captureException(error);
-    res.status(500).json({ error: 'Failed to cancel subscription' });
+      console.log(`⚠️ Subscription cancelled: ${contractor.businessName}`);
+
+      res.json({
+        success: true,
+        message:
+          "Subscription will be cancelled at the end of your billing period",
+        endsAt: contractor.subscriptionEndDate,
+      });
+    } catch (error) {
+      console.error("Cancel subscription error:", error);
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to cancel subscription" });
+    }
   }
-});
+);
 
 // Reactivate cancelled subscription
-app.post('/api/contractor/subscription/reactivate', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
+app.post(
+  "/api/contractor/subscription/reactivate",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId }
-    });
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+      });
 
-    if (!contractor.stripeSubscriptionId) {
-      return res.status(400).json({ error: 'No subscription found' });
-    }
-
-    // Reactivate in Stripe
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
-    await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
-      cancel_at_period_end: false
-    });
-
-    // Update database
-    await prisma.contractor.update({
-      where: { id: contractorId },
-      data: {
-        subscriptionStatus: 'active',
-        isAcceptingLeads: contractor.creditBalance >= 500
+      if (!contractor.stripeSubscriptionId) {
+        return res.status(400).json({ error: "No subscription found" });
       }
-    });
 
-    console.log(`✅ Subscription reactivated: ${contractor.businessName}`);
+      // Reactivate in Stripe
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+        cancel_at_period_end: false,
+      });
 
-    res.json({
-      success: true,
-      message: 'Subscription reactivated successfully'
-    });
+      // Update database
+      await prisma.contractor.update({
+        where: { id: contractorId },
+        data: {
+          subscriptionStatus: "active",
+          isAcceptingLeads: contractor.creditBalance >= 500,
+        },
+      });
 
-  } catch (error) {
-    console.error('Reactivate subscription error:', error);
-    Sentry.captureException(error);
-    res.status(500).json({ error: 'Failed to reactivate subscription' });
+      console.log(`✅ Subscription reactivated: ${contractor.businessName}`);
+
+      res.json({
+        success: true,
+        message: "Subscription reactivated successfully",
+      });
+    } catch (error) {
+      console.error("Reactivate subscription error:", error);
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to reactivate subscription" });
+    }
   }
-});
+);
 
 // Get billing invoices from Stripe
-app.get('/api/contractor/subscription/invoices', authenticateContractor, async (req, res) => {
-  try {
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractor.id }
-    });
+app.get(
+  "/api/contractor/subscription/invoices",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.contractor.id },
+      });
 
-    if (!contractor.stripeCustomerId) {
-      return res.json({ invoices: [] });
+      if (!contractor.stripeCustomerId) {
+        return res.json({ invoices: [] });
+      }
+
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+      const invoices = await stripe.invoices.list({
+        customer: contractor.stripeCustomerId,
+        limit: 12,
+      });
+
+      const formattedInvoices = invoices.data.map((inv) => ({
+        id: inv.id,
+        number: inv.number,
+        amount: inv.amount_paid / 100,
+        status: inv.status,
+        paidAt: inv.status_transitions.paid_at
+          ? new Date(inv.status_transitions.paid_at * 1000)
+          : null,
+        createdAt: new Date(inv.created * 1000),
+        invoicePdf: inv.invoice_pdf,
+        hostedUrl: inv.hosted_invoice_url,
+      }));
+
+      res.json({ invoices: formattedInvoices });
+    } catch (error) {
+      console.error("Get invoices error:", error);
+      res.status(500).json({ error: "Failed to load invoices" });
     }
-
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY_TEST);
-    const invoices = await stripe.invoices.list({
-      customer: contractor.stripeCustomerId,
-      limit: 12
-    });
-
-    const formattedInvoices = invoices.data.map(inv => ({
-      id: inv.id,
-      number: inv.number,
-      amount: inv.amount_paid / 100,
-      status: inv.status,
-      paidAt: inv.status_transitions.paid_at ? new Date(inv.status_transitions.paid_at * 1000) : null,
-      createdAt: new Date(inv.created * 1000),
-      invoicePdf: inv.invoice_pdf,
-      hostedUrl: inv.hosted_invoice_url
-    }));
-
-    res.json({ invoices: formattedInvoices });
-
-  } catch (error) {
-    console.error('Get invoices error:', error);
-    res.status(500).json({ error: 'Failed to load invoices' });
   }
-});
+);
 
 // ============================================
 // BACKEND: Add to index.js
 // ============================================
 
 // Create Stripe Customer Portal session
-app.post('/api/contractor/payment/portal', authenticateContractor, async (req, res) => {
-  try {
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractor.id }
-    });
-
-    if (!contractor.stripeCustomerId) {
-      return res.status(400).json({ 
-        error: 'No Stripe customer found. Please contact support.' 
+app.post(
+  "/api/contractor/payment/portal",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.contractor.id },
       });
+
+      if (!contractor.stripeCustomerId) {
+        return res.status(400).json({
+          error: "No Stripe customer found. Please contact support.",
+        });
+      }
+
+      // Create a portal session
+      const session = await stripe.billingPortal.sessions.create({
+        customer: contractor.stripeCustomerId,
+        return_url: `${
+          process.env.RAILWAY_URL || "https://app.getcontractornow.com"
+        }/contractor`,
+      });
+
+      res.json({
+        success: true,
+        url: session.url,
+      });
+    } catch (error) {
+      console.error("Portal session error:", error);
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to create portal session" });
     }
-
-    // Create a portal session
-    const session = await stripe.billingPortal.sessions.create({
-      customer: contractor.stripeCustomerId,
-      return_url: `${process.env.RAILWAY_URL || 'https://app.getcontractornow.com'}/contractor`,
-    });
-
-    res.json({
-      success: true,
-      url: session.url
-    });
-
-  } catch (error) {
-    console.error('Portal session error:', error);
-    Sentry.captureException(error);
-    res.status(500).json({ error: 'Failed to create portal session' });
   }
-});
+);
 
 // ============================================
 // CONTRACTOR APPLICATION SYSTEM
@@ -3511,15 +3681,19 @@ app.post('/api/contractor/payment/portal', authenticateContractor, async (req, r
 // ============================================
 // Replace your existing POST /api/contractors/apply with this:
 
-app.post('/api/contractors/apply', async (req, res) => {
+app.post("/api/contractors/apply", async (req, res) => {
   try {
     const applicationData = req.body;
 
     // Validation
-    if (!applicationData.businessName || !applicationData.email || !applicationData.phone) {
+    if (
+      !applicationData.businessName ||
+      !applicationData.email ||
+      !applicationData.phone
+    ) {
       return res.status(400).json({
         success: false,
-        error: 'Business name, email, and phone are required'
+        error: "Business name, email, and phone are required",
       });
     }
 
@@ -3527,26 +3701,27 @@ app.post('/api/contractors/apply', async (req, res) => {
     if (!applicationData.acceptedTerms) {
       return res.status(400).json({
         success: false,
-        error: 'You must accept the Terms of Service to continue'
+        error: "You must accept the Terms of Service to continue",
       });
     }
 
     if (!applicationData.acceptedTCPA) {
       return res.status(400).json({
         success: false,
-        error: 'You must consent to receive SMS notifications as required by TCPA'
+        error:
+          "You must consent to receive SMS notifications as required by TCPA",
       });
     }
 
     // Check for duplicate email
     const existingContractor = await prisma.contractor.findUnique({
-      where: { email: applicationData.email.toLowerCase() }
+      where: { email: applicationData.email.toLowerCase() },
     });
 
     if (existingContractor) {
       return res.status(400).json({
         success: false,
-        error: 'An application already exists with this email address'
+        error: "An application already exists with this email address",
       });
     }
 
@@ -3556,37 +3731,41 @@ app.post('/api/contractors/apply', async (req, res) => {
         businessName: applicationData.businessName,
         email: applicationData.email.toLowerCase(),
         phone: applicationData.phone,
-        businessAddress: applicationData.businessAddress || '',
-        businessCity: applicationData.businessCity || '',
-        businessState: applicationData.businessState || '',
-        businessZip: applicationData.businessZip || '',
-        licenseNumber: applicationData.licenseNumber || '',
+        businessAddress: applicationData.businessAddress || "",
+        businessCity: applicationData.businessCity || "",
+        businessState: applicationData.businessState || "",
+        businessZip: applicationData.businessZip || "",
+        licenseNumber: applicationData.licenseNumber || "",
         yearsInBusiness: parseInt(applicationData.yearsInBusiness) || 0,
         serviceTypes: applicationData.serviceTypes || [],
         serviceZipCodes: applicationData.serviceZipCodes || [],
-        description: applicationData.description || '',
-        website: applicationData.website || '',
-        
-        status: 'pending',
+        description: applicationData.description || "",
+        website: applicationData.website || "",
+
+        status: "pending",
         applicationSubmittedAt: new Date(),
-        
+
         // ✅ NEW: Legal Compliance Fields
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
-        tcpaConsentText: 'I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.',
-        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
-        userAgent: req.headers['user-agent'] || 'unknown',
+        tcpaConsentText:
+          "I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.",
+        ipAddress: req.ip || req.headers["x-forwarded-for"] || "unknown",
+        userAgent: req.headers["user-agent"] || "unknown",
         smsOptedOut: false,
-        
-        subscriptionTier: 'none',
-        subscriptionStatus: 'pending',
+
+        subscriptionTier: "none",
+        subscriptionStatus: "pending",
         creditBalance: 0,
         isActive: false,
         isAcceptingLeads: false,
-      }
+      },
     });
 
-    const { sendApplicationConfirmation, sendAdminApplicationAlert } = require('./notifications');
+    const {
+      sendApplicationConfirmation,
+      sendAdminApplicationAlert,
+    } = require("./notifications");
     await sendApplicationConfirmation(contractor);
     await sendAdminApplicationAlert(contractor);
 
@@ -3594,15 +3773,15 @@ app.post('/api/contractors/apply', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Application submitted successfully! You will receive a confirmation email shortly.',
-      applicationId: contractor.id
+      message:
+        "Application submitted successfully! You will receive a confirmation email shortly.",
+      applicationId: contractor.id,
     });
-
   } catch (error) {
-    console.error('Contractor application error:', error);
+    console.error("Contractor application error:", error);
     res.status(500).json({
       success: false,
-      error: 'Failed to submit application. Please try again.'
+      error: "Failed to submit application. Please try again.",
     });
   }
 });
@@ -3612,12 +3791,12 @@ app.post('/api/contractors/apply', async (req, res) => {
 // ============================================
 
 // Twilio SMS Opt-Out Handler (STOP/START commands)
-app.post('/api/webhooks/twilio/sms-optout', async (req, res) => {
+app.post("/api/webhooks/twilio/sms-optout", async (req, res) => {
   try {
     const { From: from, Body: body } = req.body;
-    const twilioSignature = req.headers['x-twilio-signature'];
-    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-    
+    const twilioSignature = req.headers["x-twilio-signature"];
+    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
     const isValid = twilio.validateRequest(
       process.env.TWILIO_AUTH_TOKEN,
       twilioSignature,
@@ -3626,26 +3805,26 @@ app.post('/api/webhooks/twilio/sms-optout', async (req, res) => {
     );
 
     if (!isValid) {
-      console.error('❌ Invalid Twilio SMS signature');
-      return res.status(403).send('Forbidden');
+      console.error("❌ Invalid Twilio SMS signature");
+      return res.status(403).send("Forbidden");
     }
 
-    const normalizedPhone = from.replace(/\D/g, '').slice(-10);
+    const normalizedPhone = from.replace(/\D/g, "").slice(-10);
     const message = body.trim().toUpperCase();
 
     const contractor = await prisma.contractor.findFirst({
-      where: { phone: { endsWith: normalizedPhone } }
+      where: { phone: { endsWith: normalizedPhone } },
     });
 
     if (!contractor) {
-      return res.status(200).send('OK');
+      return res.status(200).send("OK");
     }
 
     // Handle STOP
-    if (['STOP', 'UNSUBSCRIBE', 'CANCEL', 'QUIT', 'END'].includes(message)) {
+    if (["STOP", "UNSUBSCRIBE", "CANCEL", "QUIT", "END"].includes(message)) {
       await prisma.contractor.update({
         where: { id: contractor.id },
-        data: { smsOptedOut: true, smsOptOutAt: new Date() }
+        data: { smsOptedOut: true, smsOptOutAt: new Date() },
       });
 
       console.log(`✅ SMS opt-out: ${contractor.businessName}`);
@@ -3654,15 +3833,19 @@ app.post('/api/webhooks/twilio/sms-optout', async (req, res) => {
 <Response>
   <Message>You have been unsubscribed from SMS notifications. Reply START to resubscribe.</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
     // Handle START
-    if (['START', 'UNSTOP', 'SUBSCRIBE', 'YES'].includes(message)) {
+    if (["START", "UNSTOP", "SUBSCRIBE", "YES"].includes(message)) {
       await prisma.contractor.update({
         where: { id: contractor.id },
-        data: { smsOptedOut: false, smsOptOutAt: null, acceptedTCPAAt: new Date() }
+        data: {
+          smsOptedOut: false,
+          smsOptOutAt: null,
+          acceptedTCPAAt: new Date(),
+        },
       });
 
       console.log(`✅ SMS opt-in: ${contractor.businessName}`);
@@ -3671,124 +3854,133 @@ app.post('/api/webhooks/twilio/sms-optout', async (req, res) => {
 <Response>
   <Message>You have been resubscribed to SMS notifications from GetContractorNow.</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
     // Handle HELP
-    if (['HELP', 'INFO'].includes(message)) {
+    if (["HELP", "INFO"].includes(message)) {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Message>GetContractorNow: Receive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel. Contact: support@getcontractornow.com</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
-    res.status(200).send('OK');
+    res.status(200).send("OK");
   } catch (error) {
-    console.error('❌ SMS webhook error:', error);
-    res.status(500).send('Error');
+    console.error("❌ SMS webhook error:", error);
+    res.status(500).send("Error");
   }
 });
 
 // Privacy Policy Acceptance Logging
-app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
+app.post("/api/contractors/log-privacy-acceptance", async (req, res) => {
   try {
     const { contractorId } = req.body;
 
     if (!contractorId) {
-      return res.status(400).json({ error: 'Contractor ID required' });
+      return res.status(400).json({ error: "Contractor ID required" });
     }
 
     await prisma.contractor.update({
       where: { id: contractorId },
       data: {
         privacyPolicyAcceptedAt: new Date(),
-        privacyPolicyVersion: '1.0',
-      }
+        privacyPolicyVersion: "1.0",
+      },
     });
 
     console.log(`✅ Privacy policy accepted: ${contractorId}`);
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Privacy acceptance error:', error);
-    res.status(500).json({ error: 'Failed to log acceptance' });
+    console.error("❌ Privacy acceptance error:", error);
+    res.status(500).json({ error: "Failed to log acceptance" });
   }
 });
 
 // Data Export (GDPR/CCPA)
-app.get('/api/contractor/data-export', authenticateContractor, async (req, res) => {
-  try {
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.contractor.id },
-      include: {
-        leadAssignments: { include: { lead: true } },
-        creditTransactions: true,
-        billingRecords: true,
-        callLogs: true,
+app.get(
+  "/api/contractor/data-export",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.contractor.id },
+        include: {
+          leadAssignments: { include: { lead: true } },
+          creditTransactions: true,
+          billingRecords: true,
+          callLogs: true,
+        },
+      });
+
+      if (!contractor) {
+        return res.status(404).json({ error: "Contractor not found" });
       }
-    });
 
-    if (!contractor) {
-      return res.status(404).json({ error: 'Contractor not found' });
+      const exportData = {
+        businessInfo: {
+          businessName: contractor.businessName,
+          email: contractor.email,
+          phone: contractor.phone,
+        },
+        accountInfo: {
+          creditBalance: contractor.creditBalance,
+          subscriptionTier: contractor.subscriptionTier,
+        },
+        legalCompliance: {
+          termsAcceptedAt: contractor.acceptedTermsAt,
+          tcpaAcceptedAt: contractor.acceptedTCPAAt,
+          smsOptedOut: contractor.smsOptedOut,
+        },
+        leads: contractor.leadAssignments.length,
+        transactions: contractor.creditTransactions.length,
+      };
+
+      res.json({ success: true, exportDate: new Date(), data: exportData });
+    } catch (error) {
+      console.error("❌ Data export error:", error);
+      res.status(500).json({ error: "Failed to export data" });
     }
-
-    const exportData = {
-      businessInfo: {
-        businessName: contractor.businessName,
-        email: contractor.email,
-        phone: contractor.phone,
-      },
-      accountInfo: {
-        creditBalance: contractor.creditBalance,
-        subscriptionTier: contractor.subscriptionTier,
-      },
-      legalCompliance: {
-        termsAcceptedAt: contractor.acceptedTermsAt,
-        tcpaAcceptedAt: contractor.acceptedTCPAAt,
-        smsOptedOut: contractor.smsOptedOut,
-      },
-      leads: contractor.leadAssignments.length,
-      transactions: contractor.creditTransactions.length,
-    };
-
-    res.json({ success: true, exportDate: new Date(), data: exportData });
-  } catch (error) {
-    console.error('❌ Data export error:', error);
-    res.status(500).json({ error: 'Failed to export data' });
   }
-});
+);
 
 // Data Deletion Request (GDPR)
-app.post('/api/contractor/request-deletion', authenticateContractor, async (req, res) => {
-  try {
-    await prisma.contractor.update({
-      where: { id: req.contractor.id },
-      data: {
-        deletionRequestedAt: new Date(),
-        status: 'pending_deletion',
-        isAcceptingLeads: false,
-      }
-    });
+app.post(
+  "/api/contractor/request-deletion",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      await prisma.contractor.update({
+        where: { id: req.contractor.id },
+        data: {
+          deletionRequestedAt: new Date(),
+          status: "pending_deletion",
+          isAcceptingLeads: false,
+        },
+      });
 
-    const { sendDeletionRequestAlert } = require('./notifications');
-    await sendDeletionRequestAlert(req.contractor);
+      const { sendDeletionRequestAlert } = require("./notifications");
+      await sendDeletionRequestAlert(req.contractor);
 
-    console.log(`✅ Deletion request: ${req.contractor.businessName}`);
+      console.log(`✅ Deletion request: ${req.contractor.businessName}`);
 
-    res.json({
-      success: true,
-      message: 'Deletion request received. Account will be reviewed within 30 days.'
-    });
-  } catch (error) {
-    console.error('❌ Deletion request error:', error);
-    res.status(500).json({ error: 'Failed to process deletion request' });
+      res.json({
+        success: true,
+        message:
+          "Deletion request received. Account will be reviewed within 30 days.",
+      });
+    } catch (error) {
+      console.error("❌ Deletion request error:", error);
+      res.status(500).json({ error: "Failed to process deletion request" });
+    }
   }
-});
+);
 
 // Admin Compliance Status
-app.get('/api/admin/compliance/status', newAdminAuth, async (req, res) => {
+app.get("/api/admin/compliance/status", newAdminAuth, async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       select: {
@@ -3799,20 +3991,22 @@ app.get('/api/admin/compliance/status', newAdminAuth, async (req, res) => {
         acceptedTCPAAt: true,
         smsOptedOut: true,
         deletionRequestedAt: true,
-      }
+      },
     });
 
     const summary = {
       total: contractors.length,
-      fullyCompliant: contractors.filter(c => c.acceptedTermsAt && c.acceptedTCPAAt).length,
-      smsOptOuts: contractors.filter(c => c.smsOptedOut).length,
-      pendingDeletion: contractors.filter(c => c.deletionRequestedAt).length,
+      fullyCompliant: contractors.filter(
+        (c) => c.acceptedTermsAt && c.acceptedTCPAAt
+      ).length,
+      smsOptOuts: contractors.filter((c) => c.smsOptedOut).length,
+      pendingDeletion: contractors.filter((c) => c.deletionRequestedAt).length,
     };
 
     res.json({ success: true, summary, contractors });
   } catch (error) {
-    console.error('❌ Compliance status error:', error);
-    res.status(500).json({ error: 'Failed to fetch compliance status' });
+    console.error("❌ Compliance status error:", error);
+    res.status(500).json({ error: "Failed to fetch compliance status" });
   }
 });
 
@@ -3821,19 +4015,20 @@ app.get('/api/admin/compliance/status', newAdminAuth, async (req, res) => {
 // ============================================
 
 // Get all contractor applications
-app.get('/api/admin/applications', newAdminAuth, async (req, res) => {
+app.get("/api/admin/applications", newAdminAuth, async (req, res) => {
   try {
     const { status, sortBy } = req.query;
 
     const where = {};
-    if (status && status !== 'all') {
+    if (status && status !== "all") {
       where.status = status;
     } else if (!status) {
       // Default: show only pending applications
-      where.status = 'pending';
+      where.status = "pending";
     }
 
-    const orderBy = sortBy === 'oldest' ? { createdAt: 'asc' } : { createdAt: 'desc' };
+    const orderBy =
+      sortBy === "oldest" ? { createdAt: "asc" } : { createdAt: "desc" };
 
     const applications = await prisma.contractor.findMany({
       where,
@@ -3856,14 +4051,16 @@ app.get('/api/admin/applications', newAdminAuth, async (req, res) => {
         createdAt: true,
         applicationNotes: true,
         referralSource: true,
-      }
+      },
     });
 
     // Count by status
     const [pending, approved, rejected] = await Promise.all([
-      prisma.contractor.count({ where: { status: 'pending' } }),
-      prisma.contractor.count({ where: { status: 'active', isApproved: true } }),
-      prisma.contractor.count({ where: { status: 'rejected' } }),
+      prisma.contractor.count({ where: { status: "pending" } }),
+      prisma.contractor.count({
+        where: { status: "active", isApproved: true },
+      }),
+      prisma.contractor.count({ where: { status: "rejected" } }),
     ]);
 
     res.json({
@@ -3873,219 +4070,230 @@ app.get('/api/admin/applications', newAdminAuth, async (req, res) => {
         pending,
         approved,
         rejected,
-        total: applications.length
-      }
+        total: applications.length,
+      },
     });
-
   } catch (error) {
-    console.error('Get applications error:', error);
-    res.status(500).json({ error: 'Failed to fetch applications' });
+    console.error("Get applications error:", error);
+    res.status(500).json({ error: "Failed to fetch applications" });
   }
 });
 
 // Get single application details
-app.get('/api/admin/applications/:id', newAdminAuth, async (req, res) => {
+app.get("/api/admin/applications/:id", newAdminAuth, async (req, res) => {
   try {
     const application = await prisma.contractor.findUnique({
-      where: { id: req.params.id }
+      where: { id: req.params.id },
     });
 
     if (!application) {
-      return res.status(404).json({ error: 'Application not found' });
+      return res.status(404).json({ error: "Application not found" });
     }
 
     res.json({
       success: true,
-      application
+      application,
     });
-
   } catch (error) {
-    console.error('Get application error:', error);
-    res.status(500).json({ error: 'Failed to fetch application' });
+    console.error("Get application error:", error);
+    res.status(500).json({ error: "Failed to fetch application" });
   }
 });
 
 // Approve contractor application
-app.post('/api/admin/applications/:id/approve', newAdminAuth, async (req, res) => {
-  try {
-    const { subscriptionTier, initialCredit, notes } = req.body;
+app.post(
+  "/api/admin/applications/:id/approve",
+  newAdminAuth,
+  async (req, res) => {
+    try {
+      const { subscriptionTier, initialCredit, notes } = req.body;
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    if (contractor.status === 'active' && contractor.isApproved) {
-      return res.status(400).json({ error: 'Contractor already approved' });
-    }
-
-    // Generate temporary password
-    const tempPassword = crypto.randomBytes(8).toString('hex');
-    const passwordHash = await hashPassword(tempPassword);
-
-    // Determine subscription tier (default to 'pro')
-    const tier = subscriptionTier || 'pro';
-    const credit = initialCredit || 0;
-
-    // Update contractor to active status
-    const updatedContractor = await prisma.contractor.update({
-      where: { id: req.params.id },
-      data: {
-        status: 'active',
-        isApproved: true,
-        isVerified: true,
-        isAcceptingLeads: true,
-        passwordHash: passwordHash,
-        requirePasswordChange: true,
-        subscriptionStatus: 'active',
-        subscriptionTier: tier,
-        subscriptionStartDate: new Date(),
-        subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        creditBalance: credit,
-        approvalNotes: notes || null,
-      }
-    });
-
-    // If initial credit given, create transaction
-    if (credit > 0) {
-      await prisma.creditTransaction.create({
-        data: {
-          contractorId: updatedContractor.id,
-          type: 'deposit',
-          amount: credit,
-          balanceBefore: 0,
-          balanceAfter: credit,
-          description: 'Initial credit upon approval',
-        }
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.params.id },
       });
-    }
 
-    // Send onboarding email with credentials
-    await sendContractorOnboardingEmail(updatedContractor, tempPassword);
-
-    console.log('✅ Contractor approved:', updatedContractor.businessName);
-
-    res.json({
-      success: true,
-      message: 'Contractor approved and onboarding email sent',
-      contractor: {
-        id: updatedContractor.id,
-        businessName: updatedContractor.businessName,
-        email: updatedContractor.email,
-        tempPassword: tempPassword // Return for admin reference
+      if (!contractor) {
+        return res.status(404).json({ error: "Application not found" });
       }
-    });
 
-  } catch (error) {
-    console.error('Approval error:', error);
-    Sentry.captureException(error);
-    res.status(500).json({ error: 'Failed to approve contractor' });
+      if (contractor.status === "active" && contractor.isApproved) {
+        return res.status(400).json({ error: "Contractor already approved" });
+      }
+
+      // Generate temporary password
+      const tempPassword = crypto.randomBytes(8).toString("hex");
+      const passwordHash = await hashPassword(tempPassword);
+
+      // Determine subscription tier (default to 'pro')
+      const tier = subscriptionTier || "pro";
+      const credit = initialCredit || 0;
+
+      // Update contractor to active status
+      const updatedContractor = await prisma.contractor.update({
+        where: { id: req.params.id },
+        data: {
+          status: "active",
+          isApproved: true,
+          isVerified: true,
+          isAcceptingLeads: true,
+          passwordHash: passwordHash,
+          requirePasswordChange: true,
+          subscriptionStatus: "active",
+          subscriptionTier: tier,
+          subscriptionStartDate: new Date(),
+          subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          creditBalance: credit,
+          approvalNotes: notes || null,
+        },
+      });
+
+      // If initial credit given, create transaction
+      if (credit > 0) {
+        await prisma.creditTransaction.create({
+          data: {
+            contractorId: updatedContractor.id,
+            type: "deposit",
+            amount: credit,
+            balanceBefore: 0,
+            balanceAfter: credit,
+            description: "Initial credit upon approval",
+          },
+        });
+      }
+
+      // Send onboarding email with credentials
+      await sendContractorOnboardingEmail(updatedContractor, tempPassword);
+
+      console.log("✅ Contractor approved:", updatedContractor.businessName);
+
+      res.json({
+        success: true,
+        message: "Contractor approved and onboarding email sent",
+        contractor: {
+          id: updatedContractor.id,
+          businessName: updatedContractor.businessName,
+          email: updatedContractor.email,
+          tempPassword: tempPassword, // Return for admin reference
+        },
+      });
+    } catch (error) {
+      console.error("Approval error:", error);
+      Sentry.captureException(error);
+      res.status(500).json({ error: "Failed to approve contractor" });
+    }
   }
-});
+);
 
 // Reject contractor application
-app.post('/api/admin/applications/:id/reject', newAdminAuth, async (req, res) => {
-  try {
-    const { reason } = req.body;
+app.post(
+  "/api/admin/applications/:id/reject",
+  newAdminAuth,
+  async (req, res) => {
+    try {
+      const { reason } = req.body;
 
-    if (!reason) {
-      return res.status(400).json({ error: 'Rejection reason required' });
-    }
-
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Update to rejected status
-    await prisma.contractor.update({
-      where: { id: req.params.id },
-      data: {
-        status: 'rejected',
-        isApproved: false,
-        rejectionReason: reason,
+      if (!reason) {
+        return res.status(400).json({ error: "Rejection reason required" });
       }
-    });
 
-    // Send rejection email
-    const { sendApplicationRejectionEmail } = require('./notifications');
-    await sendApplicationRejectionEmail(contractor, reason);
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.params.id },
+      });
 
-    console.log('❌ Contractor rejected:', contractor.businessName);
+      if (!contractor) {
+        return res.status(404).json({ error: "Application not found" });
+      }
 
-    res.json({
-      success: true,
-      message: 'Application rejected and notification sent'
-    });
+      // Update to rejected status
+      await prisma.contractor.update({
+        where: { id: req.params.id },
+        data: {
+          status: "rejected",
+          isApproved: false,
+          rejectionReason: reason,
+        },
+      });
 
-  } catch (error) {
-    console.error('Rejection error:', error);
-    res.status(500).json({ error: 'Failed to reject application' });
+      // Send rejection email
+      const { sendApplicationRejectionEmail } = require("./notifications");
+      await sendApplicationRejectionEmail(contractor, reason);
+
+      console.log("❌ Contractor rejected:", contractor.businessName);
+
+      res.json({
+        success: true,
+        message: "Application rejected and notification sent",
+      });
+    } catch (error) {
+      console.error("Rejection error:", error);
+      res.status(500).json({ error: "Failed to reject application" });
+    }
   }
-});
+);
 
 // Request more information from applicant
-app.post('/api/admin/applications/:id/request-info', newAdminAuth, async (req, res) => {
-  try {
-    const { message, requestedFields } = req.body;
+app.post(
+  "/api/admin/applications/:id/request-info",
+  newAdminAuth,
+  async (req, res) => {
+    try {
+      const { message, requestedFields } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: 'Message required' });
-    }
-
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!contractor) {
-      return res.status(404).json({ error: 'Application not found' });
-    }
-
-    // Update status to under_review
-    await prisma.contractor.update({
-      where: { id: req.params.id },
-      data: {
-        status: 'under_review',
-        reviewNotes: message,
+      if (!message) {
+        return res.status(400).json({ error: "Message required" });
       }
-    });
 
-    // Send email requesting more information
-    const { sendApplicationInfoRequestEmail } = require('./notifications');
-    await sendApplicationInfoRequestEmail(contractor, message, requestedFields);
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: req.params.id },
+      });
 
-    console.log('📧 Info requested from:', contractor.businessName);
+      if (!contractor) {
+        return res.status(404).json({ error: "Application not found" });
+      }
 
-    res.json({
-      success: true,
-      message: 'Information request sent to applicant'
-    });
+      // Update status to under_review
+      await prisma.contractor.update({
+        where: { id: req.params.id },
+        data: {
+          status: "under_review",
+          reviewNotes: message,
+        },
+      });
 
-  } catch (error) {
-    console.error('Request info error:', error);
-    res.status(500).json({ error: 'Failed to request information' });
+      // Send email requesting more information
+      const { sendApplicationInfoRequestEmail } = require("./notifications");
+      await sendApplicationInfoRequestEmail(
+        contractor,
+        message,
+        requestedFields
+      );
+
+      console.log("📧 Info requested from:", contractor.businessName);
+
+      res.json({
+        success: true,
+        message: "Information request sent to applicant",
+      });
+    } catch (error) {
+      console.error("Request info error:", error);
+      res.status(500).json({ error: "Failed to request information" });
+    }
   }
-});
+);
 
 // ============================================
 // 2. TCPA COMPLIANCE - SMS OPT-OUT HANDLER
 // ============================================
 
-app.post('/api/webhooks/twilio/sms', async (req, res) => {
+app.post("/api/webhooks/twilio/sms", async (req, res) => {
   try {
     const { From: from, Body: body } = req.body;
 
     // Verify Twilio signature for security
-    const twilioSignature = req.headers['x-twilio-signature'];
-    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-    const twilio = require('twilio');
-    
+    const twilioSignature = req.headers["x-twilio-signature"];
+    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    const twilio = require("twilio");
+
     const isValid = twilio.validateRequest(
       process.env.TWILIO_AUTH_TOKEN,
       twilioSignature,
@@ -4094,36 +4302,42 @@ app.post('/api/webhooks/twilio/sms', async (req, res) => {
     );
 
     if (!isValid) {
-      console.error('❌ Invalid Twilio SMS signature');
-      return res.status(403).send('Forbidden');
+      console.error("❌ Invalid Twilio SMS signature");
+      return res.status(403).send("Forbidden");
     }
 
     // Normalize phone number
-    const normalizedPhone = from.replace(/\D/g, '').slice(-10);
+    const normalizedPhone = from.replace(/\D/g, "").slice(-10);
     const message = body.trim().toUpperCase();
 
     // Find contractor by phone
     const contractor = await prisma.contractor.findFirst({
       where: {
         phone: {
-          endsWith: normalizedPhone
-        }
-      }
+          endsWith: normalizedPhone,
+        },
+      },
     });
 
     if (!contractor) {
-      console.log('📱 SMS from unknown number:', from);
-      return res.status(200).send('OK');
+      console.log("📱 SMS from unknown number:", from);
+      return res.status(200).send("OK");
     }
 
     // ✅ Handle STOP command (TCPA requirement)
-    if (message === 'STOP' || message === 'UNSUBSCRIBE' || message === 'CANCEL' || message === 'QUIT' || message === 'END') {
+    if (
+      message === "STOP" ||
+      message === "UNSUBSCRIBE" ||
+      message === "CANCEL" ||
+      message === "QUIT" ||
+      message === "END"
+    ) {
       await prisma.contractor.update({
         where: { id: contractor.id },
         data: {
           smsOptedOut: true,
           smsOptOutAt: new Date(),
-        }
+        },
       });
 
       console.log(`✅ SMS opt-out processed for ${contractor.businessName}`);
@@ -4133,19 +4347,24 @@ app.post('/api/webhooks/twilio/sms', async (req, res) => {
 <Response>
   <Message>You have been unsubscribed from SMS notifications. You will no longer receive text messages from GetContractorNow. Reply START to resubscribe.</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
     // ✅ Handle START command (re-opt-in)
-    if (message === 'START' || message === 'UNSTOP' || message === 'SUBSCRIBE' || message === 'YES') {
+    if (
+      message === "START" ||
+      message === "UNSTOP" ||
+      message === "SUBSCRIBE" ||
+      message === "YES"
+    ) {
       await prisma.contractor.update({
         where: { id: contractor.id },
         data: {
           smsOptedOut: false,
           smsOptOutAt: null,
           acceptedTCPAAt: new Date(), // Refresh consent timestamp
-        }
+        },
       });
 
       console.log(`✅ SMS opt-in processed for ${contractor.businessName}`);
@@ -4154,27 +4373,26 @@ app.post('/api/webhooks/twilio/sms', async (req, res) => {
 <Response>
   <Message>You have been resubscribed to SMS notifications from GetContractorNow. Reply STOP to unsubscribe.</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
     // ✅ Handle HELP command (TCPA requirement)
-    if (message === 'HELP' || message === 'INFO') {
+    if (message === "HELP" || message === "INFO") {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Message>GetContractorNow: Receive exclusive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel, HELP for help. Contact: support@getcontractornow.com</Message>
 </Response>`;
-      
-      return res.type('text/xml').send(twiml);
+
+      return res.type("text/xml").send(twiml);
     }
 
     // For any other message, just acknowledge
     console.log(`📱 SMS received from ${contractor.businessName}: ${body}`);
-    res.status(200).send('OK');
-
+    res.status(200).send("OK");
   } catch (error) {
-    console.error('❌ SMS webhook error:', error);
-    res.status(500).send('Error');
+    console.error("❌ SMS webhook error:", error);
+    res.status(500).send("Error");
   }
 });
 
@@ -4182,14 +4400,14 @@ app.post('/api/webhooks/twilio/sms', async (req, res) => {
 // 3. PRIVACY POLICY ACCEPTANCE LOGGING
 // ============================================
 
-app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
+app.post("/api/contractors/log-privacy-acceptance", async (req, res) => {
   try {
     const { contractorId } = req.body;
 
     if (!contractorId) {
       return res.status(400).json({
         success: false,
-        error: 'Contractor ID is required'
+        error: "Contractor ID is required",
       });
     }
 
@@ -4197,18 +4415,18 @@ app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
       where: { id: contractorId },
       data: {
         privacyPolicyAcceptedAt: new Date(),
-        privacyPolicyVersion: '1.0', // Update this when you update privacy policy
-      }
+        privacyPolicyVersion: "1.0", // Update this when you update privacy policy
+      },
     });
 
     console.log(`✅ Privacy policy accepted by contractor: ${contractorId}`);
 
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Privacy acceptance error:', error);
+    console.error("❌ Privacy acceptance error:", error);
     res.status(500).json({
       success: false,
-      error: 'Failed to log acceptance'
+      error: "Failed to log acceptance",
     });
   }
 });
@@ -4217,146 +4435,157 @@ app.post('/api/contractors/log-privacy-acceptance', async (req, res) => {
 // 4. DATA PRIVACY - CONTRACTOR DATA EXPORT (GDPR/CCPA)
 // ============================================
 
-app.get('/api/contractor/data-export', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
+app.get(
+  "/api/contractor/data-export",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: contractorId },
-      include: {
-        leadAssignments: {
-          include: {
-            lead: true
-          }
+      const contractor = await prisma.contractor.findUnique({
+        where: { id: contractorId },
+        include: {
+          leadAssignments: {
+            include: {
+              lead: true,
+            },
+          },
+          creditTransactions: true,
+          billingRecords: true,
+          callLogs: true,
         },
-        creditTransactions: true,
-        billingRecords: true,
-        callLogs: true,
-      }
-    });
+      });
 
-    if (!contractor) {
-      return res.status(404).json({
+      if (!contractor) {
+        return res.status(404).json({
+          success: false,
+          error: "Contractor not found",
+        });
+      }
+
+      // Remove sensitive fields and format data
+      const exportData = {
+        businessInformation: {
+          businessName: contractor.businessName,
+          email: contractor.email,
+          phone: contractor.phone,
+          address: `${contractor.businessAddress}, ${contractor.businessCity}, ${contractor.businessState} ${contractor.businessZip}`,
+          licenseNumber: contractor.licenseNumber,
+          serviceZipCodes: contractor.serviceZipCodes,
+          yearsInBusiness: contractor.yearsInBusiness,
+          serviceTypes: contractor.serviceTypes,
+          website: contractor.website,
+          description: contractor.description,
+        },
+        accountInformation: {
+          accountCreated: contractor.createdAt,
+          accountStatus: contractor.status,
+          subscriptionTier: contractor.subscriptionTier,
+          subscriptionStatus: contractor.subscriptionStatus,
+          creditBalance: contractor.creditBalance,
+          isActive: contractor.isActive,
+          isAcceptingLeads: contractor.isAcceptingLeads,
+        },
+        legalCompliance: {
+          termsAcceptedAt: contractor.acceptedTermsAt,
+          tcpaAcceptedAt: contractor.acceptedTCPAAt,
+          privacyPolicyAcceptedAt: contractor.privacyPolicyAcceptedAt,
+          privacyPolicyVersion: contractor.privacyPolicyVersion,
+          smsOptedOut: contractor.smsOptedOut,
+          smsOptOutAt: contractor.smsOptOutAt,
+        },
+        leadHistory: contractor.leadAssignments.map((assignment) => ({
+          assignedAt: assignment.assignedAt,
+          status: assignment.status,
+          leadType: assignment.lead?.serviceType,
+          cost: assignment.cost,
+          customerLocation: `${assignment.lead?.customerCity}, ${assignment.lead?.customerState}`,
+        })),
+        transactionHistory: contractor.creditTransactions.map((txn) => ({
+          date: txn.createdAt,
+          type: txn.type,
+          amount: txn.amount,
+          description: txn.description,
+          balanceAfter: txn.balanceAfter,
+        })),
+        billingHistory: contractor.billingRecords.map((bill) => ({
+          date: bill.createdAt,
+          amount: bill.amount,
+          status: bill.status,
+          type: bill.type,
+        })),
+        callHistory: contractor.callLogs.map((call) => ({
+          date: call.createdAt,
+          duration: call.duration,
+          status: call.status,
+          recordingUrl: call.recordingUrl ? "Available" : "Not available",
+        })),
+      };
+
+      console.log(
+        `✅ Data export generated for contractor: ${contractor.businessName}`
+      );
+
+      res.json({
+        success: true,
+        exportDate: new Date().toISOString(),
+        data: exportData,
+      });
+    } catch (error) {
+      console.error("❌ Data export error:", error);
+      res.status(500).json({
         success: false,
-        error: 'Contractor not found'
+        error: "Failed to export data",
       });
     }
-
-    // Remove sensitive fields and format data
-    const exportData = {
-      businessInformation: {
-        businessName: contractor.businessName,
-        email: contractor.email,
-        phone: contractor.phone,
-        address: `${contractor.businessAddress}, ${contractor.businessCity}, ${contractor.businessState} ${contractor.businessZip}`,
-        licenseNumber: contractor.licenseNumber,
-        serviceZipCodes: contractor.serviceZipCodes,
-        yearsInBusiness: contractor.yearsInBusiness,
-        serviceTypes: contractor.serviceTypes,
-        website: contractor.website,
-        description: contractor.description,
-      },
-      accountInformation: {
-        accountCreated: contractor.createdAt,
-        accountStatus: contractor.status,
-        subscriptionTier: contractor.subscriptionTier,
-        subscriptionStatus: contractor.subscriptionStatus,
-        creditBalance: contractor.creditBalance,
-        isActive: contractor.isActive,
-        isAcceptingLeads: contractor.isAcceptingLeads,
-      },
-      legalCompliance: {
-        termsAcceptedAt: contractor.acceptedTermsAt,
-        tcpaAcceptedAt: contractor.acceptedTCPAAt,
-        privacyPolicyAcceptedAt: contractor.privacyPolicyAcceptedAt,
-        privacyPolicyVersion: contractor.privacyPolicyVersion,
-        smsOptedOut: contractor.smsOptedOut,
-        smsOptOutAt: contractor.smsOptOutAt,
-      },
-      leadHistory: contractor.leadAssignments.map(assignment => ({
-        assignedAt: assignment.assignedAt,
-        status: assignment.status,
-        leadType: assignment.lead?.serviceType,
-        cost: assignment.cost,
-        customerLocation: `${assignment.lead?.customerCity}, ${assignment.lead?.customerState}`,
-      })),
-      transactionHistory: contractor.creditTransactions.map(txn => ({
-        date: txn.createdAt,
-        type: txn.type,
-        amount: txn.amount,
-        description: txn.description,
-        balanceAfter: txn.balanceAfter,
-      })),
-      billingHistory: contractor.billingRecords.map(bill => ({
-        date: bill.createdAt,
-        amount: bill.amount,
-        status: bill.status,
-        type: bill.type,
-      })),
-      callHistory: contractor.callLogs.map(call => ({
-        date: call.createdAt,
-        duration: call.duration,
-        status: call.status,
-        recordingUrl: call.recordingUrl ? 'Available' : 'Not available',
-      })),
-    };
-
-    console.log(`✅ Data export generated for contractor: ${contractor.businessName}`);
-
-    res.json({
-      success: true,
-      exportDate: new Date().toISOString(),
-      data: exportData
-    });
-
-  } catch (error) {
-    console.error('❌ Data export error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to export data'
-    });
   }
-});
+);
 
 // ============================================
 // 5. DATA DELETION REQUEST (GDPR Right to be Forgotten)
 // ============================================
 
-app.post('/api/contractor/request-deletion', authenticateContractor, async (req, res) => {
-  try {
-    const contractorId = req.contractor.id;
-    const contractor = req.contractor;
+app.post(
+  "/api/contractor/request-deletion",
+  authenticateContractor,
+  async (req, res) => {
+    try {
+      const contractorId = req.contractor.id;
+      const contractor = req.contractor;
 
-    // Mark for deletion (don't delete immediately - need to preserve for legal/financial)
-    await prisma.contractor.update({
-      where: { id: contractorId },
-      data: {
-        deletionRequestedAt: new Date(),
-        status: 'pending_deletion',
-        isAcceptingLeads: false,
-        isActive: false,
-      }
-    });
+      // Mark for deletion (don't delete immediately - need to preserve for legal/financial)
+      await prisma.contractor.update({
+        where: { id: contractorId },
+        data: {
+          deletionRequestedAt: new Date(),
+          status: "pending_deletion",
+          isAcceptingLeads: false,
+          isActive: false,
+        },
+      });
 
-    // Send email to admin for manual review
-    const { sendDeletionRequestAlert } = require('./notifications');
-    await sendDeletionRequestAlert(contractor);
+      // Send email to admin for manual review
+      const { sendDeletionRequestAlert } = require("./notifications");
+      await sendDeletionRequestAlert(contractor);
 
-    console.log(`✅ Deletion request received from: ${contractor.businessName}`);
+      console.log(
+        `✅ Deletion request received from: ${contractor.businessName}`
+      );
 
-    res.json({
-      success: true,
-      message: 'Deletion request received. Your account will be reviewed and deleted within 30 days as required by law. You will receive a confirmation email.'
-    });
-
-  } catch (error) {
-    console.error('❌ Deletion request error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process deletion request'
-    });
+      res.json({
+        success: true,
+        message:
+          "Deletion request received. Your account will be reviewed and deleted within 30 days as required by law. You will receive a confirmation email.",
+      });
+    } catch (error) {
+      console.error("❌ Deletion request error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to process deletion request",
+      });
+    }
   }
-});
+);
 
 // ============================================
 // 6. CHECK SMS OPT-OUT STATUS BEFORE SENDING
@@ -4370,16 +4599,18 @@ async function canSendSMS(contractorId) {
       smsOptedOut: true,
       phone: true,
       businessName: true,
-    }
+    },
   });
 
   if (!contractor) {
-    console.error('❌ Contractor not found:', contractorId);
+    console.error("❌ Contractor not found:", contractorId);
     return false;
   }
 
   if (contractor.smsOptedOut) {
-    console.log(`⚠️ SMS blocked - contractor opted out: ${contractor.businessName}`);
+    console.log(
+      `⚠️ SMS blocked - contractor opted out: ${contractor.businessName}`
+    );
     return false;
   }
 
@@ -4395,7 +4626,7 @@ async function canSendSMS(contractorId) {
 // 8. ADMIN ENDPOINT TO VIEW COMPLIANCE STATUS
 // ============================================
 
-app.get('/api/admin/compliance/status', newAdminAuth , async (req, res) => {
+app.get("/api/admin/compliance/status", newAdminAuth, async (req, res) => {
   try {
     const contractors = await prisma.contractor.findMany({
       select: {
@@ -4409,32 +4640,32 @@ app.get('/api/admin/compliance/status', newAdminAuth , async (req, res) => {
         smsOptOutAt: true,
         deletionRequestedAt: true,
         status: true,
-      }
+      },
     });
 
     const summary = {
       totalContractors: contractors.length,
-      fullyCompliant: contractors.filter(c => 
-        c.acceptedTermsAt && c.acceptedTCPAAt && c.privacyPolicyAcceptedAt
+      fullyCompliant: contractors.filter(
+        (c) =>
+          c.acceptedTermsAt && c.acceptedTCPAAt && c.privacyPolicyAcceptedAt
       ).length,
-      smsOptOuts: contractors.filter(c => c.smsOptedOut).length,
-      pendingDeletion: contractors.filter(c => c.deletionRequestedAt).length,
-      missingConsent: contractors.filter(c => 
-        !c.acceptedTermsAt || !c.acceptedTCPAAt
+      smsOptOuts: contractors.filter((c) => c.smsOptedOut).length,
+      pendingDeletion: contractors.filter((c) => c.deletionRequestedAt).length,
+      missingConsent: contractors.filter(
+        (c) => !c.acceptedTermsAt || !c.acceptedTCPAAt
       ).length,
     };
 
     res.json({
       success: true,
       summary,
-      contractors
+      contractors,
     });
-
   } catch (error) {
-    console.error('❌ Compliance status error:', error);
+    console.error("❌ Compliance status error:", error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch compliance status'
+      error: "Failed to fetch compliance status",
     });
   }
 });
@@ -4444,32 +4675,32 @@ app.get('/api/admin/compliance/status', newAdminAuth , async (req, res) => {
 // ============================================
 
 // Admin login
-app.post('/api/admin/login', async (req, res) => {
+app.post("/api/admin/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+      return res.status(400).json({ error: "Email and password required" });
     }
 
     // Find admin
     const admin = await prisma.admin.findUnique({
-      where: { email: email.toLowerCase() }
+      where: { email: email.toLowerCase() },
     });
 
     if (!admin) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     if (!admin.isActive) {
-      return res.status(401).json({ error: 'Admin account is inactive' });
+      return res.status(401).json({ error: "Admin account is inactive" });
     }
 
     // Verify password
     const isValid = await comparePassword(password, admin.passwordHash);
 
     if (!isValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
 
     // Generate tokens
@@ -4479,10 +4710,10 @@ app.post('/api/admin/login', async (req, res) => {
     // Update last login
     await prisma.admin.update({
       where: { id: admin.id },
-      data: { lastLoginAt: new Date() }
+      data: { lastLoginAt: new Date() },
     });
 
-    console.log('✅ Admin logged in:', admin.email);
+    console.log("✅ Admin logged in:", admin.email);
 
     res.json({
       success: true,
@@ -4492,38 +4723,39 @@ app.post('/api/admin/login', async (req, res) => {
         id: admin.id,
         email: admin.email,
         name: admin.name,
-        role: admin.role
-      }
+        role: admin.role,
+      },
     });
-
   } catch (error) {
-    console.error('Admin login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error("Admin login error:", error);
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
 // Refresh access token
-app.post('/api/admin/refresh', async (req, res) => {
+app.post("/api/admin/refresh", async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
-      return res.status(400).json({ error: 'Refresh token required' });
+      return res.status(400).json({ error: "Refresh token required" });
     }
 
     const decoded = verifyRefreshToken(refreshToken);
 
     if (!decoded) {
-      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+      return res
+        .status(401)
+        .json({ error: "Invalid or expired refresh token" });
     }
 
     // Verify admin still exists
     const admin = await prisma.admin.findUnique({
-      where: { id: decoded.adminId }
+      where: { id: decoded.adminId },
     });
 
     if (!admin || !admin.isActive) {
-      return res.status(401).json({ error: 'Admin not found or inactive' });
+      return res.status(401).json({ error: "Admin not found or inactive" });
     }
 
     // Generate new access token
@@ -4531,26 +4763,54 @@ app.post('/api/admin/refresh', async (req, res) => {
 
     res.json({
       success: true,
-      accessToken
+      accessToken,
     });
-
   } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Token refresh failed' });
+    console.error("Token refresh error:", error);
+    res.status(500).json({ error: "Token refresh failed" });
   }
 });
 
 // Admin logout (optional - client-side can just delete tokens)
-app.post('/api/admin/logout', newAdminAuth, async (req, res) => {
-  res.json({ success: true, message: 'Logged out successfully' });
+app.post("/api/admin/logout", newAdminAuth, async (req, res) => {
+  res.json({ success: true, message: "Logged out successfully" });
 });
 
 // Get current admin info
-app.get('/api/admin/me', newAdminAuth, async (req, res) => {
+app.get("/api/admin/me", newAdminAuth, async (req, res) => {
   res.json({
     success: true,
-    admin: req.admin
+    admin: req.admin,
   });
+});
+
+// ============================================
+// SENTRY ERROR HANDLER (MUST BE LAST)
+// ============================================
+
+// The error handler must be registered before any other error middleware and after all controllers
+app.use(Sentry.Handlers.errorHandler());
+
+// Optional fallback error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({
+    error: "Internal server error",
+    message: process.env.NODE_ENV === "development" ? err.message : undefined,
+  });
+});
+
+// TEMPORARY - Test Sentry (remove after testing)
+app.get('/api/test-sentry', (req, res) => {
+  try {
+    throw new Error('Test error for Sentry monitoring');
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { test: true },
+      extra: { message: 'This is a test error' }
+    });
+    res.json({ message: 'Error sent to Sentry - check your dashboard!' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
