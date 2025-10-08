@@ -100,6 +100,7 @@ const {
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const express = require("express");
+const app = express();
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
@@ -121,7 +122,7 @@ const {
   authenticateAdmin: newAdminAuth,
 } = require("./admin-auth");
 
-const app = express();
+
 
 // Sentry middleware (only if Sentry loaded successfully)
 if (Sentry && Sentry.Handlers) {
@@ -218,407 +219,113 @@ app.post(
   }
 );
 
-// ============================================
-// NOW ADD ALL OTHER MIDDLEWARE
-// ============================================
-
-// Sentry breadcrumb tracking
-app.use((req, res, next) => {
-  Sentry.addBreadcrumb({
-    message: req.url,
-    category: "request",
-    level: "info",
-  });
-  next();
-});
-
-// CORS - Allow requests from your Webflow site
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
-  })
-);
-
-// Body parsers (AFTER webhook)
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// Sentry request context
-app.use((req, res, next) => {
-  if (req.headers.authorization) {
-    Sentry.setUser({ auth: "admin" });
-  }
-  Sentry.setContext("request", {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-  });
-  next();
-});
-
-// ============================================
-// ROUTES
-// ============================================
-
-// Contractor portal routes
-app.get("/contractor", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
-});
-
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
-});
-
-app.get("/contractor-app", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "contractor-form.html"));
-});
-
-app.get("/api/debug/check-env", (req, res) => {
-  res.json({
-    hasAdminPassword: !!process.env.ADMIN_PASSWORD,
-    adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
-    hasJwtSecret: !!process.env.JWT_SECRET,
-    jwtSecretLength: process.env.JWT_SECRET?.length || 0,
-    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET, // ✅ ADDED
-    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0, // ✅ ADDED
-    hasStripeKey: !!process.env.STRIPE_SECRET_KEY_TEST, // ✅ BONUS CHECK
-  });
-});
-
-// Middleware to authenticate contractor requests
-const authenticateContractor = async (req, res, next) => {
+// SendGrid webhook for email events
+app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
+    // Verify SendGrid signature if enabled
+    const signature = req.headers["x-twilio-email-event-webhook-signature"];
+    const timestamp = req.headers["x-twilio-email-event-webhook-timestamp"];
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "No token provided" });
+    if (signature && process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY) {
+      const payload = timestamp + JSON.stringify(req.body);
+      const expectedSignature = crypto
+        .createHmac("sha256", process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY)
+        .update(payload)
+        .digest("base64");
+
+      if (signature !== expectedSignature) {
+        console.error("Invalid SendGrid signature");
+        return res.status(403).json({ error: "Invalid signature" });
+      }
     }
+    const events = req.body;
 
-    const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(`📧 SendGrid webhook received ${events.length} events`);
 
-    const contractor = await prisma.contractor.findUnique({
-      where: { id: decoded.contractorId },
-    });
+    for (const event of events) {
+      const { email, event: eventType, reason, timestamp } = event;
 
-    if (!contractor) {
-      return res.status(401).json({ error: "Contractor not found" });
-    }
+      console.log(`Email event: ${eventType} for ${email}`);
 
-    if (contractor.status !== "active") {
-      return res
-        .status(403)
-        .json({ error: "Contractor account is not active" });
-    }
+      // Handle bounces and blocks
+      if (eventType === "bounce" || eventType === "dropped") {
+        // Check if it's a contractor email
+        const contractor = await prisma.contractor.findUnique({
+          where: { email: email.toLowerCase() },
+        });
 
-    req.contractor = contractor;
-    next();
-  } catch (error) {
-    console.error("Auth error:", error);
+        if (contractor) {
+          await prisma.contractor.update({
+            where: { id: contractor.id },
+            data: {
+              emailBounced: true,
+              emailBouncedAt: new Date(timestamp * 1000),
+              emailBounceReason: reason || eventType,
+            },
+          });
 
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ error: "Invalid token" });
-    }
+          console.log(`✅ Marked contractor email as bounced: ${email}`);
+        }
 
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ error: "Token expired" });
-    }
+        // Check if it's a customer email
+        const leads = await prisma.lead.findMany({
+          where: { customerEmail: email.toLowerCase() },
+        });
 
-    return res.status(500).json({ error: "Authentication failed" });
-  }
-};
+        if (leads.length > 0) {
+          await prisma.lead.updateMany({
+            where: { customerEmail: email.toLowerCase() },
+            data: {
+              customerEmailBounced: true,
+            },
+          });
 
-// ============================================
-// ADMIN API ENDPOINTS
-// ============================================
+          console.log(
+            `✅ Marked ${leads.length} lead(s) email as bounced: ${email}`
+          );
+        }
 
-// Get all billing records with filters
-app.get("/api/admin/billing", newAdminAuth, async (req, res) => {
-  try {
-    const { status, contractorId, startDate, endDate } = req.query;
-
-    const where = {};
-
-    if (status) where.status = status;
-    if (contractorId) where.contractorId = contractorId;
-    if (startDate || endDate) {
-      where.dateIncurred = {};
-      if (startDate) where.dateIncurred.gte = new Date(startDate);
-      if (endDate) where.dateIncurred.lte = new Date(endDate);
-    }
-
-    const billingRecords = await prisma.billingRecord.findMany({
-      where,
-      include: {
-        lead: {
-          select: {
-            customerFirstName: true,
-            customerLastName: true,
-            customerPhone: true,
-            customerCity: true,
-            customerState: true,
-            serviceType: true,
+        // Log the bounce
+        await prisma.notificationLog.create({
+          data: {
+            type: "email_bounce",
+            recipient: email,
+            subject: `Email bounced: ${eventType}`,
+            status: "bounced",
+            sentAt: new Date(timestamp * 1000),
+            metadata: {
+              eventType,
+              reason,
+              contractorId: contractor?.id,
+              leadCount: leads.length,
+            },
           },
-        },
-        contractor: {
-          select: {
-            businessName: true,
-            email: true,
-            phone: true,
+        });
+      }
+
+      // Handle spam reports
+      if (eventType === "spamreport") {
+        await prisma.notificationLog.create({
+          data: {
+            type: "spam_report",
+            recipient: email,
+            subject: "Email marked as spam",
+            status: "spam",
+            sentAt: new Date(timestamp * 1000),
+            metadata: { eventType },
           },
-        },
-      },
-      orderBy: {
-        dateIncurred: "desc",
-      },
-    });
+        });
 
-    // Calculate summary stats
-    const summary = {
-      total: billingRecords.length,
-      totalAmount: billingRecords.reduce(
-        (sum, record) => sum + record.amountOwed,
-        0
-      ),
-      pending: billingRecords.filter((r) => r.status === "pending").length,
-      pendingAmount: billingRecords
-        .filter((r) => r.status === "pending")
-        .reduce((sum, r) => sum + r.amountOwed, 0),
-      invoiced: billingRecords.filter((r) => r.status === "invoiced").length,
-      paid: billingRecords.filter((r) => r.status === "paid").length,
-      paidAmount: billingRecords
-        .filter((r) => r.status === "paid")
-        .reduce((sum, r) => sum + r.amountOwed, 0),
-    };
+        console.log(`⚠️ Spam report for: ${email}`);
+      }
+    }
 
-    res.json({
-      success: true,
-      summary,
-      records: billingRecords,
-    });
+    res.json({ received: true });
   } catch (error) {
-    console.error("Error fetching billing records:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("SendGrid webhook error:", error);
+    res.status(500).json({ error: "Webhook processing failed" });
   }
 });
-
-// Rate limiters
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: "Too many requests, please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100, // Increased for testing
-  message: { error: "Too many login attempts, please try again later." },
-});
-
-// Apply rate limiting
-app.use("/api/leads/", apiLimiter);
-app.use("/api/contractor/login", authLimiter);
-
-// Serve static files
-app.use(express.static(path.join(__dirname, "public")));
-
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    message: "GetContractorNow API is running",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Lead submission endpoint
-app.post("/api/leads/submit", async (req, res) => {
-  try {
-    const leadData = req.body;
-    console.log("Received lead submission:", {
-      email: leadData.email,
-      phone: leadData.phone,
-      service: leadData.service_type,
-    });
-
-    // Run advanced scoring algorithm
-    const scoringResult = await calculateLeadScore(leadData, prisma);
-
-    console.log("Scoring result:", scoringResult);
-
-    // If lead is rejected, return error with specific reasons
-    if (scoringResult.status === "rejected") {
-      console.log("Lead rejected:", scoringResult.rejectReasons);
-
-      return res.status(400).json({
-        success: false,
-        error: "Lead validation failed",
-        validationErrors: scoringResult.validationErrors,
-        message: scoringResult.validationErrors.join(". "),
-      });
-    }
-
-    // Lead approved - save to database
-    const savedLead = await prisma.lead.create({
-      data: {
-        // Customer Info
-        customerFirstName: leadData.first_name,
-        customerLastName: leadData.last_name,
-        customerEmail: leadData.email.toLowerCase().trim(),
-        customerPhone: leadData.phone.replace(/\D/g, ""), // Store digits only
-        customerAddress: leadData.address,
-        customerCity: leadData.city,
-        customerState: leadData.state,
-        customerZip: leadData.zip,
-
-        // Service Details
-        serviceType: leadData.service_type,
-        serviceDescription: leadData.service_description || null,
-        timeline: leadData.timeline,
-        budgetRange: leadData.budget_range,
-        propertyType: leadData.property_type,
-        propertyAge: leadData.property_age || null,
-        existingSystem: leadData.existing_system || null,
-        systemIssue: leadData.system_issue || null,
-
-        // Contact Preferences
-        preferredContactTime: leadData.preferred_contact_time || null,
-        preferredContactMethod: leadData.preferred_contact_method || "phone",
-
-        // Marketing Tracking
-        referralSource: leadData.referral_source || null,
-        utmSource: leadData.utm_source || null,
-        utmMedium: leadData.utm_medium || null,
-        utmCampaign: leadData.utm_campaign || null,
-
-        // Form Metadata
-        formCompletionTime: leadData.form_completion_time || null,
-        ipAddress: leadData.ip_address || null,
-        userAgent: leadData.user_agent || null,
-
-        // Scoring Results
-        score: scoringResult.score,
-        category: scoringResult.category,
-        price: scoringResult.price,
-        confidenceLevel: scoringResult.confidenceLevel,
-        qualityFlags: scoringResult.qualityFlags,
-
-        // Status
-        status: "pending_assignment",
-      },
-    });
-
-    console.log("✅ Lead saved successfully:", {
-      id: savedLead.id,
-      category: savedLead.category,
-      score: savedLead.score,
-      price: savedLead.price,
-    });
-
-    // ============================================
-    // NEW: AUTOMATICALLY ASSIGN CONTRACTOR
-    // ============================================
-
-    console.log("\n🔄 Starting contractor assignment...");
-
-    const assignmentResult = await assignContractor(savedLead);
-
-    if (assignmentResult && assignmentResult.contractor) {
-      console.log(
-        "✅ Lead assigned to contractor:",
-        assignmentResult.contractor.businessName
-      );
-
-      return res.json({
-        success: true,
-        message: "Lead received, approved, and assigned to contractor",
-        leadId: savedLead.id,
-        category: savedLead.category,
-        score: savedLead.score,
-      });
-    } else {
-      console.log("⚠️ Lead saved but not assigned");
-
-      return res.json({
-        success: true,
-        message: "Lead received and approved, but no contractors available",
-        leadId: savedLead.id,
-        category: savedLead.category,
-        score: savedLead.score,
-      });
-    }
-  } catch (error) {
-    console.error("❌ Error processing lead:", error);
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Something went wrong processing your request",
-    });
-  }
-});
-
-// ============================================
-// TWILIO WEBHOOK - NUMBER-BASED ROUTING
-// ============================================
-// Twilio webhook with signature verification
-/* app.post("/api/webhooks/twilio/call-status", async (req, res) => {
-  const monitor = monitorWebhook("twilio", "call_status");
-
-  try {
-    // ✅ TEST MODE: Skip signature verification if test parameter provided
-    const isTestMode = req.query.test === process.env.CRON_SECRET;
-    // Verify the request came from Twilio
-    const twilioSignature = req.headers["x-twilio-signature"];
-    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-
-    const isValid = twilio.validateRequest(
-      process.env.TWILIO_AUTH_TOKEN,
-      twilioSignature,
-      url,
-      req.body
-    );
-
-    if (!isValid) {
-      await logSecurityEvent("invalid_twilio_signature", {
-        ip: req.ip,
-        url: url,
-        timestamp: new Date(),
-      });
-      console.error("Invalid Twilio signature - possible fraud attempt");
-      monitor.finish(false); // ✅ ADD THIS
-      return res.status(403).json({ error: "Invalid signature" });
-    }
-
-    // Extract Twilio data
-    const {
-      CallSid: callSid,
-      CallStatus: callStatus,
-      CallDuration: callDuration,
-      From: from,
-      To: to,
-      Direction: direction,
-      RecordingUrl: recordingUrl,
-      RecordingSid: recordingSid,
-    } = req.body;
-
-    monitor.setData("callSid", callSid); // ✅ ADD THIS
-    monitor.setData("callStatus", callStatus); // ✅ ADD THIS
-
-    console.log("📞 TWILIO WEBHOOK (verified):", {
-      callSid,
-      callStatus,
-      from,
-      to: to,
-      direction,
-    }); */
 
 app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   const monitor = monitorWebhook("twilio", "call_status");
@@ -1094,6 +801,471 @@ app.post("/api/webhooks/twilio/call-status", async (req, res) => {
     });
   }
 });
+
+// ============================================
+// NOW ADD ALL OTHER MIDDLEWARE
+// ============================================
+
+// Sentry breadcrumb tracking
+app.use((req, res, next) => {
+  Sentry.addBreadcrumb({
+    message: req.url,
+    category: "request",
+    level: "info",
+  });
+  next();
+});
+
+// CORS - Allow requests from your Webflow site
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
+
+// Stripe webhook handler
+// Stripe webhook handler with signature verification
+app.post(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+
+      // Verify the signature
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+
+      console.log("Stripe webhook verified:", event.type);
+    } catch (err) {
+      console.error("⚠️ Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        const paymentIntent = event.data.object;
+        console.log("Payment succeeded:", paymentIntent.id);
+
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: paymentIntent.id },
+          data: {
+            status: "paid",
+            paidAt: new Date(),
+          },
+        });
+        break;
+
+      case "payment_intent.payment_failed":
+        const failedPayment = event.data.object;
+        console.log("Payment failed:", failedPayment.id);
+
+        await prisma.billingRecord.updateMany({
+          where: { stripePaymentId: failedPayment.id },
+          data: {
+            status: "failed",
+            notes: `Payment failed: ${
+              failedPayment.last_payment_error?.message || "Unknown error"
+            }`,
+          },
+        });
+        break;
+
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    res.json({ received: true });
+  }
+);
+
+// Body parsers (AFTER webhook)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Sentry request context
+app.use((req, res, next) => {
+  if (req.headers.authorization) {
+    Sentry.setUser({ auth: "admin" });
+  }
+  Sentry.setContext("request", {
+    method: req.method,
+    url: req.url,
+    ip: req.ip,
+  });
+  next();
+});
+
+// ============================================
+// ROUTES
+// ============================================
+
+// Contractor portal routes
+app.get("/contractor", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-portal-v2.html"));
+});
+
+app.get("/contractor-app", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "contractor-form.html"));
+});
+
+app.get("/api/debug/check-env", (req, res) => {
+  res.json({
+    hasAdminPassword: !!process.env.ADMIN_PASSWORD,
+    adminPasswordLength: process.env.ADMIN_PASSWORD?.length || 0,
+    hasJwtSecret: !!process.env.JWT_SECRET,
+    jwtSecretLength: process.env.JWT_SECRET?.length || 0,
+    hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET, // ✅ ADDED
+    webhookSecretLength: process.env.STRIPE_WEBHOOK_SECRET?.length || 0, // ✅ ADDED
+    hasStripeKey: !!process.env.STRIPE_SECRET_KEY_TEST, // ✅ BONUS CHECK
+  });
+});
+
+// Middleware to authenticate contractor requests
+const authenticateContractor = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { id: decoded.contractorId },
+    });
+
+    if (!contractor) {
+      return res.status(401).json({ error: "Contractor not found" });
+    }
+
+    if (contractor.status !== "active") {
+      return res
+        .status(403)
+        .json({ error: "Contractor account is not active" });
+    }
+
+    req.contractor = contractor;
+    next();
+  } catch (error) {
+    console.error("Auth error:", error);
+
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Token expired" });
+    }
+
+    return res.status(500).json({ error: "Authentication failed" });
+  }
+};
+
+// ============================================
+// ADMIN API ENDPOINTS
+// ============================================
+
+// Get all billing records with filters
+app.get("/api/admin/billing", newAdminAuth, async (req, res) => {
+  try {
+    const { status, contractorId, startDate, endDate } = req.query;
+
+    const where = {};
+
+    if (status) where.status = status;
+    if (contractorId) where.contractorId = contractorId;
+    if (startDate || endDate) {
+      where.dateIncurred = {};
+      if (startDate) where.dateIncurred.gte = new Date(startDate);
+      if (endDate) where.dateIncurred.lte = new Date(endDate);
+    }
+
+    const billingRecords = await prisma.billingRecord.findMany({
+      where,
+      include: {
+        lead: {
+          select: {
+            customerFirstName: true,
+            customerLastName: true,
+            customerPhone: true,
+            customerCity: true,
+            customerState: true,
+            serviceType: true,
+          },
+        },
+        contractor: {
+          select: {
+            businessName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: {
+        dateIncurred: "desc",
+      },
+    });
+
+    // Calculate summary stats
+    const summary = {
+      total: billingRecords.length,
+      totalAmount: billingRecords.reduce(
+        (sum, record) => sum + record.amountOwed,
+        0
+      ),
+      pending: billingRecords.filter((r) => r.status === "pending").length,
+      pendingAmount: billingRecords
+        .filter((r) => r.status === "pending")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+      invoiced: billingRecords.filter((r) => r.status === "invoiced").length,
+      paid: billingRecords.filter((r) => r.status === "paid").length,
+      paidAmount: billingRecords
+        .filter((r) => r.status === "paid")
+        .reduce((sum, r) => sum + r.amountOwed, 0),
+    };
+
+    res.json({
+      success: true,
+      summary,
+      records: billingRecords,
+    });
+  } catch (error) {
+    console.error("Error fetching billing records:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Rate limiters
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100, // Increased for testing
+  message: { error: "Too many login attempts, please try again later." },
+});
+
+// Apply rate limiting
+app.use("/api/leads/", apiLimiter);
+app.use("/api/contractor/login", authLimiter);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, "public")));
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "GetContractorNow API is running",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Lead submission endpoint
+app.post("/api/leads/submit", async (req, res) => {
+  try {
+    const leadData = req.body;
+    console.log("Received lead submission:", {
+      email: leadData.email,
+      phone: leadData.phone,
+      service: leadData.service_type,
+    });
+
+    // Run advanced scoring algorithm
+    const scoringResult = await calculateLeadScore(leadData, prisma);
+
+    console.log("Scoring result:", scoringResult);
+
+    // If lead is rejected, return error with specific reasons
+    if (scoringResult.status === "rejected") {
+      console.log("Lead rejected:", scoringResult.rejectReasons);
+
+      return res.status(400).json({
+        success: false,
+        error: "Lead validation failed",
+        validationErrors: scoringResult.validationErrors,
+        message: scoringResult.validationErrors.join(". "),
+      });
+    }
+
+    // Lead approved - save to database
+    const savedLead = await prisma.lead.create({
+      data: {
+        // Customer Info
+        customerFirstName: leadData.first_name,
+        customerLastName: leadData.last_name,
+        customerEmail: leadData.email.toLowerCase().trim(),
+        customerPhone: leadData.phone.replace(/\D/g, ""), // Store digits only
+        customerAddress: leadData.address,
+        customerCity: leadData.city,
+        customerState: leadData.state,
+        customerZip: leadData.zip,
+
+        // Service Details
+        serviceType: leadData.service_type,
+        serviceDescription: leadData.service_description || null,
+        timeline: leadData.timeline,
+        budgetRange: leadData.budget_range,
+        propertyType: leadData.property_type,
+        propertyAge: leadData.property_age || null,
+        existingSystem: leadData.existing_system || null,
+        systemIssue: leadData.system_issue || null,
+
+        // Contact Preferences
+        preferredContactTime: leadData.preferred_contact_time || null,
+        preferredContactMethod: leadData.preferred_contact_method || "phone",
+
+        // Marketing Tracking
+        referralSource: leadData.referral_source || null,
+        utmSource: leadData.utm_source || null,
+        utmMedium: leadData.utm_medium || null,
+        utmCampaign: leadData.utm_campaign || null,
+
+        // Form Metadata
+        formCompletionTime: leadData.form_completion_time || null,
+        ipAddress: leadData.ip_address || null,
+        userAgent: leadData.user_agent || null,
+
+        // Scoring Results
+        score: scoringResult.score,
+        category: scoringResult.category,
+        price: scoringResult.price,
+        confidenceLevel: scoringResult.confidenceLevel,
+        qualityFlags: scoringResult.qualityFlags,
+
+        // Status
+        status: "pending_assignment",
+      },
+    });
+
+    console.log("✅ Lead saved successfully:", {
+      id: savedLead.id,
+      category: savedLead.category,
+      score: savedLead.score,
+      price: savedLead.price,
+    });
+
+    // ============================================
+    // NEW: AUTOMATICALLY ASSIGN CONTRACTOR
+    // ============================================
+
+    console.log("\n🔄 Starting contractor assignment...");
+
+    const assignmentResult = await assignContractor(savedLead);
+
+    if (assignmentResult && assignmentResult.contractor) {
+      console.log(
+        "✅ Lead assigned to contractor:",
+        assignmentResult.contractor.businessName
+      );
+
+      return res.json({
+        success: true,
+        message: "Lead received, approved, and assigned to contractor",
+        leadId: savedLead.id,
+        category: savedLead.category,
+        score: savedLead.score,
+      });
+    } else {
+      console.log("⚠️ Lead saved but not assigned");
+
+      return res.json({
+        success: true,
+        message: "Lead received and approved, but no contractors available",
+        leadId: savedLead.id,
+        category: savedLead.category,
+        score: savedLead.score,
+      });
+    }
+  } catch (error) {
+    console.error("❌ Error processing lead:", error);
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      message: "Something went wrong processing your request",
+    });
+  }
+});
+
+// ============================================
+// TWILIO WEBHOOK - NUMBER-BASED ROUTING
+// ============================================
+// Twilio webhook with signature verification
+/* app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+  const monitor = monitorWebhook("twilio", "call_status");
+
+  try {
+    // ✅ TEST MODE: Skip signature verification if test parameter provided
+    const isTestMode = req.query.test === process.env.CRON_SECRET;
+    // Verify the request came from Twilio
+    const twilioSignature = req.headers["x-twilio-signature"];
+    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
+    const isValid = twilio.validateRequest(
+      process.env.TWILIO_AUTH_TOKEN,
+      twilioSignature,
+      url,
+      req.body
+    );
+
+    if (!isValid) {
+      await logSecurityEvent("invalid_twilio_signature", {
+        ip: req.ip,
+        url: url,
+        timestamp: new Date(),
+      });
+      console.error("Invalid Twilio signature - possible fraud attempt");
+      monitor.finish(false); // ✅ ADD THIS
+      return res.status(403).json({ error: "Invalid signature" });
+    }
+
+    // Extract Twilio data
+    const {
+      CallSid: callSid,
+      CallStatus: callStatus,
+      CallDuration: callDuration,
+      From: from,
+      To: to,
+      Direction: direction,
+      RecordingUrl: recordingUrl,
+      RecordingSid: recordingSid,
+    } = req.body;
+
+    monitor.setData("callSid", callSid); // ✅ ADD THIS
+    monitor.setData("callStatus", callStatus); // ✅ ADD THIS
+
+    console.log("📞 TWILIO WEBHOOK (verified):", {
+      callSid,
+      callStatus,
+      from,
+      to: to,
+      direction,
+    }); */
+
+
 
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
@@ -2220,66 +2392,7 @@ app.get(
   }
 );
 
-// Stripe webhook handler
-// Stripe webhook handler with signature verification
-app.post(
-  "/api/webhooks/stripe",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    let event;
-
-    try {
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-
-      // Verify the signature
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-
-      console.log("Stripe webhook verified:", event.type);
-    } catch (err) {
-      console.error("⚠️ Webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    // Handle the event
-    switch (event.type) {
-      case "payment_intent.succeeded":
-        const paymentIntent = event.data.object;
-        console.log("Payment succeeded:", paymentIntent.id);
-
-        await prisma.billingRecord.updateMany({
-          where: { stripePaymentId: paymentIntent.id },
-          data: {
-            status: "paid",
-            paidAt: new Date(),
-          },
-        });
-        break;
-
-      case "payment_intent.payment_failed":
-        const failedPayment = event.data.object;
-        console.log("Payment failed:", failedPayment.id);
-
-        await prisma.billingRecord.updateMany({
-          where: { stripePaymentId: failedPayment.id },
-          data: {
-            status: "failed",
-            notes: `Payment failed: ${
-              failedPayment.last_payment_error?.message || "Unknown error"
-            }`,
-          },
-        });
-        break;
-
-      default:
-        console.log(`Unhandled event type ${event.type}`);
-    }
-
-    res.json({ received: true });
-  }
-);
 
 // Cron endpoint to send feedback emails
 app.post("/api/cron/send-feedback-emails", async (req, res) => {
@@ -2430,113 +2543,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// SendGrid webhook for email events
-app.post("/api/webhooks/sendgrid", express.json(), async (req, res) => {
-  try {
-    // Verify SendGrid signature if enabled
-    const signature = req.headers["x-twilio-email-event-webhook-signature"];
-    const timestamp = req.headers["x-twilio-email-event-webhook-timestamp"];
 
-    if (signature && process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY) {
-      const payload = timestamp + JSON.stringify(req.body);
-      const expectedSignature = crypto
-        .createHmac("sha256", process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY)
-        .update(payload)
-        .digest("base64");
-
-      if (signature !== expectedSignature) {
-        console.error("Invalid SendGrid signature");
-        return res.status(403).json({ error: "Invalid signature" });
-      }
-    }
-    const events = req.body;
-
-    console.log(`📧 SendGrid webhook received ${events.length} events`);
-
-    for (const event of events) {
-      const { email, event: eventType, reason, timestamp } = event;
-
-      console.log(`Email event: ${eventType} for ${email}`);
-
-      // Handle bounces and blocks
-      if (eventType === "bounce" || eventType === "dropped") {
-        // Check if it's a contractor email
-        const contractor = await prisma.contractor.findUnique({
-          where: { email: email.toLowerCase() },
-        });
-
-        if (contractor) {
-          await prisma.contractor.update({
-            where: { id: contractor.id },
-            data: {
-              emailBounced: true,
-              emailBouncedAt: new Date(timestamp * 1000),
-              emailBounceReason: reason || eventType,
-            },
-          });
-
-          console.log(`✅ Marked contractor email as bounced: ${email}`);
-        }
-
-        // Check if it's a customer email
-        const leads = await prisma.lead.findMany({
-          where: { customerEmail: email.toLowerCase() },
-        });
-
-        if (leads.length > 0) {
-          await prisma.lead.updateMany({
-            where: { customerEmail: email.toLowerCase() },
-            data: {
-              customerEmailBounced: true,
-            },
-          });
-
-          console.log(
-            `✅ Marked ${leads.length} lead(s) email as bounced: ${email}`
-          );
-        }
-
-        // Log the bounce
-        await prisma.notificationLog.create({
-          data: {
-            type: "email_bounce",
-            recipient: email,
-            subject: `Email bounced: ${eventType}`,
-            status: "bounced",
-            sentAt: new Date(timestamp * 1000),
-            metadata: {
-              eventType,
-              reason,
-              contractorId: contractor?.id,
-              leadCount: leads.length,
-            },
-          },
-        });
-      }
-
-      // Handle spam reports
-      if (eventType === "spamreport") {
-        await prisma.notificationLog.create({
-          data: {
-            type: "spam_report",
-            recipient: email,
-            subject: "Email marked as spam",
-            status: "spam",
-            sentAt: new Date(timestamp * 1000),
-            metadata: { eventType },
-          },
-        });
-
-        console.log(`⚠️ Spam report for: ${email}`);
-      }
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error("SendGrid webhook error:", error);
-    res.status(500).json({ error: "Webhook processing failed" });
-  }
-});
 
 // Get bounced emails (admin)
 app.get("/api/admin/bounced-emails", newAdminAuth, async (req, res) => {
