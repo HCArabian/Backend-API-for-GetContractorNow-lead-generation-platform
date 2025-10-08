@@ -33,6 +33,11 @@ Sentry.init({
   ],
 });
 
+// Request handler must be the first middleware
+app.use(Sentry.Handlers.requestHandler());
+// TracingHandler creates a trace for every incoming request
+app.use(Sentry.Handlers.tracingHandler());
+
 // ============================================
 // SENTRY MONITORING HELPERS
 // ============================================
@@ -119,11 +124,7 @@ const path = require("path");
 // STRIPE SUBSCRIPTION WEBHOOK
 // ============================================
 
-// Request handler must be the first middleware
-app.use(Sentry.Handlers.requestHandler());
 
-// TracingHandler creates a trace for every incoming request
-app.use(Sentry.Handlers.tracingHandler());
 
 app.post(
   "/api/webhooks/stripe/subscription",
