@@ -2,49 +2,27 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 async function handleSubscriptionCreated(subscription) {
-  console.log("🎉 New subscription created:", subscription.id);
-
   try {
-    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-    const stripeCustomerId = subscription.customer;
-    
-    // ✅ FIX: Get dates from subscription items (they're not on the subscription object itself)
-    const subscriptionItem = subscription.items.data[0];
-    const periodStart = subscriptionItem.current_period_start;
-    const periodEnd = subscriptionItem.current_period_end;
-    
-    console.log("📅 DEBUG - Period start:", periodStart);
-    console.log("📅 DEBUG - Period end:", periodEnd);
-    
-    // Get customer email from Stripe
-    const customer = await stripe.customers.retrieve(stripeCustomerId);
-    const email = customer.email;
+    console.log("🔄 Processing subscription:", subscription.id);
 
-    if (!email) {
-      console.error("❌ No email found for Stripe customer:", stripeCustomerId);
-      return;
-    }
+    // ✅ FIXED: Access properties directly from subscription object
+    const customerId = subscription.customer;
+    const subscriptionId = subscription.id;
+    const status = subscription.status;
 
-    console.log("📧 Looking for contractor with email:", email);
-
-    // Find contractor by email
-    let contractor = await prisma.contractor.findFirst({
-      where: {
-        OR: [
-          { email: email.toLowerCase() },
-          { stripeCustomerId: stripeCustomerId }
-        ]
-      }
+    // Find contractor by Stripe customer ID
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeCustomerId: customerId },
     });
 
     if (!contractor) {
-      console.error("❌ Contractor not found for email:", email);
-      return;
+      console.log(`⚠️ No contractor found for customer: ${customerId}`);
+      return; // Not an error - might be a different customer
     }
 
-    // Determine tier from price ID
-    let tier = "pro";
-    const priceId = subscription.items.data[0].price.id;
+    // Get price ID to determine tier
+    const priceId = subscription.items?.data?.[0]?.price?.id;
+    let tier = "pro"; // default
 
     if (priceId === process.env.STRIPE_PRICE_STARTER) {
       tier = "starter";
@@ -54,66 +32,32 @@ async function handleSubscriptionCreated(subscription) {
       tier = "elite";
     }
 
-    // Check if beta tester
-    const isBeta = subscription.discount?.coupon?.id === process.env.STRIPE_PROMO_BETA;
-
-    // Get payment method
-    let paymentMethodDetails = {};
-    
-    try {
-      const paymentMethodId = subscription.default_payment_method;
-      
-      if (paymentMethodId) {
-        console.log("💳 Retrieving payment method:", paymentMethodId);
-        
-        const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
-        
-        if (paymentMethod && paymentMethod.card) {
-          paymentMethodDetails = {
-            stripePaymentMethodId: paymentMethod.id,
-            paymentMethodLast4: paymentMethod.card.last4,
-            paymentMethodBrand: paymentMethod.card.brand,
-            paymentMethodExpMonth: paymentMethod.card.exp_month,
-            paymentMethodExpYear: paymentMethod.card.exp_year,
-          };
-          
-          console.log(`✅ Payment method saved: ${paymentMethod.card.brand} ending in ${paymentMethod.card.last4}`);
-        }
-      }
-    } catch (pmError) {
-      console.error("⚠️ Error retrieving payment method:", pmError.message);
-    }
-
-    console.log("✅ Found contractor:", contractor.businessName);
-    console.log("   Tier:", tier);
-    console.log("   Beta tester:", isBeta);
-
-    // ✅ FIX: Use the dates from subscription items
+    // Update contractor
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        stripeCustomerId: stripeCustomerId,
-        stripeSubscriptionId: subscription.id,
-        subscriptionStatus: "active",
+        stripeSubscriptionId: subscriptionId,
+        subscriptionStatus: status === "active" ? "active" : "inactive",
         subscriptionTier: tier,
-        subscriptionStartDate: new Date(periodStart * 1000),
-        subscriptionEndDate: new Date(periodEnd * 1000),
-        isBetaTester: isBeta,
-        betaTesterLeadCost: isBeta ? 50.0 : null,
-        ...paymentMethodDetails,
+        subscriptionStartDate: new Date(subscription.current_period_start * 1000),
+        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+        isAcceptingLeads: status === "active",
       },
     });
 
-    console.log(`✅ Contractor ${contractor.businessName} subscribed to ${tier.toUpperCase()} tier`);
-    if (isBeta) {
-      console.log("🎟️ Beta tester discount applied - $50/lead pricing");
-    }
-
+    console.log(
+      `✅ Subscription created: ${contractor.businessName} - ${tier} tier`
+    );
   } catch (error) {
-    console.error("Error handling subscription created:", error);
-    throw error;
+    console.error("❌ Error in handleSubscriptionCreated:", error);
+    throw error; // Re-throw so Sentry captures it
   }
 }
+
+module.exports = {
+  handleSubscriptionCreated,
+  // ... other exports
+};
 
 module.exports = {
   handleSubscriptionCreated
