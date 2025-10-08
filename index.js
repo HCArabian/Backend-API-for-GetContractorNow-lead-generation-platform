@@ -3798,21 +3798,6 @@ app.post(
 // Place this in index.js, replacing existing route
 // ============================================
 
-const {
-  validateAndFormatPhone,
-  validateEmail,
-  validateLicenseNumber,
-  validateAndFormatEIN,
-  validateZipCode,
-  validateState,
-  validateCity,
-  validateServiceZipCodes,
-  validateWebsiteUrl,
-  sanitizeBusinessName,
-  validateServiceTypes,
-  validateYearsInBusiness,
-} = require('./utils/contractorValidation');
-
 app.post("/api/contractors/apply", async (req, res) => {
   try {
     const data = req.body;
