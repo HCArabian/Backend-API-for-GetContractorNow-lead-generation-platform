@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -297,10 +296,6 @@
             background: #3182ce;
         }
 
-        #dashboard {
-            display: none;
-        }
-
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -389,18 +384,9 @@
             </form>
         </div>
     </div>
-    <!-- Login Screen 
-    <div id="loginScreen" class="login-container">
-        <div class="login-box">
-            <h2>Admin Login</h2>
-            <input type="password" id="passwordInput" placeholder="Enter admin password" />
-            <button onclick="login()">Login</button>
-            <div id="loginError" class="error" style="display: none; margin-top: 15px;"></div>
-        </div>
-    </div>-->
 
     <!-- Dashboard -->
-    <div id="dashboard">
+    <div id="dashboard" style="display: none;">
         <div class="container">
             <header>
                 <h1>GetContractorNow - Admin Dashboard</h1>
@@ -576,11 +562,28 @@
         </div>
     </div>
 
+    <!-- Bounced Emails Modal -->
+    <div id="bouncedEmailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Bounced Emails</h2>
+                <button class="close-btn" onclick="closeBouncedEmailsModal()">&times;</button>
+            </div>
+
+            <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <strong>Total Bounced: <span id="bouncedEmailCount">0</span></strong>
+            </div>
+
+            <div id="bouncedEmailsList"></div>
+        </div>
+    </div>
+
     <script>
         const API_URL = 'https://api.getcontractornow.com';
         let authToken = null;
         let billingData = [];
 
+        // Check for existing token on page load
         if (localStorage.getItem('adminToken')) {
             authToken = localStorage.getItem('adminToken');
             showDashboard();
@@ -595,7 +598,7 @@
             const errorDiv = document.getElementById('loginError');
 
             try {
-                const response = await fetch('/api/admin/login', {
+                const response = await fetch(`${API_URL}/api/admin/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
@@ -606,10 +609,11 @@
                 if (data.success && data.accessToken) {
                     // Save token
                     localStorage.setItem('adminToken', data.accessToken);
+                    authToken = data.accessToken;
 
                     // Hide login, show dashboard
                     document.getElementById('loginSection').style.display = 'none';
-                    document.getElementById('dashboardSection').style.display = 'block';
+                    document.getElementById('dashboard').style.display = 'block';
 
                     // Load dashboard data
                     loadDashboard();
@@ -623,46 +627,15 @@
             }
         });
 
-        // Use token for all admin API calls
-        async function adminFetch(url, options = {}) {
-            const token = localStorage.getItem('adminToken');
-
-            return fetch(url, {
-                ...options,
-                headers: {
-                    ...options.headers,
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-        }
-
-        /*function login() {
-            const password = document.getElementById('passwordInput').value;
-            authToken = password;
-
-            fetchStats()
-                .then(() => {
-                    localStorage.setItem('adminToken', password);
-                    document.getElementById('loginError').style.display = 'none';
-                    showDashboard();
-                })
-                .catch(() => {
-                    document.getElementById('loginError').textContent = 'Invalid password';
-                    document.getElementById('loginError').style.display = 'block';
-                    authToken = null;
-                });
-        } */
-
         function logout() {
             localStorage.removeItem('adminToken');
             authToken = null;
-            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('loginSection').style.display = 'flex';
             document.getElementById('dashboard').style.display = 'none';
         }
 
         function showDashboard() {
-            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
             loadDashboard();
         }
@@ -880,10 +853,6 @@
                 errorDiv.style.display = 'none';
             }, 5000);
         }
-
-        document.getElementById('passwordInput')?.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') login();
-        });
 
         function viewDisputes() {
             fetchDisputes();
@@ -1329,6 +1298,7 @@
                 alert('Network error. Please try again.');
             }
         }
+
         async function suspendContractor(contractorId, contractorName) {
             const reason = prompt(`Enter reason for suspending ${contractorName}:`);
 
@@ -1364,6 +1334,7 @@
                 alert('Network error. Please try again.');
             }
         }
+
         async function reactivateContractor(contractorId, contractorName) {
             if (!confirm(`Reactivate ${contractorName}? They will receive an email notification and start receiving leads again.`)) {
                 return;
@@ -1444,24 +1415,6 @@
 
             container.innerHTML = html;
         }
-
     </script>
-
-    <!-- Bounced Emails Modal -->
-    <div id="bouncedEmailsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Bounced Emails</h2>
-                <button class="close-btn" onclick="closeBouncedEmailsModal()">&times;</button>
-            </div>
-
-            <div style="background: #fee2e2; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <strong>Total Bounced: <span id="bouncedEmailCount">0</span></strong>
-            </div>
-
-            <div id="bouncedEmailsList"></div>
-        </div>
-    </div>
 </body>
-
 </html>
