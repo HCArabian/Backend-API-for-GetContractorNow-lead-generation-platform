@@ -159,11 +159,14 @@ app.set("trust proxy", 1);
 // ============================================
 // STRIPE SUBSCRIPTION WEBHOOK
 // ============================================
+// ============================================
+// STRIPE WEBHOOK - UNIFIED HANDLER
+// ============================================
 app.post(
-  "/api/webhooks/stripe/subscription",
-  express.raw({ type: "application/json" }), // ✅ RAW for signature verification
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
   async (req, res) => {
-    const monitor = monitorWebhook("stripe", "subscription");
+    const monitor = monitorWebhook("stripe", "webhook");
 
     console.log("📬 Stripe webhook received");
 
@@ -192,35 +195,104 @@ app.post(
 
       monitor.setData("eventType", event.type);
 
-      // Handle different event types
-      switch (event.type) {
-        case "customer.subscription.created":
-          await handleSubscriptionCreated(event.data.object);
-          console.log("✅ Subscription created successfully");
-          break;
+      // Import handlers
+      const {
+        handleSubscriptionCreated,
+        handleSubscriptionUpdated,
+        handleSubscriptionDeleted,
+        handlePaymentMethodAttached,
+      } = require("./webhook-handler");
 
-        case "customer.subscription.updated":
-          console.log("📝 Subscription updated");
-          // Add your handler here if needed
-          break;
+      // Handle events
+      try {
+        switch (event.type) {
+          case "customer.subscription.created":
+            console.log("🆕 Subscription created event");
+            await handleSubscriptionCreated(event.data.object);
+            break;
 
-        case "customer.subscription.deleted":
-          console.log("❌ Subscription cancelled");
-          // Add your handler here if needed
-          break;
+          case "customer.subscription.updated":
+            console.log("📝 Subscription updated event");
+            await handleSubscriptionUpdated(event.data.object);
+            break;
 
-        default:
-          console.log(`ℹ️ Unhandled event type: ${event.type}`);
+          case "customer.subscription.deleted":
+            console.log("❌ Subscription deleted event");
+            await handleSubscriptionDeleted(event.data.object);
+            break;
+
+          case "payment_method.attached":
+            console.log("💳 Payment method attached event");
+            await handlePaymentMethodAttached(event.data.object);
+            break;
+
+          case "invoice.payment_succeeded":
+            console.log("✅ Invoice payment succeeded");
+            // Ensure subscription stays active
+            const invoice = event.data.object;
+            if (invoice.subscription) {
+              const contractor = await prisma.contractor.findFirst({
+                where: { stripeSubscriptionId: invoice.subscription },
+              });
+              if (contractor) {
+                await prisma.contractor.update({
+                  where: { id: contractor.id },
+                  data: { subscriptionStatus: "active" },
+                });
+              }
+            }
+            break;
+
+          case "invoice.payment_failed":
+            console.log("❌ Invoice payment failed");
+            const failedInvoice = event.data.object;
+            if (failedInvoice.subscription) {
+              const contractor = await prisma.contractor.findFirst({
+                where: { stripeSubscriptionId: failedInvoice.subscription },
+              });
+              if (contractor) {
+                await prisma.contractor.update({
+                  where: { id: contractor.id },
+                  data: {
+                    subscriptionStatus: "past_due",
+                    isAcceptingLeads: false,
+                  },
+                });
+              }
+            }
+            break;
+
+          default:
+            console.log(`ℹ️ Unhandled event type: ${event.type}`);
+        }
+
+        console.log(`✅ Webhook processed successfully: ${event.type}`);
+        monitor.finish(true);
+        res.json({ received: true });
+      } catch (handlerError) {
+        console.error(`❌ Handler error for ${event.type}:`, handlerError);
+        monitor.finish(false);
+        
+        // Still return 200 so Stripe doesn't retry
+        // But log the error
+        const Sentry = require("@sentry/node");
+        Sentry.captureException(handlerError, {
+          tags: {
+            webhook: "stripe",
+            eventType: event.type,
+          },
+          extra: {
+            eventId: event.id,
+          },
+        });
+        
+        res.json({ received: true, error: handlerError.message });
       }
-
-      monitor.finish(true);
-      res.json({ received: true });
     } catch (error) {
       monitor.finish(false);
+      const Sentry = require("@sentry/node");
       Sentry.captureException(error, {
-        tags: {
-          webhook: "stripe",
-        },
+        tags: { webhook: "stripe" },
       });
       console.error("❌ Webhook error:", error);
       res.status(500).json({ error: error.message });
