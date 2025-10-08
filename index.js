@@ -28,7 +28,6 @@ try {
   console.log("Continuing without Sentry monitoring...");
 }
 
-
 // ============================================
 // SENTRY MONITORING HELPERS
 // ============================================
@@ -84,7 +83,20 @@ function monitorCreditDeduction(contractorId, amount) {
 
   return transaction;
 }
-
+const {
+  validateAndFormatPhone,
+  validateEmail,
+  validateLicenseNumber,
+  validateAndFormatEIN,
+  validateZipCode,
+  validateState,
+  validateCity,
+  validateServiceZipCodes,
+  validateWebsiteUrl,
+  sanitizeBusinessName,
+  validateServiceTypes,
+  validateYearsInBusiness,
+} = require('./utils/contractorValidation');
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const express = require("express");
@@ -132,8 +144,6 @@ const path = require("path");
 // ============================================
 // STRIPE SUBSCRIPTION WEBHOOK
 // ============================================
-
-
 
 app.post(
   "/api/webhooks/stripe/subscription",
@@ -610,17 +620,17 @@ app.post("/api/leads/submit", async (req, res) => {
       direction,
     }); */
 
-    app.post("/api/webhooks/twilio/call-status", async (req, res) => {
+app.post("/api/webhooks/twilio/call-status", async (req, res) => {
   const monitor = monitorWebhook("twilio", "call_status");
 
   try {
     // ✅ TEST MODE: Skip signature verification if test secret matches
     const testSecret = req.query.test;
     const isTestMode = testSecret && testSecret === process.env.CRON_SECRET;
-    
-    console.log("🔍 Test mode check:", { 
-      hasTestParam: !!testSecret, 
-      isTestMode 
+
+    console.log("🔍 Test mode check:", {
+      hasTestParam: !!testSecret,
+      isTestMode,
     });
 
     if (!isTestMode) {
@@ -645,7 +655,7 @@ app.post("/api/leads/submit", async (req, res) => {
         monitor.finish(false);
         return res.status(403).json({ error: "Invalid signature" });
       }
-      
+
       console.log("✅ Twilio signature verified");
     } else {
       console.log("🧪 TEST MODE ACTIVE: Signature verification bypassed");
@@ -672,7 +682,7 @@ app.post("/api/leads/submit", async (req, res) => {
       from,
       to: to,
       direction,
-      isTestMode
+      isTestMode,
     });
 
     // ... rest of your existing webhook code continues here
@@ -3785,140 +3795,306 @@ app.post(
 // ============================================
 app.post("/api/contractors/apply", async (req, res) => {
   try {
-    const applicationData = req.body;
+    const data = req.body;
+    const validationErrors = [];
 
-    // Validation
-    if (
-      !applicationData.businessName ||
-      !applicationData.email ||
-      !applicationData.phone
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: "Business name, email, and phone are required",
-      });
-    }
+    console.log("📥 Received contractor application:", data.businessName);
 
-    // ✅ TCPA and TOS Validation
-    if (!applicationData.acceptedTerms) {
-      return res.status(400).json({
-        success: false,
-        error: "You must accept the Terms of Service to continue",
-      });
+    // ============================================
+    // 1. VALIDATE BUSINESS NAME
+    // ============================================
+    const businessNameValidation = sanitizeBusinessName(data.businessName);
+    if (!businessNameValidation.valid) {
+      validationErrors.push(businessNameValidation.error);
     }
+    const businessName = businessNameValidation.formatted;
 
-    if (!applicationData.acceptedTCPA) {
-      return res.status(400).json({
-        success: false,
-        error:
-          "You must consent to receive SMS notifications as required by TCPA",
-      });
+    // ============================================
+    // 2. VALIDATE EMAIL
+    // ============================================
+    const emailValidation = validateEmail(data.email);
+    if (!emailValidation.valid) {
+      validationErrors.push(emailValidation.error);
     }
-
-    // ✅ Validate serviceTypes
-    if (!applicationData.serviceTypes || applicationData.serviceTypes.length < 2) {
-      return res.status(400).json({
-        success: false,
-        error: "Please select at least 2 HVAC services offered",
-      });
-    }
-
-    // ✅ Validate serviceZipCodes
-    if (!applicationData.serviceZipCodes || applicationData.serviceZipCodes.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Please provide at least one service ZIP code",
-      });
-    }
+    const email = emailValidation.normalized;
 
     // Check for duplicate email
-    const existingContractor = await prisma.contractor.findUnique({
-      where: { email: applicationData.email.toLowerCase() },
-    });
+    if (email) {
+      const existingContractor = await prisma.contractor.findUnique({
+        where: { email: email },
+      });
 
-    if (existingContractor) {
+      if (existingContractor) {
+        return res.status(400).json({
+          success: false,
+          error: "An application already exists with this email address",
+        });
+      }
+    }
+
+    // ============================================
+    // 3. VALIDATE PHONE NUMBER
+    // ============================================
+    const phoneValidation = validateAndFormatPhone(data.phone);
+    if (!phoneValidation.valid) {
+      validationErrors.push(phoneValidation.error);
+    }
+    const phone = phoneValidation.formatted;
+
+    // ============================================
+    // 4. VALIDATE BUSINESS ADDRESS
+    // ============================================
+    let businessCity = null;
+    let businessState = null;
+    let businessZip = null;
+
+    if (data.businessCity) {
+      const cityValidation = validateCity(data.businessCity);
+      if (!cityValidation.valid) {
+        validationErrors.push(`City: ${cityValidation.error}`);
+      } else {
+        businessCity = cityValidation.formatted;
+      }
+    }
+
+    if (data.businessState) {
+      const stateValidation = validateState(data.businessState);
+      if (!stateValidation.valid) {
+        validationErrors.push(`State: ${stateValidation.error}`);
+      } else {
+        businessState = stateValidation.formatted;
+      }
+    }
+
+    if (data.businessZip) {
+      const zipValidation = validateZipCode(data.businessZip);
+      if (!zipValidation.valid) {
+        validationErrors.push(`Business ZIP: ${zipValidation.error}`);
+      } else {
+        businessZip = zipValidation.formatted;
+      }
+    }
+
+    // ============================================
+    // 5. VALIDATE LICENSE INFORMATION
+    // ============================================
+    let licenseNumber = null;
+    if (data.licenseNumber && data.licenseState) {
+      const licenseValidation = validateLicenseNumber(
+        data.licenseNumber,
+        data.licenseState
+      );
+      if (!licenseValidation.valid) {
+        validationErrors.push(`License: ${licenseValidation.error}`);
+      } else {
+        licenseNumber = licenseValidation.formatted;
+      }
+    }
+
+    // ============================================
+    // 6. VALIDATE TAX ID / EIN
+    // ============================================
+    const einValidation = validateAndFormatEIN(data.taxId);
+    if (!einValidation.valid) {
+      validationErrors.push(`Tax ID: ${einValidation.error}`);
+    }
+    const taxId = einValidation.formatted;
+
+    // ============================================
+    // 7. VALIDATE WEBSITE URL
+    // ============================================
+    const websiteValidation = validateWebsiteUrl(data.website);
+    if (!websiteValidation.valid) {
+      validationErrors.push(`Website: ${websiteValidation.error}`);
+    }
+    const website = websiteValidation.formatted;
+
+    // ============================================
+    // 8. VALIDATE YEARS IN BUSINESS
+    // ============================================
+    const yearsValidation = validateYearsInBusiness(data.yearsInBusiness);
+    if (!yearsValidation.valid) {
+      validationErrors.push(yearsValidation.error);
+    }
+    const yearsInBusiness = yearsValidation.formatted;
+
+    // ============================================
+    // 9. VALIDATE SERVICE TYPES
+    // ============================================
+    const serviceTypesValidation = validateServiceTypes(data.serviceTypes);
+    if (!serviceTypesValidation.valid) {
+      validationErrors.push(serviceTypesValidation.error);
+    }
+    const serviceTypes = serviceTypesValidation.formatted;
+
+    // ============================================
+    // 10. VALIDATE SERVICE ZIP CODES
+    // ============================================
+    const serviceZipsValidation = await validateServiceZipCodes(
+      data.serviceZipCodes,
+      businessZip
+    );
+    if (!serviceZipsValidation.valid) {
+      validationErrors.push(serviceZipsValidation.error);
+    }
+    const serviceZipCodes = serviceZipsValidation.formatted;
+
+    // ============================================
+    // 11. VALIDATE LEGAL COMPLIANCE
+    // ============================================
+    if (!data.acceptedTerms) {
+      validationErrors.push("You must accept the Terms of Service");
+    }
+
+    if (!data.acceptedTCPA) {
+      validationErrors.push(
+        "You must consent to receive SMS notifications (TCPA requirement)"
+      );
+    }
+
+    if (!data.acceptedPrivacy) {
+      validationErrors.push("You must accept the Privacy Policy");
+    }
+
+    // ============================================
+    // CHECK FOR ANY VALIDATION ERRORS
+    // ============================================
+    if (validationErrors.length > 0) {
+      console.log("❌ Validation errors:", validationErrors);
       return res.status(400).json({
         success: false,
-        error: "An application already exists with this email address",
+        error: validationErrors[0], // Return first error
+        errors: validationErrors, // Return all errors for debugging
       });
     }
 
-    // ✅ Create contractor application with ALL fields
+    // ============================================
+    // 12. CREATE CONTRACTOR IN DATABASE
+    // ============================================
+    console.log("✅ All validations passed, creating contractor...");
+
     const contractor = await prisma.contractor.create({
       data: {
-        businessName: applicationData.businessName,
-        email: applicationData.email.toLowerCase(),
-        phone: applicationData.phone,
-        businessAddress: applicationData.businessAddress || "",
-        businessCity: applicationData.businessCity || "",
-        businessState: applicationData.businessState || "",
-        businessZip: applicationData.businessZip || "",
-        licenseNumber: applicationData.licenseNumber || "",
-        yearsInBusiness: parseInt(applicationData.yearsInBusiness) || 0,
-        
-        // ✅ FIXED: Use serviceTypes instead of specializations
-        serviceTypes: applicationData.serviceTypes || [],
-        
-        // ✅ FIXED: serviceZipCodes is now an array
-        serviceZipCodes: applicationData.serviceZipCodes || [],
-        
-        description: applicationData.description || "",
-        website: applicationData.website || "",
+        // Business Info
+        businessName: businessName,
+        businessType: data.businessType || null,
+        yearsInBusiness: yearsInBusiness,
+        website: website,
 
-        status: "active", // Changed from "pending" so they can be approved
+        // Contact Info
+        email: email,
+        phone: phone,
+
+        // Address
+        businessAddress: data.businessAddress || "",
+        businessCity: businessCity || "",
+        businessState: businessState || "",
+        businessZip: businessZip || "",
+
+        // License & Tax
+        licenseNumber: licenseNumber || "",
+        licenseState: data.licenseState || "",
+        licenseExpirationDate: data.licenseExpirationDate
+          ? new Date(data.licenseExpirationDate)
+          : null,
+        taxId: taxId,
+
+        // Insurance (optional fields)
+        insuranceProvider: data.insuranceProvider || "",
+        insurancePolicyNumber: data.insurancePolicyNumber || "",
+        insuranceExpirationDate: data.insuranceExpirationDate
+          ? new Date(data.insuranceExpirationDate)
+          : null,
+
+        // Service Info
+        serviceTypes: serviceTypes,
+        serviceZipCodes: serviceZipCodes,
+        description: data.description || "",
+
+        // Application Status
+        status: "active",
         isVerified: false, // Admin must approve
         applicationSubmittedAt: new Date(),
 
-        // ✅ Legal Compliance Fields
+        // Legal Compliance
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),
+        acceptedPrivacyAt: new Date(),
         tcpaConsentText:
           "I consent to receive automated SMS notifications about new leads, account updates, and service messages from GetContractorNow. Message frequency varies. Message and data rates may apply. Reply STOP to cancel.",
         ipAddress: req.ip || req.headers["x-forwarded-for"] || "unknown",
         userAgent: req.headers["user-agent"] || "unknown",
         smsOptedOut: false,
 
+        // Account Settings
         subscriptionTier: "none",
         subscriptionStatus: "pending",
         creditBalance: 0,
         isActive: false,
         isAcceptingLeads: false,
+
+        // Additional fields
+        referralSource: data.referralSource || "website",
+        notes: data.notes || "",
       },
     });
 
-    // ✅ Send confirmation emails
-    const {
-      sendApplicationConfirmation,
-      sendAdminApplicationAlert,
-    } = require("./notifications");
-    
-    await sendApplicationConfirmation(contractor);
-    await sendAdminApplicationAlert(contractor);
+    // ============================================
+    // 13. SEND CONFIRMATION EMAILS
+    // ============================================
+    try {
+      const {
+        sendApplicationConfirmation,
+        sendAdminApplicationAlert,
+      } = require("./notifications");
 
-    console.log(`✅ New contractor application: ${contractor.businessName}`);
+      await sendApplicationConfirmation(contractor);
+      await sendAdminApplicationAlert(contractor);
+    } catch (emailError) {
+      console.error("⚠️  Email notification error:", emailError);
+      // Don't fail the request if emails fail
+    }
+
+    // ============================================
+    // 14. SUCCESS RESPONSE
+    // ============================================
+    console.log("✅ Contractor application created successfully");
+    console.log(`   ID: ${contractor.id}`);
+    console.log(`   Business: ${contractor.businessName}`);
+    console.log(`   Email: ${contractor.email}`);
+    console.log(`   Phone: ${contractor.phone}`);
     console.log(`   Service Types: ${contractor.serviceTypes.join(", ")}`);
     console.log(`   Service ZIPs: ${contractor.serviceZipCodes.join(", ")}`);
 
     res.json({
       success: true,
       message:
-        "Application submitted successfully! You will receive a confirmation email shortly. An admin will review your application.",
+        "Application submitted successfully! An admin will review your application and send you login credentials within 24-48 hours.",
       applicationId: contractor.id,
     });
   } catch (error) {
-    console.error("Contractor application error:", error);
-    
-    // Better error logging
-    if (error.code === 'P2002') {
+    console.error("❌ Contractor application error:", error);
+
+    // Handle Prisma errors
+    if (error.code === "P2002") {
       return res.status(400).json({
         success: false,
         error: "An application already exists with this email address",
       });
     }
-    
+
+    // Handle validation errors from Prisma
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid data provided. Please check all fields.",
+      });
+    }
+
     res.status(500).json({
       success: false,
-      error: "Failed to submit application. Please try again.",
+      error:
+        "Failed to submit application. Please try again or contact support.",
     });
   }
 });
@@ -4919,6 +5095,29 @@ app.get("/api/admin/me", newAdminAuth, async (req, res) => {
     admin: req.admin,
   });
 });
+
+// ============================================
+// CONTRACTOR APPLICATION ENDPOINT - FULLY VALIDATED
+// Place this in your index.js
+// ============================================
+
+// Import validation utilities at the top of index.js
+const {
+  validateAndFormatPhone,
+  validateEmail,
+  validateLicenseNumber,
+  validateAndFormatEIN,
+  validateZipCode,
+  validateState,
+  validateCity,
+  validateServiceZipCodes,
+  validateWebsiteUrl,
+  sanitizeBusinessName,
+  validateServiceTypes,
+  validateYearsInBusiness,
+} = require("./utils/contractorValidation");
+
+
 
 // ============================================
 // SENTRY ERROR HANDLER (MUST BE LAST)
