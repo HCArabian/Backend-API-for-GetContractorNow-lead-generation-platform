@@ -153,11 +153,37 @@ app.post(
       return res.status(400).json({ error: "Invalid payload" });
     }
 
+    // ✅ ADD: Validate event.data exists
+    if (!event.data || !event.data.object) {
+      monitor.finish(false);
+      console.error("❌ Missing event.data or event.data.object");
+      return res.status(400).json({ error: "Invalid event structure" });
+    }
+
     monitor.setData("eventType", event.type); // ✅ ADD THIS
 
     try {
       if (event.type === "customer.subscription.created") {
         await handleSubscriptionCreated(event.data.object);
+        // ✅ ADD: Try-catch around handler
+        try {
+          await handleSubscriptionCreated(event.data.object);
+          console.log("✅ Subscription created successfully");
+        } catch (handlerError) {
+          console.error("❌ Handler error:", handlerError.message);
+          // Don't fail the webhook, just log it
+          Sentry.captureException(handlerError, {
+            tags: {
+              webhook: "stripe",
+              handler: "subscription_created",
+              eventType: event.type,
+            },
+            extra: {
+              eventId: event.id,
+              subscriptionId: event.data.object.id,
+            },
+          });
+        }
       }
 
       monitor.finish(true); // ✅ ADD THIS
