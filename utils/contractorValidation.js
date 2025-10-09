@@ -16,6 +16,24 @@ const SERVICE_TYPE_LABELS = {
   'emergency_repair': '24/7 Emergency HVAC Repair',
 };
 
+const validTypes = [
+  // Core AC Services
+  'ac_repair',
+  'ac_installation',
+  'ac_maintenance',
+  
+  // Core Heating Services  
+  'heating_repair',
+  'furnace_repair',
+  'furnace_installation',
+  
+  // General HVAC
+  'hvac_installation',
+  
+  // Emergency
+  'emergency_repair',
+];
+
 // ============================================
 // PHONE NUMBER VALIDATION & FORMATTING
 // ============================================
@@ -365,26 +383,6 @@ function validateServiceTypes(serviceTypes) {
   if (!serviceTypes || serviceTypes.length === 0) {
     return { valid: false, error: 'At least one service type is required' };
   }
-
-  const validTypes = [
-  // Core AC Services
-  'ac_repair',
-  'ac_installation',
-  'ac_maintenance',
-  
-  // Core Heating Services  
-  'heating_repair',
-  'furnace_repair',
-  'furnace_installation',
-  
-  // General HVAC
-  'hvac_installation',
-  
-  // Emergency
-  'emergency_repair',
-];
-
-
 
   const invalidTypes = serviceTypes.filter(type => !validTypes.includes(type));
 
