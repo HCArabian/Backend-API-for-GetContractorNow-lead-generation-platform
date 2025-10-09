@@ -347,7 +347,7 @@ async function sendFeedbackRequestEmail(lead) {
   }
 }
 
-async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
+async function sendContractorOnboardingEmail(contractor, temporaryPassword, packageSelectionUrl) {
   // Check bounce status first
   if (!(await shouldSendEmail(contractor.email))) {
     return { success: false, error: "Email address bounced" };
@@ -373,8 +373,9 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
     .tier-features { list-style: none; padding: 0; margin: 15px 0; }
     .tier-features li { padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
     .tier-features li:last-child { border-bottom: none; }
-    .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 10px 0; font-weight: bold; }
+    .button { display: inline-block; background: #2563eb; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 6px; margin: 10px 0; font-weight: bold; text-align: center; }
     .button.secondary { background: #6b7280; }
+    .button:hover { opacity: 0.9; }
     .alert-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
   </style>
 </head>
@@ -387,27 +388,24 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
       <p>Hi ${contractor.businessName},</p>
       <p><strong>Congratulations! Your contractor account has been approved.</strong></p>
       
-      <p>You're now ready to start receiving qualified leads in your service area. Here's how to get started:</p>
+      <p>You're now ready to start receiving qualified leads in your service area. Follow these simple steps to get started:</p>
 
       <div class="alert-box">
         <strong>⚠️ IMPORTANT:</strong> You must change your temporary password on first login for security.
       </div>
 
-      <h2 style="color: #1f2937; margin-top: 30px;">Step 1: Access Your Portal</h2>
+      <h2 style="color: #1f2937; margin-top: 30px;">Step 1: Your Login Credentials</h2>
       
       <div class="credentials-box">
-        <h3>Your Login Credentials</h3>
-        <p><strong>Portal URL:</strong> <a href="${portalUrl}">${portalUrl}</a></p>
+        <h3 style="margin-top: 0;">Portal Access</h3>
+        <p><strong>Portal URL:</strong> <a href="${portalUrl}" style="color: #2563eb;">${portalUrl}</a></p>
         <p><strong>Email:</strong> ${contractor.email}</p>
-        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px; font-weight: bold;">${temporaryPassword}</code></p>
+        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px; font-weight: bold; color: #dc2626;">${temporaryPassword}</code></p>
+        <p style="font-size: 14px; color: #6b7280; margin-top: 10px;">⚠️ You'll be prompted to change this password on first login</p>
       </div>
 
-      <div style="text-align: center; margin: 20px 0;">
-        <a href="${portalUrl}" class="button">Access Portal Now</a>
-      </div>
-
-      <h2 style="color: #1f2937; margin-top: 40px;">Step 2: Choose Your Subscription Tier</h2>
-      <p>Select the plan that fits your business needs:</p>
+      <h2 style="color: #1f2937; margin-top: 40px;">Step 2: Choose Your Subscription Plan</h2>
+      <p>Select the plan that best fits your business needs. Click any button below to complete your secure payment and activate your account.</p>
 
       <!-- STARTER TIER -->
       <div class="tier-card">
@@ -421,7 +419,7 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
           <li>✅ Email & SMS notifications</li>
         </ul>
         <div style="text-align: center;">
-          <a href="${process.env.STRIPE_PAYMENT_LINK_STARTER}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button secondary">Choose Starter</a>
+          <a href="${packageSelectionUrl}&package=starter" class="button secondary">Choose Starter</a>
         </div>
       </div>
 
@@ -439,7 +437,7 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
           <li>✅ Extended credit terms (90 days)</li>
         </ul>
         <div style="text-align: center;">
-          <a href="${process.env.STRIPE_PAYMENT_LINK_PRO}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button">Choose Pro</a>
+          <a href="${packageSelectionUrl}&package=pro" class="button">Choose Pro</a>
         </div>
       </div>
 
@@ -457,7 +455,7 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
           <li>✅ Premium lead quality</li>
         </ul>
         <div style="text-align: center;">
-          <a href="${process.env.STRIPE_PAYMENT_LINK_ELITE}?prefilled_email=${encodeURIComponent(contractor.email)}" class="button secondary">Choose Elite</a>
+          <a href="${packageSelectionUrl}&package=elite" class="button secondary">Choose Elite</a>
         </div>
       </div>
 
@@ -470,11 +468,19 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
 
       <h2 style="color: #1f2937; margin-top: 40px;">What Happens Next?</h2>
       <ol style="line-height: 2;">
-        <li>Login to your portal and change your password</li>
-        <li>Choose your subscription tier</li>
-        <li>Add credit to your account ($500 minimum)</li>
-        <li>Start receiving qualified leads!</li>
+        <li><strong>Choose your plan</strong> - Click one of the buttons above</li>
+        <li><strong>Complete payment</strong> - Secure checkout via Stripe</li>
+        <li><strong>Login to portal</strong> - Use credentials above</li>
+        <li><strong>Change password</strong> - Set your permanent password</li>
+        <li><strong>Add credit</strong> - Minimum $500 to receive leads</li>
+        <li><strong>Start receiving leads!</strong> - You're all set</li>
       </ol>
+
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; margin-top: 30px; border-radius: 8px;">
+        <p style="margin: 0; font-size: 14px; color: #6b7280;">
+          <strong style="color: #1f2937;">Important:</strong> Your package selection link is valid for 7 days. If you have any questions or need assistance, please don't hesitate to reach out.
+        </p>
+      </div>
 
       <p style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e5e7eb;">
         <strong>Need help?</strong><br>
@@ -509,7 +515,8 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword) {
         sentAt: new Date(),
         metadata: {
           purpose: "onboarding",
-          includesPaymentLinks: true,
+          includesPackageSelection: true,
+          tokenExpiry: "7 days"
         },
       },
     });

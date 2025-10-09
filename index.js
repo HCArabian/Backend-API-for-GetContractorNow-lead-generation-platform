@@ -169,139 +169,202 @@ app.set("trust proxy", 1);
 // ============================================
 // STRIPE WEBHOOK - UNIFIED HANDLER
 // ============================================
+// Stripe Webhook Handler
+// Stripe Webhook Handler
 app.post(
-  "/api/webhooks/stripe",
+  "/api/webhooks/stripe/subscription",
   express.raw({ type: "application/json" }),
   async (req, res) => {
-    const monitor = monitorWebhook("stripe", "webhook");
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    console.log("📬 Stripe webhook received");
+    let event;
 
     try {
-      const sig = req.headers["stripe-signature"];
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      console.log("✅ Stripe webhook received:", event.type);
+    } catch (err) {
+      console.error("❌ Webhook verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
 
-      if (!webhookSecret) {
-        console.error("❌ STRIPE_WEBHOOK_SECRET not configured");
-        monitor.finish(false);
-        return res.status(500).json({ error: "Webhook secret not configured" });
-      }
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object;
+          
+          console.log("📋 Checkout session completed");
+          console.log("   - Session ID:", session.id);
+          console.log("   - Customer ID:", session.customer);
+          console.log("   - Subscription ID:", session.subscription);
+          console.log("   - Metadata:", JSON.stringify(session.metadata));
 
-      const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+          const contractorId = session.metadata?.contractorId;
 
-      // Verify signature
-      let event;
-      try {
-        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-        console.log("✅ Stripe signature verified:", event.type);
-      } catch (err) {
-        console.error("❌ Stripe signature verification failed:", err.message);
-        monitor.finish(false);
-        return res.status(400).json({ error: `Webhook Error: ${err.message}` });
-      }
+          if (!contractorId) {
+            console.error("❌ NO CONTRACTOR ID IN METADATA!");
+            console.error("Full session metadata:", JSON.stringify(session.metadata, null, 2));
+            return res.status(400).json({ error: "Missing contractor ID in metadata" });
+          }
 
-      monitor.setData("eventType", event.type);
+          // Get subscription details from Stripe
+          const subscription = await stripe.subscriptions.retrieve(session.subscription);
 
-      // Import handlers
-      const {
-        handleSubscriptionCreated,
-        handleSubscriptionUpdated,
-        handleSubscriptionDeleted,
-        handlePaymentMethodAttached,
-      } = require("./webhook-handler");
+          // Map package to tier
+          const packageTierMap = {
+            'starter': 'STARTER',
+            'pro': 'PRO',
+            'elite': 'ELITE'
+          };
+          const tier = packageTierMap[session.metadata?.packageId] || 'PRO';
 
-      // Handle events
-      try {
-        switch (event.type) {
-          case "customer.subscription.created":
-            console.log("🆕 Subscription created event");
-            await handleSubscriptionCreated(event.data.object);
-            break;
+          console.log("💳 Updating contractor with Stripe info...");
 
-          case "customer.subscription.updated":
-            console.log("📝 Subscription updated event");
-            await handleSubscriptionUpdated(event.data.object);
-            break;
+          // Update contractor in database
+          const updated = await prisma.contractor.update({
+            where: { id: contractorId },
+            data: {
+              stripeCustomerId: session.customer,
+              stripeSubscriptionId: session.subscription,
+              subscriptionStatus: "active",
+              subscriptionTier: tier,
+              subscriptionStartDate: new Date(subscription.current_period_start * 1000),
+              subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+              status: "active",
+              isAcceptingLeads: true,
+              // Clear the package selection token since setup is complete
+              packageSelectionToken: null,
+              packageSelectionTokenExpiry: null,
+            },
+          });
 
-          case "customer.subscription.deleted":
-            console.log("❌ Subscription deleted event");
-            await handleSubscriptionDeleted(event.data.object);
-            break;
+          console.log("✅ CONTRACTOR ACTIVATED SUCCESSFULLY");
+          console.log("   - ID:", updated.id);
+          console.log("   - Business:", updated.businessName);
+          console.log("   - Email:", updated.email);
+          console.log("   - Stripe Customer:", updated.stripeCustomerId);
+          console.log("   - Stripe Subscription:", updated.stripeSubscriptionId);
+          console.log("   - Tier:", updated.subscriptionTier);
+          console.log("   - Status:", updated.subscriptionStatus);
 
-          case "payment_method.attached":
-            console.log("💳 Payment method attached event");
-            await handlePaymentMethodAttached(event.data.object);
-            break;
-
-          case "invoice.payment_succeeded":
-            console.log("✅ Invoice payment succeeded");
-            // Ensure subscription stays active
-            const invoice = event.data.object;
-            if (invoice.subscription) {
-              const contractor = await prisma.contractor.findFirst({
-                where: { stripeSubscriptionId: invoice.subscription },
-              });
-              if (contractor) {
-                await prisma.contractor.update({
-                  where: { id: contractor.id },
-                  data: { subscriptionStatus: "active" },
-                });
-              }
-            }
-            break;
-
-          case "invoice.payment_failed":
-            console.log("❌ Invoice payment failed");
-            const failedInvoice = event.data.object;
-            if (failedInvoice.subscription) {
-              const contractor = await prisma.contractor.findFirst({
-                where: { stripeSubscriptionId: failedInvoice.subscription },
-              });
-              if (contractor) {
-                await prisma.contractor.update({
-                  where: { id: contractor.id },
-                  data: {
-                    subscriptionStatus: "past_due",
-                    isAcceptingLeads: false,
-                  },
-                });
-              }
-            }
-            break;
-
-          default:
-            console.log(`ℹ️ Unhandled event type: ${event.type}`);
+          break;
         }
 
-        console.log(`✅ Webhook processed successfully: ${event.type}`);
-        monitor.finish(true);
-        res.json({ received: true });
-      } catch (handlerError) {
-        console.error(`❌ Handler error for ${event.type}:`, handlerError);
-        monitor.finish(false);
+        case "customer.subscription.updated": {
+          const subscription = event.data.object;
+          console.log("📝 Subscription updated:", subscription.id, "Status:", subscription.status);
 
-        // Still return 200 so Stripe doesn't retry
-        // But log the error
-        const Sentry = require("@sentry/node");
-        Sentry.captureException(handlerError, {
-          tags: {
-            webhook: "stripe",
-            eventType: event.type,
-          },
-          extra: {
-            eventId: event.id,
-          },
-        });
+          const contractor = await prisma.contractor.findFirst({
+            where: { stripeSubscriptionId: subscription.id },
+          });
 
-        res.json({ received: true, error: handlerError.message });
+          if (contractor) {
+            let status = "inactive";
+            if (subscription.status === "active") status = "active";
+            else if (subscription.status === "canceled") status = "cancelled";
+            else if (subscription.status === "past_due") status = "past_due";
+
+            await prisma.contractor.update({
+              where: { id: contractor.id },
+              data: {
+                subscriptionStatus: status,
+                subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+                status: subscription.status === "active" ? "active" : "inactive",
+              },
+            });
+
+            console.log("✅ Updated subscription status to:", status);
+          } else {
+            console.warn("⚠️ No contractor found for subscription:", subscription.id);
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object;
+          console.log("❌ Subscription deleted:", subscription.id);
+          
+          const contractor = await prisma.contractor.findFirst({
+            where: { stripeSubscriptionId: subscription.id },
+          });
+
+          if (contractor) {
+            await prisma.contractor.update({
+              where: { id: contractor.id },
+              data: {
+                subscriptionStatus: "cancelled",
+                subscriptionEndDate: new Date(),
+                status: "inactive",
+                isAcceptingLeads: false,
+              },
+            });
+
+            console.log("✅ Subscription cancelled for:", contractor.businessName);
+          }
+          break;
+        }
+
+        case "invoice.payment_succeeded": {
+          const invoice = event.data.object;
+          console.log("💰 Payment succeeded for invoice:", invoice.id);
+
+          if (invoice.subscription) {
+            const contractor = await prisma.contractor.findFirst({
+              where: { stripeSubscriptionId: invoice.subscription },
+            });
+
+            if (contractor && contractor.subscriptionStatus !== "active") {
+              await prisma.contractor.update({
+                where: { id: contractor.id },
+                data: {
+                  subscriptionStatus: "active",
+                  status: "active",
+                  isAcceptingLeads: true,
+                },
+              });
+
+              console.log("✅ Activated subscription after payment for:", contractor.businessName);
+            }
+          }
+          break;
+        }
+
+        case "invoice.payment_failed": {
+          const invoice = event.data.object;
+          console.log("❌ Payment failed for invoice:", invoice.id);
+          
+          if (invoice.subscription) {
+            const contractor = await prisma.contractor.findFirst({
+              where: { stripeSubscriptionId: invoice.subscription },
+            });
+
+            if (contractor) {
+              await prisma.contractor.update({
+                where: { id: contractor.id },
+                data: { 
+                  subscriptionStatus: "past_due",
+                  isAcceptingLeads: false,
+                },
+              });
+
+              console.log("⚠️ Payment failed for:", contractor.businessName);
+              
+              // TODO: Send payment failed email notification
+            }
+          }
+          break;
+        }
+
+        default:
+          console.log(`ℹ️ Unhandled event type: ${event.type}`);
       }
+
+      // Always acknowledge receipt
+      res.json({ received: true });
+      
     } catch (error) {
-      monitor.finish(false);
-      const Sentry = require("@sentry/node");
-      Sentry.captureException(error, {
-        tags: { webhook: "stripe" },
-      });
-      console.error("❌ Webhook error:", error);
+      console.error("❌ Error processing webhook:", error);
+      Sentry.captureException(error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -2370,6 +2433,7 @@ async function logSecurityEvent(type, details) {
 }
 
 // Approve contractor and send onboarding email
+// Approve contractor and send onboarding email
 app.post(
   "/api/admin/contractors/:id/approve",
   newAdminAuth,
@@ -2389,35 +2453,191 @@ app.post(
       const tempPassword = crypto.randomBytes(8).toString("hex");
       const hashedPassword = await hashPassword(tempPassword);
 
+      // Generate package selection token (valid for 7 days)
+      const packageSelectionToken = crypto.randomBytes(32).toString("hex");
+      const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
       // Update contractor
-      await prisma.contractor.update({
+      const updatedContractor = await prisma.contractor.update({
         where: { id: contractorId },
         data: {
-          status: "active",
+          status: "approved", // Will become "active" after payment
           isVerified: true,
           passwordHash: hashedPassword,
           requirePasswordChange: true,
+          isApproved: true,
+          packageSelectionToken: packageSelectionToken,
+          packageSelectionTokenExpiry: tokenExpiry,
+          subscriptionStatus: "inactive", // Will become "active" after payment
         },
       });
 
-      // Send onboarding email
-      await sendContractorOnboardingEmail(contractor, tempPassword);
+      // Build package selection URL
+      const packageSelectionUrl = `${process.env.FRONTEND_URL}/select-package?token=${packageSelectionToken}`;
 
-      console.log(
-        "Contractor approved and onboarded:",
-        contractor.businessName
+      // Send onboarding email with package selection URL
+      await sendContractorOnboardingEmail(
+        updatedContractor,
+        tempPassword,
+        packageSelectionUrl
       );
+
+      console.log("✅ Contractor approved:", updatedContractor.businessName);
+      console.log("   Package selection URL:", packageSelectionUrl);
 
       res.json({
         success: true,
         message: "Contractor approved and onboarding email sent",
+        contractor: {
+          id: updatedContractor.id,
+          businessName: updatedContractor.businessName,
+          email: updatedContractor.email,
+          tempPassword: tempPassword, // For admin reference
+          packageSelectionUrl: packageSelectionUrl, // For admin to test
+        },
       });
     } catch (error) {
-      console.error("Contractor approval error:", error);
+      console.error("Approval error:", error);
+      Sentry.captureException(error);
       res.status(500).json({ error: "Failed to approve contractor" });
     }
   }
 );
+
+// Create Stripe checkout session from package selection
+app.post("/api/contractors/create-checkout", async (req, res) => {
+  try {
+    const { token, packageId } = req.body;
+
+    console.log("📦 Checkout request received:", { token: token?.substring(0, 10) + '...', packageId });
+
+    // Validate input
+    if (!token || !packageId) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Token and packageId are required" 
+      });
+    }
+
+    // Validate package
+    const validPackages = ['starter', 'pro', 'elite'];
+    if (!validPackages.includes(packageId)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid package. Must be starter, pro, or elite." 
+      });
+    }
+
+    // Find contractor by token
+    const contractor = await prisma.contractor.findUnique({
+      where: { packageSelectionToken: token },
+    });
+
+    if (!contractor) {
+      console.error("❌ Token not found:", token.substring(0, 10) + '...');
+      return res.status(404).json({ 
+        success: false,
+        error: "Invalid or expired token" 
+      });
+    }
+
+    // Check token expiry
+    if (contractor.packageSelectionTokenExpiry < new Date()) {
+      console.error("❌ Token expired for contractor:", contractor.email);
+      return res.status(400).json({ 
+        success: false,
+        error: "Token expired. Please contact support for a new link." 
+      });
+    }
+
+    // Check if already has active subscription
+    if (contractor.subscriptionStatus === "active") {
+      console.warn("⚠️ Contractor already has active subscription:", contractor.email);
+      return res.status(400).json({ 
+        success: false,
+        error: "You already have an active subscription. Please login to your dashboard.",
+        redirectTo: "/dashboard"
+      });
+    }
+
+    // Map package to Stripe Price ID
+    const priceMap = {
+      'starter': process.env.STRIPE_PRICE_STARTER,
+      'pro': process.env.STRIPE_PRICE_PRO,
+      'elite': process.env.STRIPE_PRICE_ELITE,
+    };
+
+    const priceId = priceMap[packageId];
+    
+    if (!priceId) {
+      console.error("❌ Price ID not configured for package:", packageId);
+      return res.status(500).json({ 
+        success: false,
+        error: "Package pricing not configured. Please contact support." 
+      });
+    }
+
+    console.log("✅ Creating checkout session:");
+    console.log("   - Contractor:", contractor.businessName);
+    console.log("   - Email:", contractor.email);
+    console.log("   - Package:", packageId);
+    console.log("   - Price ID:", priceId);
+
+    // Create Stripe checkout session
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/select-package?token=${token}&package=${packageId}&cancelled=true`,
+      
+      // ⭐ CRITICAL: Pass contractor ID in metadata
+      metadata: {
+        contractorId: contractor.id,
+        packageId: packageId,
+        source: "package_selection",
+        businessName: contractor.businessName
+      },
+      
+      // Pre-fill customer information
+      customer_email: contractor.email,
+      
+      // Collect billing address
+      billing_address_collection: "required",
+      
+      // Enable promotional codes
+      allow_promotion_codes: true,
+      
+      // Subscription settings
+      subscription_data: {
+        metadata: {
+          contractorId: contractor.id,
+          packageId: packageId
+        }
+      }
+    });
+
+    console.log("✅ Checkout session created successfully:", session.id);
+
+    res.json({
+      success: true,
+      url: session.url,
+      sessionId: session.id,
+    });
+  } catch (error) {
+    console.error("❌ Checkout creation error:", error);
+    Sentry.captureException(error);
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to create checkout session. Please try again or contact support." 
+    });
+  }
+});
 
 // Allow both api and app subdomains
 app.use((req, res, next) => {
