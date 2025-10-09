@@ -145,6 +145,10 @@ model Contractor {
   referralSource          String?             // How they heard about us
   notes                   String? 
 
+  // ✅ ADD THESE TWO NEW FIELDS:
+  packageSelectionToken       String?   @unique
+  packageSelectionTokenExpiry DateTime?
+
   @@index([email])
   @@index([phone])
   @@index([status])
@@ -157,6 +161,8 @@ model Contractor {
   @@index([stripeCustomerId])
   @@index([stripeSubscriptionId])
   @@index([serviceZipCodes])
+  @@index([packageSelectionToken]) // Add index for performance
+
 }
 
 model LeadAssignment {
