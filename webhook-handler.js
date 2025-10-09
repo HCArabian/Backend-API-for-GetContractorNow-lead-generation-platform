@@ -1,58 +1,49 @@
-// webhook-handler.js - Stripe Webhook Handlers
+// webhook-handler.js - Save Stripe Data to Database
 
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // ============================================
-// HANDLE SUBSCRIPTION CREATED
+// SUBSCRIPTION CREATED - Save Everything!
 // ============================================
 async function handleSubscriptionCreated(subscription) {
-  console.log("📝 Processing subscription created:", subscription.id);
+  console.log("📝 Saving subscription to database:", subscription.id);
 
   try {
-    const stripeCustomerId = subscription.customer;
-    const subscriptionId = subscription.id;
-
-    // Get price ID to determine tier
-    const priceId = subscription.items.data[0].price.id;
-    let tier = "pro"; // default
-
-    if (priceId === process.env.STRIPE_PRICE_STARTER) {
-      tier = "starter";
-    } else if (priceId === process.env.STRIPE_PRICE_PRO) {
-      tier = "pro";
-    } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
-      tier = "elite";
-    }
-
-    console.log(`🎯 Subscription tier: ${tier}`);
-
-    // Get customer email from Stripe
     const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-    const customer = await stripe.customers.retrieve(stripeCustomerId);
+    
+    // Get customer details
+    const customer = await stripe.customers.retrieve(subscription.customer);
     const customerEmail = customer.email;
 
-    console.log(`📧 Customer email: ${customerEmail}`);
+    console.log(`📧 Customer: ${customerEmail}`);
 
-    // Find contractor by email
+    // Find contractor
     const contractor = await prisma.contractor.findUnique({
       where: { email: customerEmail.toLowerCase() },
     });
 
     if (!contractor) {
-      console.error(`❌ No contractor found with email: ${customerEmail}`);
       throw new Error(`No contractor found with email: ${customerEmail}`);
     }
 
-    console.log(`✅ Found contractor: ${contractor.businessName}`);
+    // Determine tier from price ID
+    const priceId = subscription.items.data[0].price.id;
+    let tier = "pro";
+    
+    if (priceId === process.env.STRIPE_PRICE_STARTER) tier = "starter";
+    else if (priceId === process.env.STRIPE_PRICE_PRO) tier = "pro";
+    else if (priceId === process.env.STRIPE_PRICE_ELITE) tier = "elite";
 
-    // Get payment method
-    let paymentMethodData = {};
+    // Get payment method (last 4 digits only!)
+    let paymentData = {};
+    
     if (customer.invoice_settings?.default_payment_method) {
       const pmId = customer.invoice_settings.default_payment_method;
       const pm = await stripe.paymentMethods.retrieve(pmId);
       
-      paymentMethodData = {
+      // ✅ SECURITY: Store only last 4 digits and metadata
+      paymentData = {
         stripePaymentMethodId: pm.id,
         paymentMethodLast4: pm.card?.last4,
         paymentMethodBrand: pm.card?.brand,
@@ -60,51 +51,48 @@ async function handleSubscriptionCreated(subscription) {
         paymentMethodExpYear: pm.card?.exp_year,
       };
 
-      console.log(`💳 Payment method: ${pm.card?.brand} ending in ${pm.card?.last4}`);
+      console.log(`💳 Payment: ${pm.card?.brand} ****${pm.card?.last4}`);
     }
 
-    // Update contractor with subscription info
-    const updatedContractor = await prisma.contractor.update({
+    // ✅ SAVE TO DATABASE (single source of truth)
+    const updated = await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
-        stripeCustomerId: stripeCustomerId,
-        stripeSubscriptionId: subscriptionId,
+        // Stripe IDs
+        stripeCustomerId: subscription.customer,
+        stripeSubscriptionId: subscription.id,
+        
+        // Payment Method (last 4 only!)
+        ...paymentData,
+        
+        // Subscription Details
         subscriptionTier: tier,
         subscriptionStatus: "active",
         subscriptionStartDate: new Date(subscription.current_period_start * 1000),
         subscriptionEndDate: new Date(subscription.current_period_end * 1000),
-        isAcceptingLeads: contractor.creditBalance >= 500, // Only if they have credit
-        ...paymentMethodData,
+        
+        // Enable leads if they have credit
+        isAcceptingLeads: contractor.creditBalance >= 500,
       },
     });
 
-    console.log(`✅ Contractor updated successfully`);
-    console.log(`   Stripe Customer ID: ${stripeCustomerId}`);
-    console.log(`   Subscription ID: ${subscriptionId}`);
+    console.log(`✅ Database updated: ${updated.businessName}`);
     console.log(`   Tier: ${tier}`);
     console.log(`   Status: active`);
+    console.log(`   Payment: ${paymentData.paymentMethodBrand} ****${paymentData.paymentMethodLast4}`);
 
-    // Send welcome email (optional)
-    try {
-      const { sendSubscriptionConfirmationEmail } = require("./notifications");
-      await sendSubscriptionConfirmationEmail(updatedContractor, tier);
-    } catch (emailError) {
-      console.error("⚠️ Failed to send confirmation email:", emailError);
-      // Don't fail the webhook if email fails
-    }
-
-    return { success: true, contractor: updatedContractor };
+    return { success: true };
   } catch (error) {
-    console.error("❌ Error handling subscription created:", error);
-    throw error; // Re-throw to be caught by webhook handler
+    console.error("❌ Webhook handler error:", error);
+    throw error;
   }
 }
 
 // ============================================
-// HANDLE SUBSCRIPTION UPDATED
+// SUBSCRIPTION UPDATED - Update Database
 // ============================================
 async function handleSubscriptionUpdated(subscription) {
-  console.log("📝 Processing subscription updated:", subscription.id);
+  console.log("📝 Updating subscription in database:", subscription.id);
 
   try {
     const contractor = await prisma.contractor.findFirst({
@@ -112,33 +100,25 @@ async function handleSubscriptionUpdated(subscription) {
     });
 
     if (!contractor) {
-      console.error("❌ No contractor found for subscription:", subscription.id);
-      return { success: false, error: "Contractor not found" };
+      console.log("⚠️ No contractor found for subscription");
+      return { success: false };
     }
 
     // Determine new tier
     const priceId = subscription.items.data[0].price.id;
     let tier = contractor.subscriptionTier;
-
-    if (priceId === process.env.STRIPE_PRICE_STARTER) {
-      tier = "starter";
-    } else if (priceId === process.env.STRIPE_PRICE_PRO) {
-      tier = "pro";
-    } else if (priceId === process.env.STRIPE_PRICE_ELITE) {
-      tier = "elite";
-    }
+    
+    if (priceId === process.env.STRIPE_PRICE_STARTER) tier = "starter";
+    else if (priceId === process.env.STRIPE_PRICE_PRO) tier = "pro";
+    else if (priceId === process.env.STRIPE_PRICE_ELITE) tier = "elite";
 
     // Determine status
     let status = "inactive";
-    if (subscription.status === "active") {
-      status = "active";
-    } else if (subscription.status === "past_due") {
-      status = "past_due";
-    } else if (subscription.status === "canceled" || subscription.status === "unpaid") {
-      status = "cancelled";
-    }
+    if (subscription.status === "active") status = "active";
+    else if (subscription.status === "past_due") status = "past_due";
+    else if (subscription.status === "canceled") status = "cancelled";
 
-    // Update contractor
+    // ✅ UPDATE DATABASE
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
@@ -149,51 +129,19 @@ async function handleSubscriptionUpdated(subscription) {
       },
     });
 
-    console.log(`✅ Subscription updated: ${contractor.businessName} → ${status}`);
+    console.log(`✅ Updated: ${contractor.businessName} → ${status}`);
     return { success: true };
   } catch (error) {
-    console.error("❌ Error handling subscription updated:", error);
+    console.error("❌ Update handler error:", error);
     throw error;
   }
 }
 
 // ============================================
-// HANDLE SUBSCRIPTION DELETED
-// ============================================
-async function handleSubscriptionDeleted(subscription) {
-  console.log("❌ Processing subscription deleted:", subscription.id);
-
-  try {
-    const contractor = await prisma.contractor.findFirst({
-      where: { stripeSubscriptionId: subscription.id },
-    });
-
-    if (!contractor) {
-      console.error("❌ No contractor found for subscription:", subscription.id);
-      return { success: false, error: "Contractor not found" };
-    }
-
-    await prisma.contractor.update({
-      where: { id: contractor.id },
-      data: {
-        subscriptionStatus: "cancelled",
-        isAcceptingLeads: false,
-      },
-    });
-
-    console.log(`✅ Subscription cancelled: ${contractor.businessName}`);
-    return { success: true };
-  } catch (error) {
-    console.error("❌ Error handling subscription deleted:", error);
-    throw error;
-  }
-}
-
-// ============================================
-// HANDLE PAYMENT METHOD UPDATED
+// PAYMENT METHOD UPDATED - Save Last 4 Only
 // ============================================
 async function handlePaymentMethodAttached(paymentMethod) {
-  console.log("💳 Processing payment method attached:", paymentMethod.id);
+  console.log("💳 Saving payment method to database");
 
   try {
     const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
@@ -204,11 +152,11 @@ async function handlePaymentMethodAttached(paymentMethod) {
     });
 
     if (!contractor) {
-      console.error("❌ No contractor found for customer:", customer.email);
-      return { success: false, error: "Contractor not found" };
+      console.log("⚠️ No contractor found");
+      return { success: false };
     }
 
-    // Update payment method info
+    // ✅ SECURITY: Save only last 4 digits and metadata
     await prisma.contractor.update({
       where: { id: contractor.id },
       data: {
@@ -221,20 +169,16 @@ async function handlePaymentMethodAttached(paymentMethod) {
       },
     });
 
-    console.log(`✅ Payment method updated: ${contractor.businessName}`);
+    console.log(`✅ Payment method saved: ${paymentMethod.card?.brand} ****${paymentMethod.card?.last4}`);
     return { success: true };
   } catch (error) {
-    console.error("❌ Error handling payment method:", error);
+    console.error("❌ Payment method handler error:", error);
     throw error;
   }
 }
 
-// ============================================
-// EXPORTS
-// ============================================
 module.exports = {
   handleSubscriptionCreated,
   handleSubscriptionUpdated,
-  handleSubscriptionDeleted,
   handlePaymentMethodAttached,
 };
