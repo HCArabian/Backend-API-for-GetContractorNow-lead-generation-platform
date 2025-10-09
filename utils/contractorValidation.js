@@ -3,7 +3,18 @@
 // File: utils/contractorValidation.js
 // ============================================
 
-const validator = require('validator');
+const validator = require('validator');// Display names for service types
+
+const SERVICE_TYPE_LABELS = {
+  'ac_repair': 'AC Repair',
+  'ac_installation': 'AC Installation & Replacement',
+  'ac_maintenance': 'AC Maintenance & Tune-Up',
+  'heating_repair': 'Heating System Repair',
+  'furnace_repair': 'Furnace Repair',
+  'furnace_installation': 'Furnace Installation & Replacement',
+  'hvac_installation': 'Complete HVAC System Installation',
+  'emergency_repair': '24/7 Emergency HVAC Repair',
+};
 
 // ============================================
 // PHONE NUMBER VALIDATION & FORMATTING
@@ -373,17 +384,7 @@ function validateServiceTypes(serviceTypes) {
   'emergency_repair',
 ];
 
-// Display names for service types
-const SERVICE_TYPE_LABELS = {
-  'ac_repair': 'AC Repair',
-  'ac_installation': 'AC Installation & Replacement',
-  'ac_maintenance': 'AC Maintenance & Tune-Up',
-  'heating_repair': 'Heating System Repair',
-  'furnace_repair': 'Furnace Repair',
-  'furnace_installation': 'Furnace Installation & Replacement',
-  'hvac_installation': 'Complete HVAC System Installation',
-  'emergency_repair': '24/7 Emergency HVAC Repair',
-};
+
 
   const invalidTypes = serviceTypes.filter(type => !validTypes.includes(type));
 
