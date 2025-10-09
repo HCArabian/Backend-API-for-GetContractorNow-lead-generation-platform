@@ -56,6 +56,13 @@ const {
   getCreditExpiryDate,
   formatCurrency,
 } = require("./subscription-helpers");
+// Configure CORS properly
+const allowedOrigins = [
+  "https://www.getcontractornow.com",
+  "https://getcontractornow.com",
+  "https://your-webflow-site.webflow.io",
+  "http://localhost:3000", // for local testing
+];
 
 // ============================================
 // 2. INITIALIZE SENTRY
@@ -272,7 +279,7 @@ app.post(
       } catch (handlerError) {
         console.error(`❌ Handler error for ${event.type}:`, handlerError);
         monitor.finish(false);
-        
+
         // Still return 200 so Stripe doesn't retry
         // But log the error
         const Sentry = require("@sentry/node");
@@ -285,7 +292,7 @@ app.post(
             eventId: event.id,
           },
         });
-        
+
         res.json({ received: true, error: handlerError.message });
       }
     } catch (error) {
@@ -436,7 +443,11 @@ app.post(
       });
 
       // Handle incoming calls (ringing/in-progress)
-      if (!callStatus || callStatus === "ringing" || callStatus === "in-progress") {
+      if (
+        !callStatus ||
+        callStatus === "ringing" ||
+        callStatus === "in-progress"
+      ) {
         const assignment = await prisma.leadAssignment.findFirst({
           where: { trackingNumber: to },
           include: { lead: true, contractor: true },
@@ -529,7 +540,11 @@ app.post(
       console.log("✅ CallLog created:", callLog.id);
 
       // Bill for qualified calls (30+ seconds, completed)
-      if (callStatus === "completed" && callDuration && parseInt(callDuration) >= 30) {
+      if (
+        callStatus === "completed" &&
+        callDuration &&
+        parseInt(callDuration) >= 30
+      ) {
         console.log("💰 Qualified call - processing billing");
 
         const fullContractor = await prisma.contractor.findUnique({
@@ -580,7 +595,10 @@ app.post(
         }
 
         // Deduct credit
-        const finalBalance = Math.max(0, fullContractor.creditBalance - leadCost);
+        const finalBalance = Math.max(
+          0,
+          fullContractor.creditBalance - leadCost
+        );
 
         await prisma.$transaction([
           prisma.creditTransaction.create({
@@ -682,7 +700,16 @@ app.use(cookieParser());
 // CORS
 app.use(
   cors({
-    origin: "*",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -780,21 +807,6 @@ app.use((req, res, next) => {
   });
   next();
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ============================================
 // ROUTES
@@ -1153,8 +1165,6 @@ app.post("/api/leads/submit", async (req, res) => {
       to: to,
       direction,
     }); */
-
-
 
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin-dashboard.html"));
@@ -2281,8 +2291,6 @@ app.get(
   }
 );
 
-
-
 // Cron endpoint to send feedback emails
 app.post("/api/cron/send-feedback-emails", async (req, res) => {
   const cronSecret = req.headers["x-cron-secret"] || req.query.secret;
@@ -2431,8 +2439,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
-
 
 // Get bounced emails (admin)
 app.get("/api/admin/bounced-emails", newAdminAuth, async (req, res) => {
@@ -3011,7 +3017,7 @@ app.get(
           phone: true,
           creditBalance: true,
           status: true,
-          
+
           // Subscription (from database!)
           subscriptionTier: true,
           subscriptionStatus: true,
@@ -3019,17 +3025,17 @@ app.get(
           subscriptionEndDate: true,
           stripeCustomerId: true,
           stripeSubscriptionId: true,
-          
+
           // Payment Method (last 4 only!)
           paymentMethodLast4: true,
           paymentMethodBrand: true,
           paymentMethodExpMonth: true,
           paymentMethodExpYear: true,
-          
+
           // Service Info
           serviceZipCodes: true,
           specializations: true,
-          
+
           // Profile
           licenseNumber: true,
           licenseState: true,
@@ -3045,7 +3051,7 @@ app.get(
           yearsInBusiness: true,
           websiteUrl: true,
           businessType: true,
-          
+
           // Status
           isVerified: true,
           verifiedAt: true,
@@ -3053,14 +3059,14 @@ app.get(
           isApproved: true,
           isBetaTester: true,
           betaTesterLeadCost: true,
-          
+
           // Stats
           avgResponseTime: true,
           conversionRate: true,
           customerRating: true,
           totalJobsCompleted: true,
           totalLeadsReceived: true,
-          
+
           createdAt: true,
         },
       });
@@ -3131,14 +3137,16 @@ app.get(
           isBetaTester: contractor.isBetaTester || false,
           stripeSubscriptionId: contractor.stripeSubscriptionId,
           stripeCustomerId: contractor.stripeCustomerId,
-          
+
           // ✅ Payment method (last 4 only!)
-          paymentMethod: contractor.paymentMethodLast4 ? {
-            last4: contractor.paymentMethodLast4,
-            brand: contractor.paymentMethodBrand,
-            expMonth: contractor.paymentMethodExpMonth,
-            expYear: contractor.paymentMethodExpYear,
-          } : null,
+          paymentMethod: contractor.paymentMethodLast4
+            ? {
+                last4: contractor.paymentMethodLast4,
+                brand: contractor.paymentMethodBrand,
+                expMonth: contractor.paymentMethodExpMonth,
+                expYear: contractor.paymentMethodExpYear,
+              }
+            : null,
         },
         profile: {
           licenseNumber: contractor.licenseNumber || "",
@@ -3148,7 +3156,9 @@ app.get(
           businessCity: contractor.businessCity || "",
           businessState: contractor.businessState || "",
           businessZip: contractor.businessZip || "",
-          taxId: contractor.taxId ? "***-**-" + contractor.taxId.slice(-4) : null,
+          taxId: contractor.taxId
+            ? "***-**-" + contractor.taxId.slice(-4)
+            : null,
           insuranceProvider: contractor.insuranceProvider || "",
           insurancePolicyNumber: contractor.insurancePolicyNumber || "",
           insuranceExpirationDate: contractor.insuranceExpirationDate,
@@ -3173,8 +3183,10 @@ app.get(
         recentTransactions: recentTransactions,
       };
 
-      console.log(`✅ Dashboard loaded (from database): ${contractor.businessName}`);
-      
+      console.log(
+        `✅ Dashboard loaded (from database): ${contractor.businessName}`
+      );
+
       res.json(response);
     } catch (error) {
       console.error("❌ Dashboard error:", error);
@@ -3660,9 +3672,9 @@ app.post(
       // ✅ CHECK: If no Stripe customer, try to find it by email
       if (!contractor.stripeCustomerId) {
         console.log("⚠️ No stripeCustomerId found, searching by email...");
-        
+
         const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
-        
+
         // Search for customer by email
         const customers = await stripe.customers.list({
           email: contractor.email,
@@ -3672,7 +3684,7 @@ app.post(
         if (customers.data.length > 0) {
           const stripeCustomer = customers.data[0];
           console.log("✅ Found Stripe customer:", stripeCustomer.id);
-          
+
           // Update database with found customer ID
           await prisma.contractor.update({
             where: { id: contractor.id },
@@ -3682,7 +3694,9 @@ app.post(
           // Create portal session
           const session = await stripe.billingPortal.sessions.create({
             customer: stripeCustomer.id,
-            return_url: `${process.env.RAILWAY_URL || "https://app.getcontractornow.com"}/contractor`,
+            return_url: `${
+              process.env.RAILWAY_URL || "https://app.getcontractornow.com"
+            }/contractor`,
           });
 
           return res.json({
@@ -3694,7 +3708,8 @@ app.post(
         // Still no customer found
         console.error("❌ No Stripe customer found for:", contractor.email);
         return res.status(400).json({
-          error: "No payment method found. Please contact support to link your account.",
+          error:
+            "No payment method found. Please contact support to link your account.",
         });
       }
 
@@ -3702,7 +3717,9 @@ app.post(
       const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
       const session = await stripe.billingPortal.sessions.create({
         customer: contractor.stripeCustomerId,
-        return_url: `${process.env.RAILWAY_URL || "https://app.getcontractornow.com"}/contractor`,
+        return_url: `${
+          process.env.RAILWAY_URL || "https://app.getcontractornow.com"
+        }/contractor`,
       });
 
       res.json({
@@ -3712,9 +3729,9 @@ app.post(
     } catch (error) {
       console.error("Portal session error:", error);
       Sentry.captureException(error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to create portal session",
-        details: error.message 
+        details: error.message,
       });
     }
   }
