@@ -356,13 +356,34 @@ function validateServiceTypes(serviceTypes) {
   }
 
   const validTypes = [
-    'ac_repair',
-    'hvac_installation',
-    'system_replacement',
-    'emergency_repair',
-    'heating_repair',
-    'maintenance_tuneups'
-  ];
+  // Core AC Services
+  'ac_repair',
+  'ac_installation',
+  'ac_maintenance',
+  
+  // Core Heating Services  
+  'heating_repair',
+  'furnace_repair',
+  'furnace_installation',
+  
+  // General HVAC
+  'hvac_installation',
+  
+  // Emergency
+  'emergency_repair',
+];
+
+// Display names for service types
+const SERVICE_TYPE_LABELS = {
+  'ac_repair': 'AC Repair',
+  'ac_installation': 'AC Installation & Replacement',
+  'ac_maintenance': 'AC Maintenance & Tune-Up',
+  'heating_repair': 'Heating System Repair',
+  'furnace_repair': 'Furnace Repair',
+  'furnace_installation': 'Furnace Installation & Replacement',
+  'hvac_installation': 'Complete HVAC System Installation',
+  'emergency_repair': '24/7 Emergency HVAC Repair',
+};
 
   const invalidTypes = serviceTypes.filter(type => !validTypes.includes(type));
 
@@ -424,4 +445,6 @@ module.exports = {
   sanitizeBusinessName,
   validateServiceTypes,
   validateYearsInBusiness,
+  SERVICE_TYPE_LABELS,
+  validTypes,
 };

@@ -1,4 +1,24 @@
 // scoring.js - Advanced Lead Scoring & Validation System
+// ============================================
+// VALID SERVICE TYPES
+// ============================================
+const validServiceTypes = [
+  // Core AC Services
+  "ac_repair",
+  "ac_installation",
+  "ac_maintenance",
+
+  // Core Heating Services
+  "heating_repair",
+  "furnace_repair",
+  "furnace_installation",
+
+  // General HVAC
+  "hvac_installation",
+
+  // Emergency
+  "emergency_repair",
+];
 
 // ============================================
 // VALIDATION HELPER FUNCTIONS
@@ -470,6 +490,22 @@ async function calculateLeadScore(leadData, prisma) {
       qualityFlags: [],
     };
   }
+  // Validate service type
+  if (!validServiceTypes.includes(leadData.service_type)) {
+    return {
+      status: "rejected",
+      score: 0,
+      category: "REJECTED",
+      price: 0,
+      rejectReasons: ["invalid_service_type"],
+      validationErrors: [
+        `Invalid service type: ${
+          leadData.service_type
+        }. Must be one of: ${validServiceTypes.join(", ")}`,
+      ],
+      qualityFlags: [],
+    };
+  }
 
   // 2. Name validation
   const firstNameCheck = validateName(leadData.first_name, "First name");
@@ -649,14 +685,23 @@ async function calculateLeadScore(leadData, prisma) {
   // ============================================
 
   // 1. SERVICE TYPE SCORE (0-50 points)
+  // 1. SERVICE TYPE SCORE (0-50 points)
   const serviceScores = {
-    "Emergency Repair": 50,
-    "System Replacement": 40,
-    "HVAC Installation": 35,
-    "AC Repair": 30,
-    "Heating Repair": 30,
-    "Maintenance/Tune-up": 15,
-    "Just Getting Quotes": 10,
+    // Emergency Services (Highest Value)
+    emergency_repair: 50,
+
+    // Installation Services (High Value)
+    hvac_installation: 40,
+    furnace_installation: 40,
+    ac_installation: 38,
+
+    // Repair Services (Medium-High Value)
+    heating_repair: 30,
+    furnace_repair: 30,
+    ac_repair: 30,
+
+    // Maintenance Services (Lower Value)
+    ac_maintenance: 15,
   };
   score += serviceScores[leadData.service_type] || 0;
 

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,7 +23,7 @@
       margin: 0 auto;
       background: white;
       border-radius: 12px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       overflow: hidden;
     }
 
@@ -184,8 +185,13 @@
     }
 
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
 
     @media (max-width: 768px) {
@@ -201,365 +207,483 @@
         padding: 30px 20px;
       }
     }
+
+    .checkbox-label:hover {
+      background: rgba(0, 0, 0, 0.02);
+      padding: 4px;
+      border-radius: 4px;
+      margin-left: -4px;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .checkbox-label input[type="checkbox"]:checked {
+      accent-color: #2563eb;
+    }
   </style>
 </head>
+
 <body>
 
-<div class="container">
-  <div class="header">
-    <h1>Join GetContractorNow</h1>
-    <p>Apply to receive exclusive HVAC leads in your service area</p>
+  <div class="container">
+    <div class="header">
+      <h1>Join GetContractorNow</h1>
+      <p>Apply to receive exclusive HVAC leads in your service area</p>
+    </div>
+
+    <div class="form-container">
+      <div id="successAlert" class="alert alert-success"></div>
+      <div id="errorAlert" class="alert alert-error"></div>
+      <div id="spinner" class="spinner"></div>
+
+      <form id="applicationForm">
+        <!-- Business Information -->
+        <div class="section">
+          <h2 class="section-title">Business Information</h2>
+
+          <div class="form-group">
+            <label>Business Name <span class="required">*</span></label>
+            <input type="text" name="businessName" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Business Type</label>
+              <select name="businessType">
+                <option value="">Select...</option>
+                <option value="Sole Proprietor">Sole Proprietor</option>
+                <option value="LLC">LLC</option>
+                <option value="Corporation">Corporation</option>
+                <option value="Partnership">Partnership</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Years in Business</label>
+              <input type="number" name="yearsInBusiness" min="0" max="100">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Website URL (if applicable)</label>
+            <input type="url" name="website" placeholder="https://yourcompany.com">
+          </div>
+        </div>
+
+        <!-- Owner Information -->
+        <div class="section">
+          <h2 class="section-title">Owner/Contact Information</h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>First Name</label>
+              <input type="text" name="ownerFirstName">
+            </div>
+
+            <div class="form-group">
+              <label>Last Name</label>
+              <input type="text" name="ownerLastName">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email Address <span class="required">*</span></label>
+              <input type="email" name="email" required>
+              <small>This will be your login email</small>
+            </div>
+
+            <div class="form-group">
+              <label>Phone Number <span class="required">*</span></label>
+              <input type="tel" name="phone" required placeholder="(555) 123-4567">
+            </div>
+          </div>
+        </div>
+
+        <!-- Business Address -->
+        <div class="section">
+          <h2 class="section-title">Business Address</h2>
+
+          <div class="form-group">
+            <label>Street Address</label>
+            <input type="text" name="businessAddress">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" name="businessCity">
+            </div>
+
+            <div class="form-group">
+              <label>State</label>
+              <select name="businessState">
+                <option value="">Select State...</option>
+                <option value="AL">Alabama</option>
+                <option value="AK">Alaska</option>
+                <option value="AZ">Arizona</option>
+                <option value="AR">Arkansas</option>
+                <option value="CA">California</option>
+                <option value="CO">Colorado</option>
+                <option value="CT">Connecticut</option>
+                <option value="DE">Delaware</option>
+                <option value="FL">Florida</option>
+                <option value="GA">Georgia</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>ZIP Code</label>
+            <input type="text" name="businessZip" pattern="[0-9]{5}">
+          </div>
+        </div>
+
+        <!-- License Information -->
+        <div class="section">
+          <h2 class="section-title">License & Credentials</h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>License Number</label>
+              <input type="text" name="licenseNumber">
+            </div>
+
+            <div class="form-group">
+              <label>License State</label>
+              <select name="licenseState">
+                <option value="">Select State...</option>
+                <option value="CA">California</option>
+                <option value="TX">Texas</option>
+                <option value="FL">Florida</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>License Expiration Date</label>
+            <input type="date" name="licenseExpirationDate">
+          </div>
+        </div>
+
+        <!-- Service Coverage -->
+        <div class="section">
+          <h2 class="section-title">Service Coverage</h2>
+
+          <div class="form-group">
+            <label>Service ZIP Codes <span class="required">*</span></label>
+            <textarea name="serviceZipCodes" required
+              placeholder="Enter ZIP codes separated by commas (e.g., 90210, 90211, 90212)"></textarea>
+            <small>Enter all ZIP codes where you provide service</small>
+          </div>
+
+          <!-- ============================================ -->
+          <!-- CONTRACTOR APPLICATION FORM - SERVICE TYPES -->
+          <!-- Add this to your contractor-form.html -->
+          <!-- ============================================ -->
+
+          <div class="form-section">
+            <h3>Services You Provide</h3>
+            <p class="section-description">Select all HVAC services your company offers</p>
+
+            <div class="form-group">
+              <label>Service Types * <span style="color: #dc2626;">(Select at least one)</span></label>
+
+              <div class="checkbox-grid"
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 12px;">
+
+                <!-- Air Conditioning Services -->
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                  <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 14px; font-weight: 600;">Air Conditioning
+                  </h4>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="ac_repair" style="margin-right: 8px;">
+                    <span>AC Repair</span>
+                  </label>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="ac_installation" style="margin-right: 8px;">
+                    <span>AC Installation & Replacement</span>
+                  </label>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="ac_maintenance" style="margin-right: 8px;">
+                    <span>AC Maintenance & Tune-Up</span>
+                  </label>
+                </div>
+
+                <!-- Heating Services -->
+                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                  <h4 style="margin: 0 0 10px 0; color: #92400e; font-size: 14px; font-weight: 600;">Heating</h4>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="heating_repair" style="margin-right: 8px;">
+                    <span>Heating System Repair</span>
+                  </label>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="furnace_repair" style="margin-right: 8px;">
+                    <span>Furnace Repair</span>
+                  </label>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="furnace_installation" style="margin-right: 8px;">
+                    <span>Furnace Installation & Replacement</span>
+                  </label>
+                </div>
+
+                <!-- HVAC & Emergency -->
+                <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+                  <h4 style="margin: 0 0 10px 0; color: #065f46; font-size: 14px; font-weight: 600;">HVAC & Emergency
+                  </h4>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="hvac_installation" style="margin-right: 8px;">
+                    <span>Complete HVAC System Installation</span>
+                  </label>
+
+                  <label class="checkbox-label"
+                    style="display: flex; align-items: center; margin: 8px 0; cursor: pointer;">
+                    <input type="checkbox" name="serviceTypes" value="emergency_repair" style="margin-right: 8px;">
+                    <span>24/7 Emergency HVAC Repair</span>
+                  </label>
+                </div>
+
+              </div>
+
+              <div id="serviceTypesError" class="error-message"
+                style="display: none; color: #dc2626; font-size: 14px; margin-top: 8px;"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Additional Information</label>
+            <textarea name="description"
+              placeholder="Tell us about your business and why you'd like to receive exclusive leads..."></textarea>
+          </div>
+        </div>
+
+        <!-- Legal Compliance -->
+        <div class="section">
+          <h2 class="section-title">⚖️ Legal Requirements</h2>
+
+          <div
+            style="background: #fef3c7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
+            <p style="margin: 0; color: #78350f; font-size: 0.95rem;">
+              <strong>Important:</strong> Please review and accept the following to complete your application.
+            </p>
+          </div>
+
+          <div class="form-group">
+            <div
+              style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;"
+              id="termsCheckbox">
+              <input type="checkbox" id="acceptedTerms" name="acceptedTerms" required
+                style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
+              <label for="acceptedTerms" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
+                I have read and agree to the <a href="/terms-of-service" target="_blank"
+                  style="color: #2563eb; text-decoration: none; font-weight: 600;">Terms of Service</a> and
+                <a href="/contractor-agreement" target="_blank"
+                  style="color: #2563eb; text-decoration: none; font-weight: 600;">Contractor Agreement</a>.
+                I understand that leads are provided on a credit-based system and I am responsible for maintaining
+                sufficient credit balance. <span class="required">*</span>
+              </label>
+            </div>
+
+            <div
+              style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;"
+              id="tcpaCheckbox">
+              <input type="checkbox" id="acceptedTCPA" name="acceptedTCPA" required
+                style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
+              <label for="acceptedTCPA" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
+                <strong style="color: #1f2937;">SMS Consent (TCPA Compliance):</strong> I consent to receive automated
+                SMS text messages from GetContractorNow about new lead assignments, account updates, low credit
+                warnings, and service notifications. I understand that message frequency varies, message and data rates
+                may apply, and I can opt out at any time by replying STOP. I can reply HELP for assistance. By providing
+                my phone number, I agree to receive SMS communications as described. <span class="required">*</span>
+              </label>
+            </div>
+
+            <div
+              style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;"
+              id="privacyCheckbox">
+              <input type="checkbox" id="acceptedPrivacy" name="acceptedPrivacy" required
+                style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
+              <label for="acceptedPrivacy" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
+                I have read and understand the <a href="/privacy-policy" target="_blank"
+                  style="color: #2563eb; text-decoration: none; font-weight: 600;">Privacy Policy</a>.
+                I understand how my personal information will be collected, used, and protected, and I acknowledge my
+                rights under GDPR and CCPA including the right to access, export, and delete my data. <span
+                  class="required">*</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn">Submit Application</button>
+      </form>
+    </div>
   </div>
 
-  <div class="form-container">
-    <div id="successAlert" class="alert alert-success"></div>
-    <div id="errorAlert" class="alert alert-error"></div>
-    <div id="spinner" class="spinner"></div>
+  <script>
+    const API_URL = 'https://api.getcontractornow.com';
 
-    <form id="applicationForm">
-      <!-- Business Information -->
-      <div class="section">
-        <h2 class="section-title">Business Information</h2>
-        
-        <div class="form-group">
-          <label>Business Name <span class="required">*</span></label>
-          <input type="text" name="businessName" required>
-        </div>
+    document.getElementById('applicationForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
 
-        <div class="form-row">
-          <div class="form-group">
-            <label>Business Type</label>
-            <select name="businessType">
-              <option value="">Select...</option>
-              <option value="Sole Proprietor">Sole Proprietor</option>
-              <option value="LLC">LLC</option>
-              <option value="Corporation">Corporation</option>
-              <option value="Partnership">Partnership</option>
-            </select>
-          </div>
+      const form = e.target;
+      const submitBtn = form.querySelector('.submit-btn');
+      const spinner = document.getElementById('spinner');
+      const successAlert = document.getElementById('successAlert');
+      const errorAlert = document.getElementById('errorAlert');
 
-          <div class="form-group">
-            <label>Years in Business</label>
-            <input type="number" name="yearsInBusiness" min="0" max="100">
-          </div>
-        </div>
+      successAlert.style.display = 'none';
+      errorAlert.style.display = 'none';
 
-        <div class="form-group">
-          <label>Website URL (if applicable)</label>
-          <input type="url" name="website" placeholder="https://yourcompany.com">
-        </div>
-      </div>
+      spinner.style.display = 'block';
+      submitBtn.disabled = true;
 
-      <!-- Owner Information -->
-      <div class="section">
-        <h2 class="section-title">Owner/Contact Information</h2>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label>First Name</label>
-            <input type="text" name="ownerFirstName">
-          </div>
+      const formData = new FormData(form);
+      const data = {};
 
-          <div class="form-group">
-            <label>Last Name</label>
-            <input type="text" name="ownerLastName">
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>Email Address <span class="required">*</span></label>
-            <input type="email" name="email" required>
-            <small>This will be your login email</small>
-          </div>
-
-          <div class="form-group">
-            <label>Phone Number <span class="required">*</span></label>
-            <input type="tel" name="phone" required placeholder="(555) 123-4567">
-          </div>
-        </div>
-      </div>
-
-      <!-- Business Address -->
-      <div class="section">
-        <h2 class="section-title">Business Address</h2>
-        
-        <div class="form-group">
-          <label>Street Address</label>
-          <input type="text" name="businessAddress">
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label>City</label>
-            <input type="text" name="businessCity">
-          </div>
-
-          <div class="form-group">
-            <label>State</label>
-            <select name="businessState">
-              <option value="">Select State...</option>
-              <option value="AL">Alabama</option>
-              <option value="AK">Alaska</option>
-              <option value="AZ">Arizona</option>
-              <option value="AR">Arkansas</option>
-              <option value="CA">California</option>
-              <option value="CO">Colorado</option>
-              <option value="CT">Connecticut</option>
-              <option value="DE">Delaware</option>
-              <option value="FL">Florida</option>
-              <option value="GA">Georgia</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>ZIP Code</label>
-          <input type="text" name="businessZip" pattern="[0-9]{5}">
-        </div>
-      </div>
-
-      <!-- License Information -->
-      <div class="section">
-        <h2 class="section-title">License & Credentials</h2>
-        
-        <div class="form-row">
-          <div class="form-group">
-            <label>License Number</label>
-            <input type="text" name="licenseNumber">
-          </div>
-
-          <div class="form-group">
-            <label>License State</label>
-            <select name="licenseState">
-              <option value="">Select State...</option>
-              <option value="CA">California</option>
-              <option value="TX">Texas</option>
-              <option value="FL">Florida</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>License Expiration Date</label>
-          <input type="date" name="licenseExpirationDate">
-        </div>
-      </div>
-
-      <!-- Service Coverage -->
-      <div class="section">
-        <h2 class="section-title">Service Coverage</h2>
-        
-        <div class="form-group">
-          <label>Service ZIP Codes <span class="required">*</span></label>
-          <textarea name="serviceZipCodes" required placeholder="Enter ZIP codes separated by commas (e.g., 90210, 90211, 90212)"></textarea>
-          <small>Enter all ZIP codes where you provide service</small>
-        </div>
-
-        <div class="form-group">
-          <label>HVAC Services Offered <span class="required">*</span></label>
-          <small style="color: #dc2626; font-weight: 600;">Select at least 2 services</small>
-          <div class="checkbox-group">
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="ac_repair">
-              <label>AC Repair</label>
-            </div>
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="hvac_installation">
-              <label>HVAC Installation</label>
-            </div>
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="system_replacement">
-              <label>System Replacement</label>
-            </div>
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="emergency_repair">
-              <label>Emergency Repair</label>
-            </div>
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="heating_repair">
-              <label>Heating Repair</label>
-            </div>
-            <div class="checkbox-item">
-              <input type="checkbox" name="serviceTypes" value="maintenance_tuneups">
-              <label>Maintenance/Tune-ups</label>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Additional Information</label>
-          <textarea name="description" placeholder="Tell us about your business and why you'd like to receive exclusive leads..."></textarea>
-        </div>
-      </div>
-
-      <!-- Legal Compliance -->
-      <div class="section">
-        <h2 class="section-title">⚖️ Legal Requirements</h2>
-        
-        <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f59e0b;">
-          <p style="margin: 0; color: #78350f; font-size: 0.95rem;">
-            <strong>Important:</strong> Please review and accept the following to complete your application.
-          </p>
-        </div>
-
-        <div class="form-group">
-          <div style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;" id="termsCheckbox">
-            <input type="checkbox" id="acceptedTerms" name="acceptedTerms" required style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
-            <label for="acceptedTerms" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
-              I have read and agree to the <a href="/terms-of-service" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">Terms of Service</a> and 
-              <a href="/contractor-agreement" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">Contractor Agreement</a>. 
-              I understand that leads are provided on a credit-based system and I am responsible for maintaining sufficient credit balance. <span class="required">*</span>
-            </label>
-          </div>
-
-          <div style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;" id="tcpaCheckbox">
-            <input type="checkbox" id="acceptedTCPA" name="acceptedTCPA" required style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
-            <label for="acceptedTCPA" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
-              <strong style="color: #1f2937;">SMS Consent (TCPA Compliance):</strong> I consent to receive automated SMS text messages from GetContractorNow about new lead assignments, account updates, low credit warnings, and service notifications. I understand that message frequency varies, message and data rates may apply, and I can opt out at any time by replying STOP. I can reply HELP for assistance. By providing my phone number, I agree to receive SMS communications as described. <span class="required">*</span>
-            </label>
-          </div>
-
-          <div style="display: flex; align-items: flex-start; gap: 10px; padding: 15px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 8px; margin-bottom: 15px;" id="privacyCheckbox">
-            <input type="checkbox" id="acceptedPrivacy" name="acceptedPrivacy" required style="width: 20px; height: 20px; margin-top: 3px; cursor: pointer;">
-            <label for="acceptedPrivacy" style="margin: 0; cursor: pointer; font-size: 0.9rem; color: #374151;">
-              I have read and understand the <a href="/privacy-policy" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">Privacy Policy</a>. 
-              I understand how my personal information will be collected, used, and protected, and I acknowledge my rights under GDPR and CCPA including the right to access, export, and delete my data. <span class="required">*</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" class="submit-btn">Submit Application</button>
-    </form>
-  </div>
-</div>
-
-<script>
-  const API_URL = 'https://api.getcontractornow.com';
-  
-  document.getElementById('applicationForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const form = e.target;
-    const submitBtn = form.querySelector('.submit-btn');
-    const spinner = document.getElementById('spinner');
-    const successAlert = document.getElementById('successAlert');
-    const errorAlert = document.getElementById('errorAlert');
-    
-    successAlert.style.display = 'none';
-    errorAlert.style.display = 'none';
-    
-    spinner.style.display = 'block';
-    submitBtn.disabled = true;
-    
-    const formData = new FormData(form);
-    const data = {};
-    
-    for (let [key, value] of formData.entries()) {
-      if (key === 'serviceTypes') {
-        if (!data.serviceTypes) {
-          data.serviceTypes = [];
+      for (let [key, value] of formData.entries()) {
+        if (key === 'serviceTypes') {
+          if (!data.serviceTypes) {
+            data.serviceTypes = [];
+          }
+          data.serviceTypes.push(value);
+        } else {
+          data[key] = value;
         }
-        data.serviceTypes.push(value);
-      } else {
-        data[key] = value;
       }
-    }
-    
-    if (!data.serviceTypes || data.serviceTypes.length < 2) {
-      errorAlert.textContent = 'Please select at least 2 HVAC services offered';
-      errorAlert.style.display = 'block';
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      return;
-    }
 
-    const termsCheckbox = document.getElementById('acceptedTerms');
-    const tcpaCheckbox = document.getElementById('acceptedTCPA');
-    const privacyCheckbox = document.getElementById('acceptedPrivacy');
+      if (!data.serviceTypes || data.serviceTypes.length < 2) {
+        errorAlert.textContent = 'Please select at least 2 HVAC services offered';
+        errorAlert.style.display = 'block';
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        return;
+      }
 
-    if (!termsCheckbox.checked) {
-      errorAlert.textContent = 'Please accept the Terms of Service to continue';
-      errorAlert.style.display = 'block';
-      document.getElementById('termsCheckbox').style.borderColor = '#dc2626';
-      document.getElementById('termsCheckbox').style.background = '#fef2f2';
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      return;
-    }
+      const termsCheckbox = document.getElementById('acceptedTerms');
+      const tcpaCheckbox = document.getElementById('acceptedTCPA');
+      const privacyCheckbox = document.getElementById('acceptedPrivacy');
 
-    if (!tcpaCheckbox.checked) {
-      errorAlert.textContent = 'Please provide SMS consent to receive lead notifications (required by TCPA)';
-      errorAlert.style.display = 'block';
-      document.getElementById('tcpaCheckbox').style.borderColor = '#dc2626';
-      document.getElementById('tcpaCheckbox').style.background = '#fef2f2';
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      return;
-    }
+      if (!termsCheckbox.checked) {
+        errorAlert.textContent = 'Please accept the Terms of Service to continue';
+        errorAlert.style.display = 'block';
+        document.getElementById('termsCheckbox').style.borderColor = '#dc2626';
+        document.getElementById('termsCheckbox').style.background = '#fef2f2';
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        return;
+      }
 
-    if (!privacyCheckbox.checked) {
-      errorAlert.textContent = 'Please accept the Privacy Policy to continue';
-      errorAlert.style.display = 'block';
-      document.getElementById('privacyCheckbox').style.borderColor = '#dc2626';
-      document.getElementById('privacyCheckbox').style.background = '#fef2f2';
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      return;
-    }
+      if (!tcpaCheckbox.checked) {
+        errorAlert.textContent = 'Please provide SMS consent to receive lead notifications (required by TCPA)';
+        errorAlert.style.display = 'block';
+        document.getElementById('tcpaCheckbox').style.borderColor = '#dc2626';
+        document.getElementById('tcpaCheckbox').style.background = '#fef2f2';
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        return;
+      }
 
-    document.getElementById('termsCheckbox').style.borderColor = '#e5e7eb';
-    document.getElementById('termsCheckbox').style.background = '#f9fafb';
-    document.getElementById('tcpaCheckbox').style.borderColor = '#e5e7eb';
-    document.getElementById('tcpaCheckbox').style.background = '#f9fafb';
-    document.getElementById('privacyCheckbox').style.borderColor = '#e5e7eb';
-    document.getElementById('privacyCheckbox').style.background = '#f9fafb';
+      if (!privacyCheckbox.checked) {
+        errorAlert.textContent = 'Please accept the Privacy Policy to continue';
+        errorAlert.style.display = 'block';
+        document.getElementById('privacyCheckbox').style.borderColor = '#dc2626';
+        document.getElementById('privacyCheckbox').style.background = '#fef2f2';
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        return;
+      }
 
-    data.acceptedTerms = true;
-    data.acceptedTCPA = true;
-    data.acceptedPrivacy = true;
-    
-    if (data.serviceZipCodes) {
-      data.serviceZipCodes = data.serviceZipCodes
-        .split(',')
-        .map(zip => zip.trim())
-        .filter(zip => zip.length > 0);
-    }
-    
-    try {
-      const response = await fetch(`${API_URL}/api/contractors/apply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      });
-      
-      const result = await response.json();
-      
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      
-      if (result.success) {
-        successAlert.textContent = result.message;
-        successAlert.style.display = 'block';
-        form.reset();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        errorAlert.textContent = result.error || 'Failed to submit application. Please try again.';
+      document.getElementById('termsCheckbox').style.borderColor = '#e5e7eb';
+      document.getElementById('termsCheckbox').style.background = '#f9fafb';
+      document.getElementById('tcpaCheckbox').style.borderColor = '#e5e7eb';
+      document.getElementById('tcpaCheckbox').style.background = '#f9fafb';
+      document.getElementById('privacyCheckbox').style.borderColor = '#e5e7eb';
+      document.getElementById('privacyCheckbox').style.background = '#f9fafb';
+
+      data.acceptedTerms = true;
+      data.acceptedTCPA = true;
+      data.acceptedPrivacy = true;
+
+      if (data.serviceZipCodes) {
+        data.serviceZipCodes = data.serviceZipCodes
+          .split(',')
+          .map(zip => zip.trim())
+          .filter(zip => zip.length > 0);
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/api/contractors/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+
+        if (result.success) {
+          successAlert.textContent = result.message;
+          successAlert.style.display = 'block';
+          form.reset();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          errorAlert.textContent = result.error || 'Failed to submit application. Please try again.';
+          errorAlert.style.display = 'block';
+        }
+
+      } catch (error) {
+        console.error('Submission error:', error);
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        errorAlert.textContent = 'Submission error: ' + error.message;
         errorAlert.style.display = 'block';
       }
-      
-    } catch (error) {
-      console.error('Submission error:', error);
-      spinner.style.display = 'none';
-      submitBtn.disabled = false;
-      errorAlert.textContent = 'Submission error: ' + error.message;
-      errorAlert.style.display = 'block';
+    });
+
+    // Validation for service types
+    function validateServiceTypes() {
+      const checkboxes = document.querySelectorAll('input[name="serviceTypes"]:checked');
+      const errorDiv = document.getElementById('serviceTypesError');
+
+      if (checkboxes.length === 0) {
+        errorDiv.textContent = 'Please select at least one service type';
+        errorDiv.style.display = 'block';
+        return false;
+      }
+
+      errorDiv.style.display = 'none';
+      return true;
     }
-  });
-</script>
+
+    // Get selected service types
+    function getSelectedServiceTypes() {
+      const checkboxes = document.querySelectorAll('input[name="serviceTypes"]:checked');
+      return Array.from(checkboxes).map(cb => cb.value);
+    }
+  </script>
 
 </body>
+
 </html>
