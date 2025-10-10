@@ -15,8 +15,7 @@ const crypto = require("crypto");
 const twilio = require("twilio");
 const path = require("path");
 const Sentry = require("@sentry/node");
-const validator = require('validator');
-
+const validator = require("validator");
 
 // Your custom imports
 const { calculateLeadScore } = require("./scoring");
@@ -2417,25 +2416,27 @@ app.post("/api/cron/send-feedback-emails", async (req, res) => {
           gte: new Date(oneDayAgo.getTime() - 60 * 60 * 1000), // 23-24 hours ago
           lte: oneDayAgo,
         },
-        feedback: {  // ✅ CORRECT - lowercase
+        feedback: {
+          // ✅ CORRECT - lowercase
           none: {}, // No feedback submitted yet
         },
         customerEmailBounced: false, // ✅ ADDED - Don't email bounced addresses
       },
       include: {
-        assignment: {  // ✅ ADDED - Need contractor info for email
+        assignment: {
+          // ✅ ADDED - Need contractor info for email
           include: {
-            contractor: true
-          }
-        }
-      }
+            contractor: true,
+          },
+        },
+      },
     });
 
     console.log(`Found ${leads.length} leads eligible for feedback emails`);
 
     let sent = 0;
     let failed = 0;
-    
+
     for (const lead of leads) {
       // ✅ ADDED - Skip if no contractor assigned
       if (!lead.assignment || !lead.assignment.contractor) {
@@ -2457,21 +2458,21 @@ app.post("/api/cron/send-feedback-emails", async (req, res) => {
       success: true,
       totalEligible: leads.length,
       sent: sent,
-      failed: failed
+      failed: failed,
     });
   } catch (error) {
     console.error("Feedback email cron error:", error);
-    
+
     // ✅ ADDED - Report to Sentry
-    if (typeof Sentry !== 'undefined') {
+    if (typeof Sentry !== "undefined") {
       Sentry.captureException(error, {
-        tags: { cron: 'feedback_emails' }
+        tags: { cron: "feedback_emails" },
       });
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: "Failed to send feedback emails",
-      message: error.message 
+      message: error.message,
     });
   }
 });
@@ -4945,7 +4946,31 @@ app.post(
       }
 
       // Send onboarding email with credentials
-      await sendContractorOnboardingEmail(updatedContractor, tempPassword);
+      // await sendContractorOnboardingEmail(updatedContractor, tempPassword);
+
+      // Generate package selection URL with secure token
+      const packageToken = crypto.randomBytes(32).toString("hex");
+
+      // Store token in contractor record
+      await prisma.contractor.update({
+        where: { id: updatedContractor.id },
+        data: {
+          packageSelectionToken: packageToken,
+          packageSelectionTokenExpiry: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000
+          ), // 7 days
+        },
+      });
+
+      // Create package selection URL
+      const packageSelectionUrl = `https://app.getcontractornow.com/select-package.html?token=${packageToken}`;
+
+      // Send onboarding email with credentials
+      await sendContractorOnboardingEmail(
+        updatedContractor,
+        tempPassword,
+        packageSelectionUrl
+      );
 
       console.log("✅ Contractor approved:", updatedContractor.businessName);
 
