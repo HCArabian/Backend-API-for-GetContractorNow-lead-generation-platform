@@ -2504,6 +2504,51 @@ app.post(
   }
 );
 
+// Verify package selection token
+app.get("/api/contractors/verify-token/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const contractor = await prisma.contractor.findUnique({
+      where: { packageSelectionToken: token },
+      select: {
+        id: true,
+        businessName: true,
+        email: true,
+        packageSelectionTokenExpiry: true,
+        subscriptionStatus: true,
+      },
+    });
+
+    if (!contractor) {
+      return res.status(404).json({ error: "Invalid or expired token" });
+    }
+
+    // Check if token expired
+    if (contractor.packageSelectionTokenExpiry < new Date()) {
+      return res.status(400).json({ error: "Token expired. Please contact support." });
+    }
+
+    // Check if already has active subscription
+    if (contractor.subscriptionStatus === "active") {
+      return res.status(400).json({ 
+        error: "Subscription already active",
+        redirectTo: "/dashboard"
+      });
+    }
+
+    res.json({
+      valid: true,
+      contractorId: contractor.id,
+      businessName: contractor.businessName,
+      email: contractor.email,
+    });
+  } catch (error) {
+    console.error("Token verification error:", error);
+    res.status(500).json({ error: "Failed to verify token" });
+  }
+});
+
 // Create Stripe checkout session from package selection
 app.post("/api/contractors/create-checkout", async (req, res) => {
   try {
