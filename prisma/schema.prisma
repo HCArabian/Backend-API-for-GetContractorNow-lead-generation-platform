@@ -161,7 +161,6 @@ model Contractor {
   @@index([stripeCustomerId])
   @@index([stripeSubscriptionId])
   @@index([serviceZipCodes])
-  @@index([packageSelectionToken]) // Add index for performance
 
 }
 
