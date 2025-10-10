@@ -38,18 +38,18 @@ const {
   authenticateAdmin: newAdminAuth,
 } = require("./admin-auth");
 const {
+  sanitizeBusinessName,
   validateAndFormatPhone,
   validateEmail,
+  validateCity,
+  validateState,
+  validateZipCode,
   validateLicenseNumber,
   validateAndFormatEIN,
-  validateZipCode,
-  validateState,
-  validateCity,
-  validateServiceZipCodes,
   validateWebsiteUrl,
-  sanitizeBusinessName,
-  validateServiceTypes,
   validateYearsInBusiness,
+  validateServiceTypes,
+  validateServiceZipCodes,
 } = require("./utils/contractorValidation");
 const {
   getLeadCostForContractor,

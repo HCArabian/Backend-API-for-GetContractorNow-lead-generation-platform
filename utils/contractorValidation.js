@@ -500,8 +500,194 @@ async function validateContractorApplication(data) {
   };
 }
 
+// ============================================
+// WRAPPER FUNCTIONS FOR BACKEND COMPATIBILITY
+// ============================================
+
+function sanitizeBusinessName(name) {
+  if (!name) {
+    return { valid: false, error: 'Business name is required' };
+  }
+  
+  const result = validateBusinessName(name);
+  if (!result.valid) {
+    return result;
+  }
+  
+  // Sanitize: trim and remove special characters
+  const sanitized = name.trim().replace(/[<>\"']/g, '');
+  
+  return {
+    valid: true,
+    formatted: sanitized
+  };
+}
+
+function validateAndFormatPhone(phone) {
+  return validatePhone(phone);
+}
+
+function validateCity(city) {
+  if (!city || city.trim().length < 2) {
+    return { valid: false, error: 'City name is required' };
+  }
+  
+  // Capitalize first letter of each word
+  const formatted = city.trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+  
+  return {
+    valid: true,
+    formatted
+  };
+}
+
+function validateState(state) {
+  if (!state) {
+    return { valid: false, error: 'State is required' };
+  }
+  
+  const validStates = [
+    'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+    'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+    'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
+    'VA','WA','WV','WI','WY','DC'
+  ];
+  
+  const stateUpper = state.toUpperCase().trim();
+  
+  if (!validStates.includes(stateUpper)) {
+    return { valid: false, error: 'Invalid state code' };
+  }
+  
+  return {
+    valid: true,
+    formatted: stateUpper
+  };
+}
+
+function validateZipCode(zip) {
+  if (!zip) {
+    return { valid: false, error: 'ZIP code is required' };
+  }
+  
+  const cleanZip = zip.replace(/\D/g, '');
+  
+  if (cleanZip.length !== 5) {
+    return { valid: false, error: 'ZIP code must be 5 digits' };
+  }
+  
+  return {
+    valid: true,
+    formatted: cleanZip
+  };
+}
+
+function validateLicenseNumber(licenseNumber, licenseState) {
+  const result = validateLicense(licenseNumber, licenseState, null);
+  
+  if (!result.valid) {
+    return { valid: false, error: result.errors.join('; ') };
+  }
+  
+  return {
+    valid: true,
+    formatted: licenseNumber.trim()
+  };
+}
+
+function validateAndFormatEIN(taxId) {
+  return validateTaxId(taxId);
+}
+
+function validateWebsiteUrl(websiteUrl) {
+  if (!websiteUrl) {
+    return { valid: true, formatted: null };
+  }
+  
+  const result = validateWebsite(websiteUrl);
+  
+  if (!result.valid) {
+    return result;
+  }
+  
+  return {
+    valid: true,
+    formatted: result.normalized
+  };
+}
+
+function validateServiceTypes(serviceTypes) {
+  if (!serviceTypes || !Array.isArray(serviceTypes)) {
+    return { valid: false, error: 'Service types must be an array' };
+  }
+  
+  if (serviceTypes.length === 0) {
+    return { valid: false, error: 'At least one service type is required' };
+  }
+  
+  // Validate each service type
+  const invalidTypes = serviceTypes.filter(type => !validTypes.includes(type));
+  
+  if (invalidTypes.length > 0) {
+    return {
+      valid: false,
+      error: `Invalid service types: ${invalidTypes.join(', ')}`
+    };
+  }
+  
+  return {
+    valid: true,
+    formatted: serviceTypes
+  };
+}
+
+async function validateServiceZipCodes(serviceZipCodes, businessZip) {
+  if (!serviceZipCodes || !Array.isArray(serviceZipCodes)) {
+    return { valid: false, error: 'Service ZIP codes must be an array' };
+  }
+  
+  if (serviceZipCodes.length === 0) {
+    return { valid: false, error: 'At least one service ZIP code is required' };
+  }
+  
+  // Validate each ZIP
+  const cleanedZips = [];
+  
+  for (const zip of serviceZipCodes) {
+    const cleanZip = zip.replace(/\D/g, '');
+    
+    if (cleanZip.length !== 5) {
+      return {
+        valid: false,
+        error: `Invalid ZIP code: ${zip} (must be 5 digits)`
+      };
+    }
+    
+    cleanedZips.push(cleanZip);
+  }
+  
+  // Remove duplicates
+  const uniqueZips = [...new Set(cleanedZips)];
+  
+  // Business ZIP should be included
+  if (businessZip && !uniqueZips.includes(businessZip)) {
+    uniqueZips.push(businessZip);
+  }
+  
+  return {
+    valid: true,
+    formatted: uniqueZips
+  };
+}
+
 module.exports = {
+  // Main validation function
   validateContractorApplication,
+  
+  // Individual validators (original names)
   validatePhone,
   validateEmail,
   validateGeography,
@@ -509,7 +695,23 @@ module.exports = {
   validateLicense,
   validateBusinessName,
   validateTaxId,
+  validateWebsite,
+  validateYearsInBusiness,
   formatPhoneNumber,
+  
+  // Backend-compatible wrappers (what index.js actually calls)
+  sanitizeBusinessName,
+  validateAndFormatPhone,
+  validateCity,
+  validateState,
+  validateZipCode,
+  validateLicenseNumber,
+  validateAndFormatEIN,
+  validateWebsiteUrl,
+  validateServiceTypes,
+  validateServiceZipCodes,
+  
+  // Reference data
   knownInsuranceProviders,
   SERVICE_TYPE_LABELS,
   validTypes,
