@@ -98,7 +98,10 @@ function validateEmail(email) {
     return { valid: false, error: 'Please use a business email address' };
   }
   
-  return { valid: true };
+   return { 
+    valid: true, 
+    normalized: email.toLowerCase().trim() 
+  };
 }
 
 // ============================================
