@@ -641,24 +641,82 @@
         const result = await response.json();
 
         spinner.style.display = 'none';
-        submitBtn.disabled = false;
 
         if (result.success) {
-          successAlert.textContent = result.message;
+          // Hide the form
+          form.style.display = 'none';
+
+          // Show enhanced success message with redirect
+          successAlert.innerHTML = `
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="width: 80px; height: 80px; background: #10b981; border-radius: 50%; margin: 0 auto 30px; display: flex; align-items: center; justify-content: center;">
+            <svg width="50" height="50" fill="none" stroke="white" stroke-width="3" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+          <h2 style="color: #065f46; font-size: 2rem; margin-bottom: 20px;">Application Submitted Successfully!</h2>
+          <p style="color: #047857; font-size: 1.1rem; margin-bottom: 15px;">${result.message}</p>
+          <p style="color: #065f46; font-size: 0.95rem; margin-bottom: 10px;">
+            <strong>Reference ID:</strong> ${result.applicationId}
+          </p>
+          <p style="color: #047857; font-size: 0.95rem; margin-bottom: 30px;">
+            We'll review your application within 24-48 hours and send you login credentials.
+          </p>
+          <div style="background: #d1fae5; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+            <p style="color: #065f46; font-size: 1rem; margin: 0;">
+              Redirecting to home page in <span id="countdown" style="font-weight: bold; font-size: 1.2rem; color: #047857;">5</span> seconds...
+            </p>
+          </div>
+          <button onclick="window.location.href=https://www.getcontractornow.com" style="
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+          " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            Return to Home Now
+          </button>
+        </div>
+      `;
           successAlert.style.display = 'block';
-          form.reset();
+
+          // Scroll to top to see success message
           window.scrollTo({ top: 0, behavior: 'smooth' });
+
+          // Countdown and auto-redirect
+          let countdown = 5;
+          const countdownInterval = setInterval(() => {
+            countdown--;
+            const countdownEl = document.getElementById('countdown');
+            if (countdownEl) {
+              countdownEl.textContent = countdown;
+            }
+
+            if (countdown <= 0) {
+              clearInterval(countdownInterval);
+              window.location.href = 'https://www.getcontractornow.com'; // Change to your home page URL if different
+            }
+          }, 1000);
+
         } else {
+          submitBtn.disabled = false;
           errorAlert.textContent = result.error || 'Failed to submit application. Please try again.';
           errorAlert.style.display = 'block';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
       } catch (error) {
         console.error('Submission error:', error);
         spinner.style.display = 'none';
         submitBtn.disabled = false;
-        errorAlert.textContent = 'Submission error: ' + error.message;
+        errorAlert.textContent = 'Network error. Please check your connection and try again.';
         errorAlert.style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     });
 
@@ -683,7 +741,6 @@
       return Array.from(checkboxes).map(cb => cb.value);
     }
   </script>
-
 </body>
 
 </html>

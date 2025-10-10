@@ -192,7 +192,7 @@ app.post(
       switch (event.type) {
         case "checkout.session.completed": {
           const session = event.data.object;
-          
+
           console.log("📋 Checkout session completed");
           console.log("   - Session ID:", session.id);
           console.log("   - Customer ID:", session.customer);
@@ -203,20 +203,27 @@ app.post(
 
           if (!contractorId) {
             console.error("❌ NO CONTRACTOR ID IN METADATA!");
-            console.error("Full session metadata:", JSON.stringify(session.metadata, null, 2));
-            return res.status(400).json({ error: "Missing contractor ID in metadata" });
+            console.error(
+              "Full session metadata:",
+              JSON.stringify(session.metadata, null, 2)
+            );
+            return res
+              .status(400)
+              .json({ error: "Missing contractor ID in metadata" });
           }
 
           // Get subscription details from Stripe
-          const subscription = await stripe.subscriptions.retrieve(session.subscription);
+          const subscription = await stripe.subscriptions.retrieve(
+            session.subscription
+          );
 
           // Map package to tier
           const packageTierMap = {
-            'starter': 'STARTER',
-            'pro': 'PRO',
-            'elite': 'ELITE'
+            starter: "STARTER",
+            pro: "PRO",
+            elite: "ELITE",
           };
-          const tier = packageTierMap[session.metadata?.packageId] || 'PRO';
+          const tier = packageTierMap[session.metadata?.packageId] || "PRO";
 
           console.log("💳 Updating contractor with Stripe info...");
 
@@ -228,8 +235,12 @@ app.post(
               stripeSubscriptionId: session.subscription,
               subscriptionStatus: "active",
               subscriptionTier: tier,
-              subscriptionStartDate: new Date(subscription.current_period_start * 1000),
-              subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+              subscriptionStartDate: new Date(
+                subscription.current_period_start * 1000
+              ),
+              subscriptionEndDate: new Date(
+                subscription.current_period_end * 1000
+              ),
               status: "active",
               isAcceptingLeads: true,
               // Clear the package selection token since setup is complete
@@ -243,7 +254,10 @@ app.post(
           console.log("   - Business:", updated.businessName);
           console.log("   - Email:", updated.email);
           console.log("   - Stripe Customer:", updated.stripeCustomerId);
-          console.log("   - Stripe Subscription:", updated.stripeSubscriptionId);
+          console.log(
+            "   - Stripe Subscription:",
+            updated.stripeSubscriptionId
+          );
           console.log("   - Tier:", updated.subscriptionTier);
           console.log("   - Status:", updated.subscriptionStatus);
 
@@ -252,7 +266,12 @@ app.post(
 
         case "customer.subscription.updated": {
           const subscription = event.data.object;
-          console.log("📝 Subscription updated:", subscription.id, "Status:", subscription.status);
+          console.log(
+            "📝 Subscription updated:",
+            subscription.id,
+            "Status:",
+            subscription.status
+          );
 
           const contractor = await prisma.contractor.findFirst({
             where: { stripeSubscriptionId: subscription.id },
@@ -268,14 +287,20 @@ app.post(
               where: { id: contractor.id },
               data: {
                 subscriptionStatus: status,
-                subscriptionEndDate: new Date(subscription.current_period_end * 1000),
-                status: subscription.status === "active" ? "active" : "inactive",
+                subscriptionEndDate: new Date(
+                  subscription.current_period_end * 1000
+                ),
+                status:
+                  subscription.status === "active" ? "active" : "inactive",
               },
             });
 
             console.log("✅ Updated subscription status to:", status);
           } else {
-            console.warn("⚠️ No contractor found for subscription:", subscription.id);
+            console.warn(
+              "⚠️ No contractor found for subscription:",
+              subscription.id
+            );
           }
           break;
         }
@@ -283,7 +308,7 @@ app.post(
         case "customer.subscription.deleted": {
           const subscription = event.data.object;
           console.log("❌ Subscription deleted:", subscription.id);
-          
+
           const contractor = await prisma.contractor.findFirst({
             where: { stripeSubscriptionId: subscription.id },
           });
@@ -299,7 +324,10 @@ app.post(
               },
             });
 
-            console.log("✅ Subscription cancelled for:", contractor.businessName);
+            console.log(
+              "✅ Subscription cancelled for:",
+              contractor.businessName
+            );
           }
           break;
         }
@@ -323,7 +351,10 @@ app.post(
                 },
               });
 
-              console.log("✅ Activated subscription after payment for:", contractor.businessName);
+              console.log(
+                "✅ Activated subscription after payment for:",
+                contractor.businessName
+              );
             }
           }
           break;
@@ -332,7 +363,7 @@ app.post(
         case "invoice.payment_failed": {
           const invoice = event.data.object;
           console.log("❌ Payment failed for invoice:", invoice.id);
-          
+
           if (invoice.subscription) {
             const contractor = await prisma.contractor.findFirst({
               where: { stripeSubscriptionId: invoice.subscription },
@@ -341,14 +372,14 @@ app.post(
             if (contractor) {
               await prisma.contractor.update({
                 where: { id: contractor.id },
-                data: { 
+                data: {
                   subscriptionStatus: "past_due",
                   isAcceptingLeads: false,
                 },
               });
 
               console.log("⚠️ Payment failed for:", contractor.businessName);
-              
+
               // TODO: Send payment failed email notification
             }
           }
@@ -361,7 +392,6 @@ app.post(
 
       // Always acknowledge receipt
       res.json({ received: true });
-      
     } catch (error) {
       console.error("❌ Error processing webhook:", error);
       Sentry.captureException(error);
@@ -761,30 +791,32 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // CORS
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, Postman)
-    if (!origin) {
-      console.log('Request with no origin - allowing');
-      return callback(null, true);
-    }
-    
-    console.log('Request from origin:', origin); // Debug log
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      console.log('Origin allowed:', origin);
-      callback(null, true);
-    } else {
-      console.log('Origin rejected:', origin);
-      // ALLOW IT ANYWAY (for now) instead of rejecting
-      callback(null, true); // Change this temporarily
-      // callback(new Error('Not allowed by CORS')); // This was causing the error
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl, Postman)
+      if (!origin) {
+        console.log("Request with no origin - allowing");
+        return callback(null, true);
+      }
+
+      console.log("Request from origin:", origin); // Debug log
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        console.log("Origin allowed:", origin);
+        callback(null, true);
+      } else {
+        console.log("Origin rejected:", origin);
+        // ALLOW IT ANYWAY (for now) instead of rejecting
+        callback(null, true); // Change this temporarily
+        // callback(new Error('Not allowed by CORS')); // This was causing the error
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 // Sentry breadcrumbs
 app.use((req, res, next) => {
@@ -2526,14 +2558,16 @@ app.get("/api/contractors/verify-token/:token", async (req, res) => {
 
     // Check if token expired
     if (contractor.packageSelectionTokenExpiry < new Date()) {
-      return res.status(400).json({ error: "Token expired. Please contact support." });
+      return res
+        .status(400)
+        .json({ error: "Token expired. Please contact support." });
     }
 
     // Check if already has active subscription
     if (contractor.subscriptionStatus === "active") {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Subscription already active",
-        redirectTo: "/dashboard"
+        redirectTo: "/dashboard",
       });
     }
 
@@ -2554,22 +2588,25 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
   try {
     const { token, packageId } = req.body;
 
-    console.log("📦 Checkout request received:", { token: token?.substring(0, 10) + '...', packageId });
+    console.log("📦 Checkout request received:", {
+      token: token?.substring(0, 10) + "...",
+      packageId,
+    });
 
     // Validate input
     if (!token || !packageId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Token and packageId are required" 
+        error: "Token and packageId are required",
       });
     }
 
     // Validate package
-    const validPackages = ['starter', 'pro', 'elite'];
+    const validPackages = ["starter", "pro", "elite"];
     if (!validPackages.includes(packageId)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Invalid package. Must be starter, pro, or elite." 
+        error: "Invalid package. Must be starter, pro, or elite.",
       });
     }
 
@@ -2579,46 +2616,50 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
     });
 
     if (!contractor) {
-      console.error("❌ Token not found:", token.substring(0, 10) + '...');
-      return res.status(404).json({ 
+      console.error("❌ Token not found:", token.substring(0, 10) + "...");
+      return res.status(404).json({
         success: false,
-        error: "Invalid or expired token" 
+        error: "Invalid or expired token",
       });
     }
 
     // Check token expiry
     if (contractor.packageSelectionTokenExpiry < new Date()) {
       console.error("❌ Token expired for contractor:", contractor.email);
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: "Token expired. Please contact support for a new link." 
+        error: "Token expired. Please contact support for a new link.",
       });
     }
 
     // Check if already has active subscription
     if (contractor.subscriptionStatus === "active") {
-      console.warn("⚠️ Contractor already has active subscription:", contractor.email);
-      return res.status(400).json({ 
+      console.warn(
+        "⚠️ Contractor already has active subscription:",
+        contractor.email
+      );
+      return res.status(400).json({
         success: false,
-        error: "You already have an active subscription. Please login to your dashboard.",
-        redirectTo: "/dashboard"
+        error:
+          "You already have an active subscription. Please login to your dashboard.",
+        redirectTo: "/dashboard",
       });
     }
 
     // Map package to Stripe Price ID
     const priceMap = {
-      'starter': process.env.STRIPE_PRICE_STARTER,
-      'pro': process.env.STRIPE_PRICE_PRO,
-      'elite': process.env.STRIPE_PRICE_ELITE,
+      starter: process.env.STRIPE_PRICE_STARTER,
+      pro: process.env.STRIPE_PRICE_PRO,
+      elite: process.env.STRIPE_PRICE_ELITE,
     };
 
     const priceId = priceMap[packageId];
-    
+
     if (!priceId) {
       console.error("❌ Price ID not configured for package:", packageId);
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: "Package pricing not configured. Please contact support." 
+        error: "Package pricing not configured. Please contact support.",
       });
     }
 
@@ -2640,31 +2681,31 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
       ],
       success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL}/select-package?token=${token}&package=${packageId}&cancelled=true`,
-      
+
       // ⭐ CRITICAL: Pass contractor ID in metadata
       metadata: {
         contractorId: contractor.id,
         packageId: packageId,
         source: "package_selection",
-        businessName: contractor.businessName
+        businessName: contractor.businessName,
       },
-      
+
       // Pre-fill customer information
       customer_email: contractor.email,
-      
+
       // Collect billing address
       billing_address_collection: "required",
-      
+
       // Enable promotional codes
       allow_promotion_codes: true,
-      
+
       // Subscription settings
       subscription_data: {
         metadata: {
           contractorId: contractor.id,
-          packageId: packageId
-        }
-      }
+          packageId: packageId,
+        },
+      },
     });
 
     console.log("✅ Checkout session created successfully:", session.id);
@@ -2677,9 +2718,10 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
   } catch (error) {
     console.error("❌ Checkout creation error:", error);
     Sentry.captureException(error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: "Failed to create checkout session. Please try again or contact support." 
+      error:
+        "Failed to create checkout session. Please try again or contact support.",
     });
   }
 });
@@ -4137,6 +4179,149 @@ app.post("/api/contractors/apply", async (req, res) => {
       validationErrors.push(`Tax ID: ${einValidation.error}`);
     }
     const taxId = einValidation.formatted;
+    // ============================================
+    // 4B. VALIDATE GEOGRAPHY MATCHING (CRITICAL)
+    // ============================================
+    if (businessCity && businessState && businessZip) {
+      console.log("🗺️  Validating geographic consistency...");
+
+      try {
+        const response = await fetch(
+          `https://api.zippopotam.us/us/${businessZip}`
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.places && data.places.length > 0) {
+            const zipState = data.places[0]["state abbreviation"];
+            const zipCities = data.places.map((p) =>
+              p["place name"].toLowerCase()
+            );
+            const enteredCity = businessCity.toLowerCase().trim();
+
+            // Check state match
+            if (zipState.toUpperCase() !== businessState.toUpperCase()) {
+              validationErrors.push(
+                `ZIP code ${businessZip} is in ${zipState}, not ${businessState}. Please verify your location.`
+              );
+            }
+
+            // Check city match
+            const cityMatch = zipCities.some(
+              (zipCity) =>
+                zipCity === enteredCity ||
+                zipCity.includes(enteredCity) ||
+                enteredCity.includes(zipCity)
+            );
+
+            if (!cityMatch) {
+              const suggestedCity = data.places[0]["place name"];
+              validationErrors.push(
+                `ZIP code ${businessZip} is in ${suggestedCity}, ${zipState}. Did you mean ${suggestedCity}?`
+              );
+            }
+          }
+        } else {
+          console.warn("⚠️  Could not verify ZIP code via API");
+        }
+      } catch (geoError) {
+        console.warn("⚠️  Geographic validation API failed:", geoError.message);
+        // Don't block application if API is down
+      }
+    }
+    // ============================================
+    // 6B. VALIDATE INSURANCE (CRITICAL)
+    // ============================================
+    console.log("🛡️  Validating insurance information...");
+
+    // Insurance provider validation
+    if (!data.insuranceProvider || data.insuranceProvider.trim().length < 2) {
+      validationErrors.push("Insurance provider is required");
+    } else {
+      const knownProviders = [
+        "State Farm",
+        "Allstate",
+        "Progressive",
+        "GEICO",
+        "Liberty Mutual",
+        "Farmers",
+        "Nationwide",
+        "Travelers",
+        "USAA",
+        "American Family",
+        "The Hartford",
+        "Chubb",
+        "Erie Insurance",
+        "Next Insurance",
+        "Hiscox",
+        "Thimble",
+        "BiBerk",
+        "Insureon",
+        "Pie Insurance",
+      ];
+
+      const providerLower = data.insuranceProvider.toLowerCase();
+      const isKnown = knownProviders.some(
+        (known) =>
+          providerLower.includes(known.toLowerCase()) ||
+          known.toLowerCase().includes(providerLower)
+      );
+
+      if (!isKnown) {
+        console.warn("⚠️  Unknown insurance provider:", data.insuranceProvider);
+        // Log for manual review but don't block
+      }
+    }
+
+    // Insurance policy number validation
+    if (
+      !data.insurancePolicyNumber ||
+      data.insurancePolicyNumber.trim().length < 5
+    ) {
+      validationErrors.push(
+        "Insurance policy number is required (minimum 5 characters)"
+      );
+    } else {
+      const cleanPolicy = data.insurancePolicyNumber.replace(/[\s\-]/g, "");
+
+      // Check for suspicious patterns
+      if (/^(0+|1+|9+|12345|00000|test)$/i.test(cleanPolicy)) {
+        validationErrors.push("Invalid insurance policy number format");
+      }
+
+      // Policy numbers should be alphanumeric
+      if (!/^[A-Z0-9\-\s]+$/i.test(data.insurancePolicyNumber)) {
+        validationErrors.push(
+          "Policy number should only contain letters, numbers, and dashes"
+        );
+      }
+    }
+
+    // Insurance expiration validation
+    if (!data.insuranceExpirationDate) {
+      validationErrors.push("Insurance expiration date is required");
+    } else {
+      const expiryDate = new Date(data.insuranceExpirationDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (isNaN(expiryDate.getTime())) {
+        validationErrors.push("Invalid insurance expiration date");
+      } else if (expiryDate < today) {
+        validationErrors.push(
+          "Insurance policy has expired. Current insurance is required."
+        );
+      } else if (
+        expiryDate < new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
+      ) {
+        console.warn(
+          "⚠️  Insurance expiring within 30 days:",
+          data.insuranceExpirationDate
+        );
+        // Don't block but log for follow-up
+      }
+    }
 
     // ============================================
     // 7. VALIDATE WEBSITE URL
@@ -4245,9 +4430,9 @@ app.post("/api/contractors/apply", async (req, res) => {
           : null,
         taxId: taxId,
 
-        // Insurance (optional fields) - ✅ VERIFIED FIELD NAMES
-        insuranceProvider: data.insuranceProvider || "",
-        insurancePolicyNumber: data.insurancePolicyNumber || "",
+        // Insurance (REQUIRED fields) - ✅ VERIFIED FIELD NAMES
+        insuranceProvider: data.insuranceProvider, // Required - validation ensures it exists
+        insurancePolicyNumber: data.insurancePolicyNumber, // Required - validation ensures it exists
         insuranceExpirationDate: data.insuranceExpirationDate
           ? new Date(data.insuranceExpirationDate)
           : null,
