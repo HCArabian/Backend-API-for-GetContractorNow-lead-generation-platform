@@ -927,7 +927,9 @@ app.get("/", (req, res) => {
 app.get("/contractor-app", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "contractor-form.html"));
 });
-
+app.get("/package-selection", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "select-package.html"));
+});
 app.get("/api/debug/check-env", (req, res) => {
   res.json({
     hasAdminPassword: !!process.env.ADMIN_PASSWORD,
