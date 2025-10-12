@@ -6,7 +6,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-const Stripe = require("stripe");
+const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -833,7 +833,7 @@ app.use((req, res, next) => {
 
 // Static files
 app.use(express.static("public"));
-app.use(express.static("public", { extensions: ["html"] })); // Allows /select-package without .html
+app.use(express.static('public', { extensions: ['html'] })); // Allows /select-package without .html
 
 /* // Stripe webhook handler
 // Stripe webhook handler with signature verification

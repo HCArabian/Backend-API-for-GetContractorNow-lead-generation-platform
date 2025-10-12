@@ -348,7 +348,7 @@ async function sendFeedbackRequestEmail(lead) {
   }
 }
 
-async function sendContractorOnboardingEmail(
+/* async function sendContractorOnboardingEmail(
   contractor,
   temporaryPassword,
   packageSelectionUrl
@@ -522,6 +522,143 @@ async function sendContractorOnboardingEmail(
           purpose: "onboarding",
           includesPackageSelection: true,
           tokenExpiry: "7 days",
+        },
+      },
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Onboarding email error:", error);
+    return { success: false, error: error.message };
+  }
+} */
+
+async function sendContractorOnboardingEmail(contractor, temporaryPassword, packageSelectionUrl) {
+  // Check bounce status first
+  if (!(await shouldSendEmail(contractor.email))) {
+    return { success: false, error: "Email address bounced" };
+  }
+
+  const portalUrl = `https://app.getcontractornow.com/contractor`;
+
+  const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { padding: 40px; background: #f9fafb; border: 1px solid #e5e7eb; }
+    .credentials-box { background: #dbeafe; border: 2px solid #2563eb; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .button { 
+      display: inline-block; 
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); 
+      color: white !important; 
+      padding: 18px 40px; 
+      text-decoration: none; 
+      border-radius: 8px; 
+      margin: 20px 0; 
+      font-weight: bold; 
+      font-size: 18px;
+      text-align: center;
+    }
+    .alert-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 Welcome to GetContractorNow!</h1>
+    </div>
+    <div class="content">
+      <p>Hi ${contractor.ownerFirstName || contractor.businessName},</p>
+      
+      <p><strong>Congratulations! Your contractor account has been approved.</strong></p>
+      
+      <p>You're now ready to start receiving qualified HVAC leads in your service area. Here's how to get started:</p>
+
+      <div class="alert-box">
+        <strong>⚠️ IMPORTANT:</strong> Complete these 3 steps to activate your account and start receiving leads.
+      </div>
+
+      <h2 style="color: #1f2937; margin-top: 30px;">Step 1: Choose Your Subscription Plan</h2>
+      <p>Select the plan that fits your business needs. We offer three tiers - Starter, Pro, and Elite - each with different lead volumes and pricing.</p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${packageSelectionUrl}" class="button">
+          Choose Your Plan & Complete Payment →
+        </a>
+      </div>
+
+      <h2 style="color: #1f2937; margin-top: 30px;">Step 2: Your Login Credentials</h2>
+      
+      <div class="credentials-box">
+        <h3 style="margin-top: 0;">Portal Access (Use After Payment)</h3>
+        <p><strong>Portal URL:</strong> <a href="${portalUrl}" style="color: #2563eb;">${portalUrl}</a></p>
+        <p><strong>Email:</strong> ${contractor.email}</p>
+        <p><strong>Temporary Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 4px; font-size: 16px; font-weight: bold; color: #dc2626;">${temporaryPassword}</code></p>
+        <p style="font-size: 14px; color: #6b7280; margin-top: 10px;">⚠️ You'll be prompted to change this password on first login</p>
+      </div>
+
+      <h2 style="color: #1f2937; margin-top: 30px;">Step 3: Add Credit & Start Receiving Leads</h2>
+      <p>After subscribing and logging in, add a minimum of $500 credit to your account to start receiving leads immediately.</p>
+
+      <h2 style="color: #1f2937; margin-top: 40px;">Complete Process:</h2>
+      <ol style="line-height: 2;">
+        <li><strong>Click the button above</strong> to select your subscription plan</li>
+        <li><strong>Complete secure payment</strong> via Stripe</li>
+        <li><strong>Login to portal</strong> using credentials above</li>
+        <li><strong>Change your password</strong> for security</li>
+        <li><strong>Add $500 minimum credit</strong> to your account</li>
+        <li><strong>Start receiving leads!</strong> 🚀</li>
+      </ol>
+
+      <div class="alert-box" style="background: #d1fae5; border-left-color: #10b981;">
+        <strong>🎟️ Have a promotional code?</strong> Enter it during checkout for special pricing!
+      </div>
+
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; margin-top: 30px; border-radius: 8px;">
+        <p style="margin: 0; font-size: 14px; color: #6b7280;">
+          <strong style="color: #1f2937;">Important:</strong> Your package selection link is valid for 7 days. If you have any questions or need assistance, please reach out to us.
+        </p>
+      </div>
+
+      <p style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e5e7eb;">
+        <strong>Need help?</strong><br>
+        Email: support@getcontractornow.com<br>
+        We're here to help you succeed!
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  try {
+    await sgMail.send({
+      to: contractor.email,
+      from: process.env.SENDGRID_FROM_EMAIL,
+      subject: "Welcome to GetContractorNow - Complete Your Setup",
+      html: emailHtml,
+    });
+
+    console.log("✅ Onboarding email sent to:", contractor.email);
+
+    // Log to database
+    await prisma.notificationLog.create({
+      data: {
+        contractorId: contractor.id,
+        type: "email",
+        recipient: contractor.email,
+        subject: "Welcome to GetContractorNow - Complete Your Setup",
+        body: emailHtml,
+        status: "sent",
+        sentAt: new Date(),
+        metadata: {
+          purpose: "onboarding",
+          includesPackageSelection: true,
+          tokenExpiry: "7 days"
         },
       },
     });
