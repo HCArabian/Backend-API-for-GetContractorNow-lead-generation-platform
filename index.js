@@ -831,6 +831,7 @@ app.use((req, res, next) => {
 
 // Static files
 app.use(express.static("public"));
+app.use(express.static('public', { extensions: ['html'] })); // Allows /select-package without .html
 
 /* // Stripe webhook handler
 // Stripe webhook handler with signature verification
