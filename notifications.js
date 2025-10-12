@@ -735,7 +735,7 @@ async function sendApplicationConfirmationEmail(contractor) {
     </div>
     
     <div class="content">
-      <p>Hi ${contractor.ownerFirstName},</p>
+      <p>Hi ${lead.customerFirstName} ${lead.customerLastName},</p>
       
       <p>Thank you for submitting your contractor application to <strong>GetContractorNow</strong>! We've received your information and are excited to review your application.</p>
       
