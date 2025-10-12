@@ -144,6 +144,8 @@ model Contractor {
   description             String?             // Contractor's business description
   referralSource          String?             // How they heard about us
   notes                   String? 
+  ownerFirstName          String?
+  ownerLastName           String?
 
   // ✅ ADD THESE TWO NEW FIELDS:
   packageSelectionToken       String?   @unique
