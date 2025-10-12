@@ -6,6 +6,8 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const { PrismaClient } = require("@prisma/client");
