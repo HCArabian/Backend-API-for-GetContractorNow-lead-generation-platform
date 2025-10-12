@@ -298,7 +298,7 @@ async function sendFeedbackRequestEmail(lead) {
       <h1>How was your service?</h1>
     </div>
     <div class="content">
-      <p>Hi ${lead.customerFirstName},</p>
+      <p>Hi ${contractor.ownerFirstName},</p>
       <p>We hope the contractor we connected you with provided excellent service!</p>
       <p>Your feedback helps us maintain quality and improve our service. It only takes 1 minute.</p>
       <div style="text-align: center;">
@@ -735,7 +735,7 @@ async function sendApplicationConfirmationEmail(contractor) {
     </div>
     
     <div class="content">
-      <p>Hi ${lead.customerFirstName} ${lead.customerLastName},</p>
+      <p>Hi ${contractor.ownerFirstName},</p>
       
       <p>Thank you for submitting your contractor application to <strong>GetContractorNow</strong>! We've received your information and are excited to review your application.</p>
       

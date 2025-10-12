@@ -4455,6 +4455,9 @@ app.post("/api/contractors/apply", async (req, res) => {
         email: email,
         phone: phone,
 
+        ownerFirstName: data.ownerFirstName || null, // ✅ ADD THIS
+        ownerLastName: data.ownerLastName || null, // ✅ ADD THIS
+
         // Address - ✅ VERIFIED FIELD NAMES
         businessAddress: data.businessAddress || "",
         businessCity: businessCity || "",
@@ -4965,7 +4968,8 @@ app.post(
       });
 
       // Create package selection URL
-      const packageSelectionUrl = "https://app.getcontractornow.com/select-package.html?token=${packageToken}";
+      const packageSelectionUrl =
+        "https://app.getcontractornow.com/select-package.html?token=${packageToken}";
 
       // Send onboarding email with credentials
       await sendContractorOnboardingEmail(
