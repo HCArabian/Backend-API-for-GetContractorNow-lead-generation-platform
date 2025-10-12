@@ -6,7 +6,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-const Stripe = require('stripe');
+const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -833,7 +833,7 @@ app.use((req, res, next) => {
 
 // Static files
 app.use(express.static("public"));
-app.use(express.static('public', { extensions: ['html'] })); // Allows /select-package without .html
+app.use(express.static("public", { extensions: ["html"] })); // Allows /select-package without .html
 
 /* // Stripe webhook handler
 // Stripe webhook handler with signature verification
@@ -2721,8 +2721,8 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL}/select-package?token=${token}&package=${packageId}&cancelled=true`,
+      success_url: `${process.env.FRONTEND_URL}/payment-success.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL}/select-package.html?token=${token}&package=${packageId}&error=payment_cancelled`,
 
       // ⭐ CRITICAL: Pass contractor ID in metadata
       metadata: {
