@@ -4,10 +4,11 @@ const sgMail = require("@sendgrid/mail");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'team@getcontractornow.com';
-const FROM_NAME = 'GetContractorNow';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@getcontractornow.com';
-const PORTAL_URL = process.env.RAILWAY_URL || 'https://app.getcontractornow.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || "team@getcontractornow.com";
+const FROM_NAME = "GetContractorNow";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@getcontractornow.com";
+const PORTAL_URL =
+  process.env.RAILWAY_URL || "https://app.getcontractornow.com";
 
 // Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -298,7 +299,7 @@ async function sendFeedbackRequestEmail(lead) {
       <h1>How was your service?</h1>
     </div>
     <div class="content">
-      <p>Hi ${contractor.ownerFirstName},</p>
+      <p>Hi ${contractor.ownerFirstName || contractor.businessName},</p>
       <p>We hope the contractor we connected you with provided excellent service!</p>
       <p>Your feedback helps us maintain quality and improve our service. It only takes 1 minute.</p>
       <div style="text-align: center;">
@@ -347,7 +348,11 @@ async function sendFeedbackRequestEmail(lead) {
   }
 }
 
-async function sendContractorOnboardingEmail(contractor, temporaryPassword, packageSelectionUrl) {
+async function sendContractorOnboardingEmail(
+  contractor,
+  temporaryPassword,
+  packageSelectionUrl
+) {
   // Check bounce status first
   if (!(await shouldSendEmail(contractor.email))) {
     return { success: false, error: "Email address bounced" };
@@ -516,7 +521,7 @@ async function sendContractorOnboardingEmail(contractor, temporaryPassword, pack
         metadata: {
           purpose: "onboarding",
           includesPackageSelection: true,
-          tokenExpiry: "7 days"
+          tokenExpiry: "7 days",
         },
       },
     });
@@ -707,9 +712,9 @@ async function sendApplicationConfirmationEmail(contractor) {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: 'Application Received - GetContractorNow',
+      subject: "Application Received - GetContractorNow",
       html: `
 <!DOCTYPE html>
 <html>
@@ -743,7 +748,7 @@ async function sendApplicationConfirmationEmail(contractor) {
         <strong>📋 Application Details:</strong><br>
         Business: ${contractor.businessName}<br>
         License: ${contractor.licenseState} #${contractor.licenseNumber}<br>
-        Service Areas: ${contractor.serviceZipCodes.join(', ')}<br>
+        Service Areas: ${contractor.serviceZipCodes.join(", ")}<br>
         Submitted: ${new Date().toLocaleDateString()}
       </div>
       
@@ -783,11 +788,10 @@ async function sendApplicationConfirmationEmail(contractor) {
     };
 
     await sgMail.send(msg);
-    console.log('✅ Application confirmation email sent to:', contractor.email);
+    console.log("✅ Application confirmation email sent to:", contractor.email);
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Error sending application confirmation:', error);
+    console.error("❌ Error sending application confirmation:", error);
     return { success: false, error: error.message };
   }
 }
@@ -802,7 +806,7 @@ async function sendAdminNewApplicationAlert(contractor) {
       to: ADMIN_EMAIL,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
       subject: `🆕 New Contractor Application: ${contractor.businessName}`,
       html: `
@@ -828,16 +832,38 @@ async function sendAdminNewApplicationAlert(contractor) {
     <div class="content">
       <div class="info-grid">
         <h3>${contractor.businessName}</h3>
-        <p><strong>Owner:</strong> ${contractor.ownerFirstName} ${contractor.ownerLastName}</p>
-        <p><strong>Email:</strong> <a href="mailto:${contractor.email}">${contractor.email}</a></p>
+        <p><strong>Owner:</strong> ${contractor.ownerFirstName} ${
+        contractor.ownerLastName
+      }</p>
+        <p><strong>Email:</strong> <a href="mailto:${contractor.email}">${
+        contractor.email
+      }</a></p>
         <p><strong>Phone:</strong> ${contractor.phone}</p>
-        <p><strong>Location:</strong> ${contractor.businessCity}, ${contractor.businessState} ${contractor.businessZip}</p>
-        <p><strong>License:</strong> ${contractor.licenseState} #${contractor.licenseNumber}</p>
-        <p><strong>Service ZIPs:</strong> ${contractor.serviceZipCodes.join(', ')}</p>
-        <p><strong>Specializations:</strong> ${contractor.specializations.join(', ')}</p>
-        <p><strong>Years in Business:</strong> ${contractor.yearsInBusiness || 'Not provided'}</p>
-        ${contractor.websiteUrl ? `<p><strong>Website:</strong> <a href="${contractor.websiteUrl}">${contractor.websiteUrl}</a></p>` : ''}
-        ${contractor.applicationNotes ? `<p><strong>Notes:</strong> ${contractor.applicationNotes}</p>` : ''}
+        <p><strong>Location:</strong> ${contractor.businessCity}, ${
+        contractor.businessState
+      } ${contractor.businessZip}</p>
+        <p><strong>License:</strong> ${contractor.licenseState} #${
+        contractor.licenseNumber
+      }</p>
+        <p><strong>Service ZIPs:</strong> ${contractor.serviceZipCodes.join(
+          ", "
+        )}</p>
+        <p><strong>Specializations:</strong> ${contractor.specializations.join(
+          ", "
+        )}</p>
+        <p><strong>Years in Business:</strong> ${
+          contractor.yearsInBusiness || "Not provided"
+        }</p>
+        ${
+          contractor.websiteUrl
+            ? `<p><strong>Website:</strong> <a href="${contractor.websiteUrl}">${contractor.websiteUrl}</a></p>`
+            : ""
+        }
+        ${
+          contractor.applicationNotes
+            ? `<p><strong>Notes:</strong> ${contractor.applicationNotes}</p>`
+            : ""
+        }
         <p><strong>Applied:</strong> ${new Date().toLocaleString()}</p>
       </div>
       
@@ -856,11 +882,10 @@ async function sendAdminNewApplicationAlert(contractor) {
     };
 
     await sgMail.send(msg);
-    console.log('✅ Admin alert sent for new application');
+    console.log("✅ Admin alert sent for new application");
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Error sending admin alert:', error);
+    console.error("❌ Error sending admin alert:", error);
     return { success: false, error: error.message };
   }
 }
@@ -875,9 +900,9 @@ async function sendApplicationRejectionEmail(contractor, reason) {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: 'Application Status Update - GetContractorNow',
+      subject: "Application Status Update - GetContractorNow",
       html: `
 <!DOCTYPE html>
 <html>
@@ -930,11 +955,10 @@ async function sendApplicationRejectionEmail(contractor, reason) {
     };
 
     await sgMail.send(msg);
-    console.log('✅ Rejection email sent to:', contractor.email);
+    console.log("✅ Rejection email sent to:", contractor.email);
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Error sending rejection email:', error);
+    console.error("❌ Error sending rejection email:", error);
     return { success: false, error: error.message };
   }
 }
@@ -943,24 +967,30 @@ async function sendApplicationRejectionEmail(contractor, reason) {
 // 4. REQUEST MORE INFORMATION EMAIL
 // ============================================
 
-async function sendApplicationInfoRequestEmail(contractor, message, requestedFields) {
+async function sendApplicationInfoRequestEmail(
+  contractor,
+  message,
+  requestedFields
+) {
   try {
-    const fieldsList = requestedFields ? `
+    const fieldsList = requestedFields
+      ? `
       <div style="background: #dbeafe; padding: 15px; margin: 20px 0;">
         <strong>Information Needed:</strong>
         <ul>
-          ${requestedFields.map(field => `<li>${field}</li>`).join('')}
+          ${requestedFields.map((field) => `<li>${field}</li>`).join("")}
         </ul>
       </div>
-    ` : '';
+    `
+      : "";
 
     const msg = {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: 'Additional Information Needed - GetContractorNow Application',
+      subject: "Additional Information Needed - GetContractorNow Application",
       html: `
 <!DOCTYPE html>
 <html>
@@ -1000,11 +1030,10 @@ async function sendApplicationInfoRequestEmail(contractor, message, requestedFie
     };
 
     await sgMail.send(msg);
-    console.log('✅ Info request email sent to:', contractor.email);
+    console.log("✅ Info request email sent to:", contractor.email);
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Error sending info request:', error);
+    console.error("❌ Error sending info request:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1020,7 +1049,7 @@ async function sendDeletionRequestAlert(contractor) {
       to: ADMIN_EMAIL,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
       subject: `🚨 Data Deletion Request - ${contractor.businessName}`,
       html: `
@@ -1051,7 +1080,9 @@ async function sendDeletionRequestAlert(contractor) {
         <li><strong>Business:</strong> ${contractor.businessName}</li>
         <li><strong>Email:</strong> ${contractor.email}</li>
         <li><strong>Phone:</strong> ${contractor.phone}</li>
-        <li><strong>Account Created:</strong> ${new Date(contractor.createdAt).toLocaleDateString()}</li>
+        <li><strong>Account Created:</strong> ${new Date(
+          contractor.createdAt
+        ).toLocaleDateString()}</li>
         <li><strong>Request Date:</strong> ${new Date().toLocaleDateString()}</li>
       </ul>
       
@@ -1079,11 +1110,12 @@ async function sendDeletionRequestAlert(contractor) {
     };
 
     await sgMail.send(msg);
-    console.log(`✅ Deletion request alert sent to admin for ${contractor.businessName}`);
+    console.log(
+      `✅ Deletion request alert sent to admin for ${contractor.businessName}`
+    );
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Deletion request alert error:', error);
+    console.error("❌ Deletion request alert error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1091,7 +1123,7 @@ async function sendDeletionRequestAlert(contractor) {
 // Deletion Confirmation to Contractor
 async function sendDeletionConfirmation(contractor) {
   if (!(await shouldSendEmail(contractor.email))) {
-    return { success: false, error: 'Email address bounced' };
+    return { success: false, error: "Email address bounced" };
   }
 
   try {
@@ -1099,9 +1131,9 @@ async function sendDeletionConfirmation(contractor) {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: 'Data Deletion Request Received - GetContractorNow',
+      subject: "Data Deletion Request Received - GetContractorNow",
       html: `
 <!DOCTYPE html>
 <html>
@@ -1161,9 +1193,8 @@ async function sendDeletionConfirmation(contractor) {
     await sgMail.send(msg);
     console.log(`✅ Deletion confirmation sent to ${contractor.email}`);
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Deletion confirmation error:', error);
+    console.error("❌ Deletion confirmation error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1171,7 +1202,7 @@ async function sendDeletionConfirmation(contractor) {
 // SMS Opt-Out Confirmation Email
 async function sendSMSOptOutConfirmation(contractor) {
   if (!(await shouldSendEmail(contractor.email))) {
-    return { success: false, error: 'Email address bounced' };
+    return { success: false, error: "Email address bounced" };
   }
 
   try {
@@ -1179,9 +1210,9 @@ async function sendSMSOptOutConfirmation(contractor) {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: 'SMS Notifications Disabled - GetContractorNow',
+      subject: "SMS Notifications Disabled - GetContractorNow",
       html: `
 <!DOCTYPE html>
 <html>
@@ -1247,9 +1278,8 @@ async function sendSMSOptOutConfirmation(contractor) {
     await sgMail.send(msg);
     console.log(`✅ SMS opt-out confirmation sent to ${contractor.email}`);
     return { success: true };
-
   } catch (error) {
-    console.error('❌ SMS opt-out confirmation error:', error);
+    console.error("❌ SMS opt-out confirmation error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1261,21 +1291,23 @@ async function sendSMSOptOutConfirmation(contractor) {
 // Low Credit Warning ($100 or $50 threshold)
 async function sendLowCreditWarning(contractor, currentBalance, threshold) {
   if (!(await shouldSendEmail(contractor.email))) {
-    return { success: false, error: 'Email address bounced' };
+    return { success: false, error: "Email address bounced" };
   }
 
   const isUrgent = threshold <= 50;
-  const urgencyColor = isUrgent ? '#dc2626' : '#f59e0b';
-  const urgencyBg = isUrgent ? '#fee2e2' : '#fef3c7';
+  const urgencyColor = isUrgent ? "#dc2626" : "#f59e0b";
+  const urgencyBg = isUrgent ? "#fee2e2" : "#fef3c7";
 
   try {
     const msg = {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: `${isUrgent ? '🚨 URGENT:' : '⚠️'} Low Credit Balance - Add Funds Now`,
+      subject: `${
+        isUrgent ? "🚨 URGENT:" : "⚠️"
+      } Low Credit Balance - Add Funds Now`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -1293,7 +1325,7 @@ async function sendLowCreditWarning(contractor, currentBalance, threshold) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>${isUrgent ? '🚨 URGENT' : '⚠️ Warning'}</h1>
+      <h1>${isUrgent ? "🚨 URGENT" : "⚠️ Warning"}</h1>
       <h2>Low Credit Balance</h2>
     </div>
     
@@ -1301,26 +1333,32 @@ async function sendLowCreditWarning(contractor, currentBalance, threshold) {
       <p>Hello ${contractor.businessName},</p>
       
       <div class="alert-box">
-        <strong>${isUrgent ? 'URGENT:' : 'WARNING:'} Your credit balance is running low!</strong>
+        <strong>${
+          isUrgent ? "URGENT:" : "WARNING:"
+        } Your credit balance is running low!</strong>
       </div>
       
       <h3 style="text-align: center; color: #6b7280;">Current Balance:</h3>
       <div class="balance-display">$${currentBalance.toFixed(2)}</div>
       
-      ${isUrgent ? `
+      ${
+        isUrgent
+          ? `
       <div style="background: #fee2e2; padding: 20px; border-radius: 6px; margin: 20px 0; text-align: center;">
         <h3 style="color: #991b1b; margin-top: 0;">⚠️ CRITICAL: Add credit immediately!</h3>
         <p style="color: #7f1d1d; margin-bottom: 0;">
           Your balance is critically low. You may miss leads if your balance reaches $0.
         </p>
       </div>
-      ` : `
+      `
+          : `
       <div style="background: #fef3c7; padding: 20px; border-radius: 6px; margin: 20px 0;">
         <p style="margin: 0; color: #78350f;">
           <strong>Action Required:</strong> Add credit soon to ensure you don't miss any leads.
         </p>
       </div>
-      `}
+      `
+      }
       
       <h3>What happens if balance reaches $0?</h3>
       <ul>
@@ -1350,19 +1388,21 @@ async function sendLowCreditWarning(contractor, currentBalance, threshold) {
     };
 
     await sgMail.send(msg);
-    console.log(`✅ Low credit warning (${threshold}) sent to ${contractor.email}`);
+    console.log(
+      `✅ Low credit warning (${threshold}) sent to ${contractor.email}`
+    );
 
     // Log notification
     await prisma.notificationLog.create({
       data: {
         contractorId: contractor.id,
-        type: 'email',
+        type: "email",
         recipient: contractor.email,
         subject: msg.subject,
-        status: 'sent',
+        status: "sent",
         sentAt: new Date(),
         metadata: {
-          purpose: 'low_credit_warning',
+          purpose: "low_credit_warning",
           threshold: threshold,
           currentBalance: currentBalance,
         },
@@ -1370,9 +1410,8 @@ async function sendLowCreditWarning(contractor, currentBalance, threshold) {
     });
 
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Low credit warning email error:', error);
+    console.error("❌ Low credit warning email error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1380,7 +1419,7 @@ async function sendLowCreditWarning(contractor, currentBalance, threshold) {
 // Credit Depleted - Account Paused
 async function sendCreditDepletedEmail(contractor) {
   if (!(await shouldSendEmail(contractor.email))) {
-    return { success: false, error: 'Email address bounced' };
+    return { success: false, error: "Email address bounced" };
   }
 
   try {
@@ -1388,9 +1427,9 @@ async function sendCreditDepletedEmail(contractor) {
       to: contractor.email,
       from: {
         email: FROM_EMAIL,
-        name: FROM_NAME
+        name: FROM_NAME,
       },
-      subject: '🚨 URGENT: Credit Balance Depleted - Account Paused',
+      subject: "🚨 URGENT: Credit Balance Depleted - Account Paused",
       html: `
 <!DOCTYPE html>
 <html>
@@ -1453,7 +1492,7 @@ async function sendCreditDepletedEmail(contractor) {
       <p style="margin-top: 30px;">
         <strong>Need help?</strong><br>
         Email: <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a><br>
-        Phone: ${process.env.SUPPORT_PHONE || '(555) 123-4567'}
+        Phone: ${process.env.SUPPORT_PHONE || "(555) 123-4567"}
       </p>
       
       <p style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb; font-size: 12px; color: #6b7280;">
@@ -1474,22 +1513,21 @@ async function sendCreditDepletedEmail(contractor) {
     await prisma.notificationLog.create({
       data: {
         contractorId: contractor.id,
-        type: 'email',
+        type: "email",
         recipient: contractor.email,
         subject: msg.subject,
-        status: 'sent',
+        status: "sent",
         sentAt: new Date(),
         metadata: {
-          purpose: 'credit_depleted',
+          purpose: "credit_depleted",
           accountPaused: true,
         },
       },
     });
 
     return { success: true };
-
   } catch (error) {
-    console.error('❌ Credit depleted email error:', error);
+    console.error("❌ Credit depleted email error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1498,21 +1536,22 @@ async function sendCreditDepletedEmail(contractor) {
 async function sendLowCreditSMS(contractor, currentBalance) {
   try {
     // Check if SMS allowed
-    const { canSendSMS } = require('./sms-notifications');
+    const { canSendSMS } = require("./sms-notifications");
     const canSend = await canSendSMS(contractor.id);
-    
+
     if (!canSend) {
-      console.log('⚠️ SMS skipped - contractor opted out');
-      return { success: false, reason: 'opted_out' };
+      console.log("⚠️ SMS skipped - contractor opted out");
+      return { success: false, reason: "opted_out" };
     }
 
-    const { sendSMS } = require('./sms-notifications');
-    const message = `🚨 URGENT: Your GetContractorNow credit balance is critically low ($${currentBalance.toFixed(2)}). Add credit now to avoid missing leads: ${PORTAL_URL}/contractor`;
+    const { sendSMS } = require("./sms-notifications");
+    const message = `🚨 URGENT: Your GetContractorNow credit balance is critically low ($${currentBalance.toFixed(
+      2
+    )}). Add credit now to avoid missing leads: ${PORTAL_URL}/contractor`;
 
     return await sendSMS(contractor.phone, message, null, contractor.id);
-
   } catch (error) {
-    console.error('❌ Low credit SMS error:', error);
+    console.error("❌ Low credit SMS error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -1523,22 +1562,22 @@ module.exports = {
   sendContractorOnboardingEmail,
   sendContractorSuspensionEmail,
   sendContractorReactivationEmail,
-  
+
   // Application emails (full names)
   sendApplicationConfirmationEmail,
   sendAdminNewApplicationAlert,
   sendApplicationRejectionEmail,
   sendApplicationInfoRequestEmail,
-  
+
   // ✅ ALIASES for index.js (short names)
   sendApplicationConfirmation: sendApplicationConfirmationEmail,
   sendAdminApplicationAlert: sendAdminNewApplicationAlert,
-  
+
   // Legal Compliance
   sendDeletionRequestAlert,
   sendDeletionConfirmation,
   sendSMSOptOutConfirmation,
-  
+
   // Low Credit Warnings
   sendLowCreditWarning,
   sendCreditDepletedEmail,
