@@ -364,9 +364,43 @@
             </div>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label>License Expiration Date</label>
+              <input type="date" name="licenseExpirationDate">
+            </div>
+
+            <div class="form-group">
+              <label>Tax ID / EIN <span class="required">*</span></label>
+              <input type="text" name="taxId" required placeholder="12-3456789" pattern="[0-9]{2}-?[0-9]{7}"
+                maxlength="10">
+              <small>Federal Employer Identification Number (Format: XX-XXXXXXX)</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Insurance Information -->
+        <div class="section">
+          <h2 class="section-title">Insurance Information</h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Insurance Provider <span class="required">*</span></label>
+              <input type="text" name="insuranceProvider" required placeholder="State Farm, Allstate, etc.">
+              <small>Name of your general liability insurance provider</small>
+            </div>
+
+            <div class="form-group">
+              <label>Policy Number <span class="required">*</span></label>
+              <input type="text" name="insurancePolicyNumber" required placeholder="POL123456789" minlength="5">
+              <small>Your insurance policy number</small>
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>License Expiration Date</label>
-            <input type="date" name="licenseExpirationDate">
+            <label>Insurance Expiration Date <span class="required">*</span></label>
+            <input type="date" name="insuranceExpirationDate" required>
+            <small>Policy must not be expired</small>
           </div>
         </div>
 
