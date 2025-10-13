@@ -1202,69 +1202,9 @@
       document.getElementById('accountContent').innerHTML = html;
     }
 
-    // View Invoices Modal
+    // View Invoices - Redirect to Stripe Portal
     async function viewInvoices() {
-      showSpinner();
-
-      try {
-        const response = await fetch(`${API_URL}/api/contractor/billing/invoices`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
-          }
-        });
-
-        const data = await response.json();
-        hideSpinner();
-
-        if (data.invoices && data.invoices.length > 0) {
-          showInvoicesModal(data.invoices);
-        } else {
-          alert('No invoices available yet.');
-        }
-      } catch (error) {
-        hideSpinner();
-        console.error('Invoice error:', error);
-        alert('Failed to load invoices');
-      }
-    }
-
-    function showInvoicesModal(invoices) {
-      const modalHTML = `
-        <div class="modal-overlay active" id="invoicesModal" onclick="if(event.target===this) this.remove()">
-          <div class="modal-content" style="max-width: 800px;">
-            <h2>Subscription Invoices</h2>
-            <table class="invoices-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Download</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${invoices.map(inv => `
-                  <tr>
-                    <td>${new Date(inv.created * 1000).toLocaleDateString()}</td>
-                    <td>${inv.description || 'Monthly Subscription'}</td>
-                    <td>$${(inv.amount_paid / 100).toFixed(2)}</td>
-                    <td><span style="color: ${inv.status === 'paid' ? '#10b981' : '#f59e0b'}; font-weight: 600;">${inv.status === 'paid' ? '✅ Paid' : inv.status}</span></td>
-                    <td>
-                      <a href="${inv.invoice_pdf}" target="_blank" class="invoice-link" style="color: #2563eb; text-decoration: none; font-weight: 600;">
-                        📄 PDF
-                      </a>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            <button class="btn-secondary" onclick="document.getElementById('invoicesModal').remove()" style="margin-top: 1rem;">Close</button>
-          </div>
-        </div>
-      `;
-
-      document.body.insertAdjacentHTML('beforeend', modalHTML);
+      await openStripePortal();
     }
 
     // Show Change Plan Modal

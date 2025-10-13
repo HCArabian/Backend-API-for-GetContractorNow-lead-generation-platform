@@ -1434,50 +1434,6 @@ app.patch("/api/admin/billing/:id", newAdminAuth, async (req, res) => {
   }
 });
 
-// Get subscription invoices for contractor
-// Get subscription invoices for contractor
-app.get(
-  "/api/contractor/billing/invoices",
-  authenticateContractor,
-  async (req, res) => {
-    try {
-      const contractorId = req.contractor.id;
-
-      const contractor = await prisma.contractor.findUnique({
-        where: { id: contractorId },
-        select: { stripeCustomerId: true },
-      });
-
-      if (!contractor || !contractor.stripeCustomerId) {
-        return res.json({ invoices: [] });
-      }
-
-      // Get invoices from Stripe
-      const invoices = await stripe.invoices.list({
-        customer: contractor.stripeCustomerId,
-        limit: 12, // Last 12 invoices
-      });
-
-      // Format invoices
-      const formattedInvoices = invoices.data.map(inv => ({
-        id: inv.id,
-        created: inv.created,
-        description: inv.lines.data[0]?.description || 'Monthly Subscription',
-        amount_paid: inv.amount_paid,
-        status: inv.status,
-        invoice_pdf: inv.invoice_pdf,
-      }));
-
-      res.json({ invoices: formattedInvoices });
-
-    } catch (error) {
-      console.error("Get invoices error:", error);
-      Sentry.captureException(error);
-      res.status(500).json({ error: "Failed to load invoices" });
-    }
-  }
-);
-
 // Get all contractors (for filter dropdown)
 app.get("/api/admin/contractors", newAdminAuth, async (req, res) => {
   try {
