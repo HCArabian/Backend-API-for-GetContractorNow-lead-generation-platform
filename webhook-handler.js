@@ -205,6 +205,96 @@ async function handleSubscriptionCreated(subscription) {
   }
 }
 
+// Add this to your webhook handler
+app.post("/webhook", async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET_TEST
+    );
+  } catch (err) {
+    console.error("⚠️ Webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  console.log(`📨 Webhook received: ${event.type}`);
+
+  try {
+    switch (event.type) {
+      case "customer.subscription.created":
+        await handleSubscriptionCreated(event.data.object);
+        break;
+
+      case "customer.subscription.updated":
+        await handleSubscriptionUpdated(event.data.object);
+        break;
+
+      case "customer.subscription.deleted":
+        await handleSubscriptionDeleted(event.data.object);
+        break;
+
+      // 🔥 NEW: Handle payment method being attached
+      case "payment_method.attached":
+        await handlePaymentMethodAttached(event.data.object);
+        break;
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error("Webhook handler error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 🔥 NEW HANDLER: Save payment method when it's attached
+async function handlePaymentMethodAttached(paymentMethod) {
+  console.log("💳 Payment method attached:", paymentMethod.id);
+
+  try {
+    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+
+    // Find contractor by Stripe customer ID
+    const contractor = await prisma.contractor.findFirst({
+      where: { stripeCustomerId: paymentMethod.customer },
+    });
+
+    if (!contractor) {
+      console.log(
+        "⚠️ No contractor found for customer:",
+        paymentMethod.customer
+      );
+      return;
+    }
+
+    // Only update if they don't already have a payment method
+    if (!contractor.stripePaymentMethodId) {
+      await prisma.contractor.update({
+        where: { id: contractor.id },
+        data: {
+          stripePaymentMethodId: paymentMethod.id,
+          paymentMethodLast4: paymentMethod.card?.last4,
+          paymentMethodBrand: paymentMethod.card?.brand,
+          paymentMethodExpMonth: paymentMethod.card?.exp_month,
+          paymentMethodExpYear: paymentMethod.card?.exp_year,
+        },
+      });
+
+      console.log(
+        `✅ Payment method saved: ${contractor.businessName} - ${paymentMethod.card?.brand} ****${paymentMethod.card?.last4}`
+      );
+    }
+  } catch (error) {
+    console.error("❌ Error handling payment method attached:", error);
+  }
+}
+
 // ============================================
 // SUBSCRIPTION UPDATED - Update Database
 // ============================================
