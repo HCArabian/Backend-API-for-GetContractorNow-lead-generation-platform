@@ -6,7 +6,7 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-const Stripe = require('stripe');
+const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
@@ -833,7 +833,7 @@ app.use((req, res, next) => {
 
 // Static files
 app.use(express.static("public"));
-app.use(express.static('public', { extensions: ['html'] })); // Allows /select-package without .html
+app.use(express.static("public", { extensions: ["html"] })); // Allows /select-package without .html
 
 /* // Stripe webhook handler
 // Stripe webhook handler with signature verification
@@ -1526,11 +1526,18 @@ app.post("/api/contractor/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
-    if (contractor.status !== "active") {
-      return res
-        .status(403)
-        .json({ error: "Account is suspended or inactive" });
+    // Check if account is suspended
+    if (contractor.status === "suspended" || contractor.status === "declined") {
+      return res.status(403).json({ error: "Account is suspended" });
     }
+
+    // Check if verified by admin
+    if (!contractor.isVerified) {
+      return res.status(403).json({ error: "Account pending admin approval" });
+    }
+
+    // Allow login even if subscription is pending (they need to add credit)
+    // The dashboard will prompt them to subscribe if they haven't
 
     const token = generateToken(contractor.id);
 
