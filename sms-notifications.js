@@ -65,7 +65,14 @@ async function notifyContractorSMS(contractor, lead, trackingNumber) {
   // Only send SMS for PLATINUM and GOLD leads
   if (lead.category !== "PLATINUM" && lead.category !== "GOLD") {
     console.log("Skipping SMS - lead is", lead.category);
-    return null;
+    return { success: false, reason: "not_premium_lead" };
+  }
+
+  // ✅ SAFETY CHECK: Verify SMS is allowed (even though assignment.js already checks)
+  const canSend = await canSendSMS(contractor.id);
+  if (!canSend) {
+    console.log("⚠️ SMS blocked - contractor opted out or no phone");
+    return { success: false, reason: "opted_out_or_no_phone" };
   }
 
   const urgencyEmoji = lead.category === "PLATINUM" ? "🔥" : "⭐";
