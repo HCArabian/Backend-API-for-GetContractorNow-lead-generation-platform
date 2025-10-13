@@ -3,56 +3,130 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Processing Your Selection - GetContractorNow</title>
+  <title>Choose Your Plan - GetContractorNow</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      padding: 40px 20px;
       color: #333;
     }
     .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 50px;
+    }
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 15px;
+    }
+    .header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+    .packages-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+    .package-card {
       background: white;
       border-radius: 16px;
-      padding: 60px 40px;
-      max-width: 500px;
-      width: 90%;
-      text-align: center;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      transition: transform 0.3s, box-shadow 0.3s;
+      position: relative;
     }
-    .spinner {
-      width: 60px;
-      height: 60px;
-      border: 5px solid #f3f3f3;
-      border-top: 5px solid #2563eb;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 30px;
+    .package-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.3);
     }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .package-card.recommended {
+      border: 3px solid #2563eb;
     }
-    h1 {
-      font-size: 28px;
+    .recommended-badge {
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2563eb;
+      color: white;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .package-name {
+      font-size: 2rem;
+      font-weight: bold;
       color: #1f2937;
       margin-bottom: 15px;
     }
-    p {
-      font-size: 16px;
-      color: #6b7280;
-      line-height: 1.6;
+    .package-price {
+      font-size: 3rem;
+      font-weight: bold;
+      color: #2563eb;
+      margin-bottom: 10px;
     }
-    .error-container {
+    .package-price span {
+      font-size: 1.2rem;
+      color: #6b7280;
+    }
+    .package-features {
+      list-style: none;
+      margin: 30px 0;
+      padding: 0;
+    }
+    .package-features li {
+      padding: 12px 0;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: flex-start;
+    }
+    .package-features li:last-child {
+      border-bottom: none;
+    }
+    .package-features li::before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+      margin-right: 12px;
+      font-size: 1.3rem;
+    }
+    .select-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .select-btn:hover {
+      transform: scale(1.02);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+    .select-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .error-box {
       background: #fee;
       border: 2px solid #fcc;
       border-radius: 8px;
       padding: 20px;
-      margin-top: 20px;
+      margin-bottom: 30px;
+      text-align: center;
     }
     .error-title {
       color: #dc2626;
@@ -60,73 +134,146 @@
       font-weight: bold;
       margin-bottom: 10px;
     }
-    .error-message {
-      color: #991b1b;
-      font-size: 14px;
-    }
-    .success-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 20px;
-      background: #d1fae5;
-      border-radius: 50%;
-      display: flex;
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
       align-items: center;
       justify-content: center;
-      font-size: 40px;
+      z-index: 1000;
+    }
+    .loading-content {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      text-align: center;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #2563eb;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div id="loading-state">
-      <div class="spinner"></div>
-      <h1>Processing Your Selection</h1>
-      <p>Please wait while we prepare your secure checkout...</p>
-      <p style="margin-top: 20px; font-size: 14px; color: #9ca3af;">You'll be redirected to Stripe in a moment</p>
+    <div class="header">
+      <h1>🚀 Choose Your Plan</h1>
+      <p>Select the subscription that fits your business needs</p>
     </div>
 
-    <div id="error-state" style="display: none;">
-      <div class="error-container">
-        <div class="error-title">⚠️ Oops!</div>
-        <div class="error-message" id="error-message"></div>
+    <div id="error-container"></div>
+
+    <div class="packages-grid">
+      <!-- STARTER -->
+      <div class="package-card">
+        <div class="package-name">Starter</div>
+        <div class="package-price">$99<span>/month</span></div>
+        <ul class="package-features">
+          <li>Up to 15 leads per month</li>
+          <li>$75 per lead</li>
+          <li>3 service ZIP codes</li>
+          <li>Standard priority</li>
+          <li>Email & SMS notifications</li>
+        </ul>
+        <button class="select-btn" onclick="selectPackage('starter')">
+          Choose Starter
+        </button>
       </div>
-      <p style="margin-top: 20px; font-size: 14px;">
-        Need help? Contact us at <a href="mailto:support@getcontractornow.com" style="color: #2563eb;">support@getcontractornow.com</a>
-      </p>
+
+      <!-- PRO (RECOMMENDED) -->
+      <div class="package-card recommended">
+        <div class="recommended-badge">⭐ RECOMMENDED</div>
+        <div class="package-name">Pro</div>
+        <div class="package-price">$125<span>/month</span></div>
+        <ul class="package-features">
+          <li>Up to 40 leads per month</li>
+          <li>$100 per lead</li>
+          <li>5 service ZIP codes</li>
+          <li>High priority assignment</li>
+          <li>Email & SMS notifications</li>
+          <li>Extended credit terms (90 days)</li>
+        </ul>
+        <button class="select-btn" onclick="selectPackage('pro')">
+          Choose Pro
+        </button>
+      </div>
+
+      <!-- ELITE -->
+      <div class="package-card">
+        <div class="package-name">Elite</div>
+        <div class="package-price">$200<span>/month</span></div>
+        <ul class="package-features">
+          <li>Unlimited leads</li>
+          <li>$250 per premium lead</li>
+          <li>15 service ZIP codes</li>
+          <li>Highest priority assignment</li>
+          <li>Email & SMS notifications</li>
+          <li>Extended credit terms (120 days)</li>
+          <li>Premium lead quality</li>
+        </ul>
+        <button class="select-btn" onclick="selectPackage('elite')">
+          Choose Elite
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <h2>Processing Your Selection</h2>
+      <p>Redirecting to secure checkout...</p>
     </div>
   </div>
 
   <script>
-    (async function() {
+    const API_URL = 'https://api.getcontractornow.com';
+    let token = null;
+
+    // Get token from URL
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      token = urlParams.get('token');
+
+      if (!token) {
+        showError('Missing security token. Please use the link from your email or contact support.');
+        disableAllButtons();
+      }
+
+      // Check if there's an error message
+      const error = urlParams.get('error');
+      if (error === 'payment_cancelled') {
+        showError('Payment was cancelled. Please select a package to try again.');
+      }
+    })();
+
+    async function selectPackage(packageId) {
+      if (!token) {
+        showError('Invalid token. Please use the link from your email.');
+        return;
+      }
+
+      // Show loading
+      document.getElementById('loading-overlay').style.display = 'flex';
+
       try {
-        // Get parameters from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
-        const packageId = urlParams.get('package');
-        
-        // Validate parameters
-        if (!token) {
-          showError('Missing security token. Please use the link from your email.');
-          return;
-        }
-        
-        if (!packageId) {
-          showError('Missing package selection. Please use one of the package buttons from your email.');
-          return;
-        }
-
-        // Validate package ID
-        const validPackages = ['starter', 'pro', 'elite'];
-        if (!validPackages.includes(packageId)) {
-          showError('Invalid package selection. Please choose Starter, Pro, or Elite.');
-          return;
-        }
-
         console.log('Creating checkout for package:', packageId);
 
-        // Call backend to create Stripe checkout session
-        const response = await fetch('https://api.getcontractornow.com/api/contractors/create-checkout', {
+        const response = await fetch(`${API_URL}/api/contractors/create-checkout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -144,19 +291,37 @@
           // Redirect to Stripe Checkout
           window.location.href = data.url;
         } else {
+          hideLoading();
           showError(data.error || 'Unable to create checkout session. Please try again or contact support.');
         }
 
       } catch (error) {
         console.error('Checkout error:', error);
-        showError('An unexpected error occurred. Please try again or contact support.');
+        hideLoading();
+        showError('An unexpected error occurred. Please try again or contact support at support@getcontractornow.com');
       }
-    })();
+    }
 
     function showError(message) {
-      document.getElementById('loading-state').style.display = 'none';
-      document.getElementById('error-state').style.display = 'block';
-      document.getElementById('error-message').textContent = message;
+      const errorHtml = `
+        <div class="error-box">
+          <div class="error-title">⚠️ Oops!</div>
+          <div>${message}</div>
+        </div>
+      `;
+      document.getElementById('error-container').innerHTML = errorHtml;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }
+
+    function disableAllButtons() {
+      document.querySelectorAll('.select-btn').forEach(btn => {
+        btn.disabled = true;
+        btn.textContent = 'Invalid Link';
+      });
     }
   </script>
 </body>
