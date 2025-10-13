@@ -740,6 +740,20 @@
         <div id="accountContent">Loading...</div>
       </div>
 
+      <div class="subscription-invoice-section">
+        <h3>Monthly Subscription Invoices</h3>
+        <button id="viewInvoicesBtn" class="primary-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+          </svg>
+          View & Download Invoices
+        </button>
+      </div>
+
       <!-- Profile Tab -->
       <div id="profile-tab" class="tab-content">
         <div class="card">
@@ -1008,7 +1022,7 @@
       document.getElementById('subscriptionCard').innerHTML = html;
     }
 
-    // Replace the renderPaymentMethod() function with this simpler version:
+    // Render Payment Method
     function renderPaymentMethod() {
       const pm = dashboardData.subscription.paymentMethod;
 
@@ -1048,7 +1062,8 @@
 
       document.getElementById('paymentMethodCard').innerHTML = html;
     }
-    // Add this new function to open Stripe Portal
+
+    // Open Stripe Portal
     async function openStripePortal() {
       showSpinner();
 
@@ -1063,7 +1078,6 @@
         const data = await response.json();
 
         if (data.success) {
-          // Redirect to Stripe's hosted portal
           window.location.href = data.url;
         } else {
           alert(data.error || 'Failed to open payment portal');
@@ -1170,64 +1184,87 @@
         ` : ''}
 
         <div class="card">
-          <h2>📄 Billing Invoices</h2>
-          <div id="invoicesContent">Loading invoices...</div>
+          <h2>📄 Monthly Subscription Invoices</h2>
+          <button class="btn-primary" onclick="viewInvoices()" style="margin-bottom: 1rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="display: inline; vertical-align: middle; margin-right: 8px;">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <line x1="10" y1="9" x2="8" y2="9"/>
+            </svg>
+            View & Download Invoices
+          </button>
+          <div id="invoicesContent"></div>
         </div>
       `;
 
       document.getElementById('accountContent').innerHTML = html;
-      loadInvoices();
     }
 
-    // Load Invoices
-    async function loadInvoices() {
+    // View Invoices Modal
+    async function viewInvoices() {
+      showSpinner();
+
       try {
-        const response = await fetch(`${API_URL}/api/contractor/subscription/invoices`, {
+        const response = await fetch(`${API_URL}/api/contractor/billing/invoices`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('contractorToken')}`
           }
         });
 
         const data = await response.json();
+        hideSpinner();
 
         if (data.invoices && data.invoices.length > 0) {
-          let html = `
+          showInvoicesModal(data.invoices);
+        } else {
+          alert('No invoices available yet.');
+        }
+      } catch (error) {
+        hideSpinner();
+        console.error('Invoice error:', error);
+        alert('Failed to load invoices');
+      }
+    }
+
+    function showInvoicesModal(invoices) {
+      const modalHTML = `
+        <div class="modal-overlay active" id="invoicesModal" onclick="if(event.target===this) this.remove()">
+          <div class="modal-content" style="max-width: 800px;">
+            <h2>Subscription Invoices</h2>
             <table class="invoices-table">
               <thead>
                 <tr>
-                  <th>Invoice #</th>
                   <th>Date</th>
+                  <th>Description</th>
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Download</th>
                 </tr>
               </thead>
               <tbody>
-          `;
-
-          data.invoices.forEach(inv => {
-            html += `
-              <tr>
-                <td>${inv.number || inv.id}</td>
-                <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
-                <td>$${inv.amount.toFixed(2)}</td>
-                <td>${inv.status === 'paid' ? '✅ Paid' : inv.status}</td>
-                <td><a href="${inv.invoicePdf}" target="_blank" class="invoice-link">PDF</a></td>
-              </tr>
-            `;
-          });
-
-          html += `
+                ${invoices.map(inv => `
+                  <tr>
+                    <td>${new Date(inv.created * 1000).toLocaleDateString()}</td>
+                    <td>${inv.description || 'Monthly Subscription'}</td>
+                    <td>$${(inv.amount_paid / 100).toFixed(2)}</td>
+                    <td><span style="color: ${inv.status === 'paid' ? '#10b981' : '#f59e0b'}; font-weight: 600;">${inv.status === 'paid' ? '✅ Paid' : inv.status}</span></td>
+                    <td>
+                      <a href="${inv.invoice_pdf}" target="_blank" class="invoice-link" style="color: #2563eb; text-decoration: none; font-weight: 600;">
+                        📄 PDF
+                      </a>
+                    </td>
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
-          `;
-          document.getElementById('invoicesContent').innerHTML = html;
-        } else {
-          document.getElementById('invoicesContent').innerHTML = '<p>No invoices yet.</p>';
-        }
-      } catch (error) {
-        document.getElementById('invoicesContent').innerHTML = '<p>Failed to load invoices.</p>';
-      }
+            <button class="btn-secondary" onclick="document.getElementById('invoicesModal').remove()" style="margin-top: 1rem;">Close</button>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', modalHTML);
     }
 
     // Show Change Plan Modal
@@ -1475,30 +1512,65 @@
       document.getElementById('profileContent').innerHTML = html;
     }
 
-    // Render Billing
+    // Render Billing - Enhanced with icons and refunds
     function renderBilling() {
       const transactions = dashboardData.recentTransactions;
 
       if (transactions && transactions.length > 0) {
         let html = '<table style="width: 100%; border-collapse: collapse;">';
-        html += '<tr style="border-bottom: 2px solid #e5e7eb;"><th style="text-align: left; padding: 0.75rem;">Date</th><th style="text-align: left; padding: 0.75rem;">Type</th><th style="text-align: left; padding: 0.75rem;">Amount</th><th style="text-align: left; padding: 0.75rem;">Balance</th></tr>';
+        html += `
+          <thead>
+            <tr style="border-bottom: 2px solid #e5e7eb;">
+              <th style="text-align: left; padding: 0.75rem; width: 50px;"></th>
+              <th style="text-align: left; padding: 0.75rem;">Date</th>
+              <th style="text-align: left; padding: 0.75rem;">Description</th>
+              <th style="text-align: left; padding: 0.75rem;">Type</th>
+              <th style="text-align: right; padding: 0.75rem;">Amount</th>
+              <th style="text-align: right; padding: 0.75rem;">Balance After</th>
+            </tr>
+          </thead>
+          <tbody>
+        `;
 
         transactions.forEach(t => {
-          const color = t.type === 'deposit' ? '#10b981' : '#ef4444';
+          let icon, typeLabel, color;
+
+          if (t.type === 'deposit') {
+            icon = '💰';
+            typeLabel = 'Credit Added';
+            color = '#10b981';
+          } else if (t.type === 'deduction') {
+            icon = '📞';
+            typeLabel = 'Lead Charge';
+            color = '#ef4444';
+          } else if (t.type === 'refund') {
+            icon = '↩️';
+            typeLabel = 'Refund';
+            color = '#10b981';
+          } else {
+            icon = '📝';
+            typeLabel = t.type;
+            color = t.amount >= 0 ? '#10b981' : '#ef4444';
+          }
+
           const sign = t.amount >= 0 ? '+' : '';
+
           html += `
             <tr style="border-bottom: 1px solid #e5e7eb;">
+              <td style="padding: 0.75rem; font-size: 1.5rem;">${icon}</td>
               <td style="padding: 0.75rem;">${new Date(t.createdAt).toLocaleDateString()}</td>
-              <td style="padding: 0.75rem;">${t.type}</td>
-              <td style="padding: 0.75rem; color: ${color}; font-weight: bold;">${sign}$${Math.abs(t.amount).toFixed(2)}</td>
-              <td style="padding: 0.75rem;">$${t.balanceAfter.toFixed(2)}</td>
+              <td style="padding: 0.75rem; color: #6b7280; font-size: 0.9rem;">${t.description || 'No description'}</td>
+              <td style="padding: 0.75rem;">${typeLabel}</td>
+              <td style="padding: 0.75rem; text-align: right; color: ${color}; font-weight: bold; font-size: 1.1rem;">${sign}$${Math.abs(t.amount).toFixed(2)}</td>
+              <td style="padding: 0.75rem; text-align: right; font-weight: 600;">$${t.balanceAfter.toFixed(2)}</td>
             </tr>
           `;
         });
-        html += '</table>';
+
+        html += '</tbody></table>';
         document.getElementById('billingContent').innerHTML = html;
       } else {
-        document.getElementById('billingContent').innerHTML = '<p>No transactions yet.</p>';
+        document.getElementById('billingContent').innerHTML = '<p style="color: #6b7280; text-align: center; padding: 2rem;">No transactions yet. Add credits to get started!</p>';
       }
     }
 
@@ -1595,7 +1667,6 @@
       event.target.classList.add('active');
       document.getElementById(`${tabName}-tab`).classList.add('active');
 
-      // Load account management when tab is clicked
       if (tabName === 'account' && dashboardData) {
         loadAccountManagement();
       }
@@ -1615,16 +1686,13 @@
       window.location.reload();
     }
 
-
-    // When contractor returns from Stripe Portal, refresh dashboard
     window.addEventListener('focus', function () {
-      // If user was in portal and comes back, reload dashboard
       const token = localStorage.getItem('contractorToken');
       if (token && dashboardData) {
         loadDashboard();
       }
     });
-    // Initialize
+
     window.onload = function () {
       const token = localStorage.getItem('contractorToken');
       if (token) {
