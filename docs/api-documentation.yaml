@@ -1,0 +1,1452 @@
+openapi: 3.0.3
+info:
+  title: GetContractorNow API
+  version: '1.0'
+  description: |
+    REST API for lead intake, contractor onboarding, subscriptions, credit, billing, webhooks, compliance, and admin ops.
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/creativepixelstudios/API/1.0
+  - url: https://api.getcontractornow.com
+    description: Production
+  - url: http://localhost:3000
+    description: Local
+
+tags:
+  - name: Public
+  - name: Webhooks
+  - name: Contractor
+  - name: Admin
+  - name: Billing
+  - name: Subscription
+  - name: Credit
+  - name: Compliance
+  - name: Applications
+
+components:
+  securitySchemes:
+    ContractorBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Contractor JWT (`Authorization: Bearer <token>`)"
+    AdminBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Admin JWT (`Authorization: Bearer <token>`)"
+    StripeSignature:
+      type: apiKey
+      in: header
+      name: Stripe-Signature
+      description: "Stripe webhook signing header"
+    TwilioSignature:
+      type: apiKey
+      in: header
+      name: x-twilio-signature
+      description: "Twilio webhook signing header"
+    CronSecret:
+      type: apiKey
+      in: header
+      name: CRON_SECRET
+      description: "Secret header for /api/cron/recycle-numbers"
+    CronSecretAlt:
+      type: apiKey
+      in: header
+      name: x-cron-secret
+      description: "Secret header for /api/cron/send-feedback-emails"
+    SendgridEmailSig:
+      type: apiKey
+      in: header
+      name: x-twilio-email-event-webhook-signature
+      description: "SendGrid/Twilio Email Events signature (timestamp in `x-twilio-email-event-webhook-timestamp`)"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string, nullable: true }
+
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        message: { type: string }
+        timestamp: { type: string, format: date-time }
+
+    LeadSubmission:
+      type: object
+      additionalProperties: true
+      required: [first_name, last_name, email, phone, service_type, city, state, zip]
+    LeadSubmitResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        leadId: { type: string }
+        category: { type: string }
+        score: { type: number }
+
+    Dispute:
+      type: object
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        contractorId: { type: string }
+        reason: { type: string }
+        description: { type: string, nullable: true }
+        evidence: { type: string, nullable: true }
+        status: { type: string, enum: [pending, approved, denied, rejected] }
+        resolution: { type: string, nullable: true, enum: [full_credit, partial_credit, denied, null] }
+        resolutionNotes: { type: string, nullable: true }
+        creditAmount: { type: number, nullable: true }
+        submittedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+
+    DisputesSummary:
+      type: object
+      properties:
+        total: { type: integer }
+        pending: { type: integer }
+        approved: { type: integer }
+        denied: { type: integer }
+
+    FeedbackSubmission:
+      type: object
+      required: [leadId, contractorCalled]
+      properties:
+        leadId: { type: string }
+        contractorCalled: { type: boolean }
+        outcome: { type: string, nullable: true }
+        rating: { type: integer, minimum: 1, maximum: 5, nullable: true }
+        feedbackText: { type: string, nullable: true }
+        wouldRecommend: { type: boolean, nullable: true }
+
+    FeedbackItem:
+      type: object
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        contractorId: { type: string }
+        contractorCalled: { type: boolean }
+        outcome: { type: string, nullable: true }
+        rating: { type: integer, nullable: true }
+        feedbackText: { type: string, nullable: true }
+        wouldRecommend: { type: boolean, nullable: true }
+        submittedAt: { type: string, format: date-time }
+
+    FeedbackItemWithLead:
+      allOf:
+        - $ref: '#/components/schemas/FeedbackItem'
+        - type: object
+          properties:
+            lead:
+              type: object
+              additionalProperties: true
+
+    FeedbackSummary:
+      type: object
+      properties:
+        total: { type: integer }
+        contractorCalled: { type: integer }
+        contractorDidNotCall: { type: integer }
+        avgRating: { type: string }
+
+    RecycleNumbersStatus:
+      type: object
+      properties:
+        success: { type: boolean }
+        recycled: { type: integer }
+        available: { type: integer }
+        assigned: { type: integer }
+        total: { type: integer }
+        utilization: { type: string, example: "42.0%" }
+
+    PaymentSetupIntentResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        clientSecret: { type: string }
+
+    SavePaymentMethodRequest:
+      type: object
+      required: [paymentMethodId]
+      properties:
+        paymentMethodId: { type: string }
+
+    PaymentStatusResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        hasPaymentMethod: { type: boolean }
+
+    PaymentUpdateConfirmRequest:
+      type: object
+      required: [paymentMethodId]
+      properties:
+        paymentMethodId: { type: string }
+
+    PaymentUpdateConfirmResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        paymentMethod:
+          type: object
+          properties:
+            last4: { type: string }
+            brand: { type: string }
+            expMonth: { type: integer }
+            expYear: { type: integer }
+
+    VerifyTokenResponse:
+      type: object
+      properties:
+        valid: { type: boolean }
+        contractorId: { type: string }
+        businessName: { type: string }
+        email: { type: string }
+
+    CreateCheckoutRequest:
+      type: object
+      required: [token, packageId]
+      properties:
+        token: { type: string }
+        packageId: { type: string, enum: [starter, pro, elite] }
+
+    CreateCheckoutResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        url: { type: string }
+        sessionId: { type: string }
+
+    CreditDepositRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          minimum: 100
+          maximum: 10000
+
+    CreditBalanceResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        balance: { type: number }
+        leadCost: { type: number }
+        minimumRequired: { type: number }
+        hasMinimum: { type: boolean }
+        nextExpiry: { type: string, format: date-time, nullable: true }
+        transactions:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    ContractorLeadsResponse:
+      type: object
+      properties:
+        leads:
+          type: array
+          items:
+            type: object
+            properties:
+              assignmentId: { type: string }
+              leadId: { type: string }
+              status: { type: string }
+              assignedAt: { type: string, format: date-time }
+              trackingNumber: { type: string, nullable: true }
+              customer: { type: object, additionalProperties: true }
+              project: { type: object, additionalProperties: true }
+              createdAt: { type: string, format: date-time }
+
+    DashboardResponse:
+      type: object
+      properties:
+        contractor: { type: object, additionalProperties: true }
+        subscription: { type: object, additionalProperties: true }
+        profile: { type: object, additionalProperties: true }
+        stats:
+          type: object
+          properties:
+            leadsThisMonth: { type: integer }
+            maxLeadsPerMonth: { type: integer }
+        recentTransactions:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    PlansResponse:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            type: object
+            properties:
+              tier: { type: string, enum: [starter, pro, elite] }
+              name: { type: string }
+              price: { type: number }
+              leadCost: { type: number }
+              maxLeads: { type: integer }
+              features:
+                type: array
+                items: { type: string }
+
+    ChangePlanRequest:
+      type: object
+      required: [newTier]
+      properties:
+        newTier: { type: string, enum: [starter, pro, elite] }
+
+    CancelRequest:
+      type: object
+      properties:
+        reason: { type: string, nullable: true }
+
+    InvoicesResponse:
+      type: object
+      properties:
+        invoices:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              number: { type: string }
+              amount: { type: number }
+              status: { type: string }
+              paidAt: { type: string, format: date-time, nullable: true }
+              createdAt: { type: string, format: date-time }
+              invoicePdf: { type: string, nullable: true }
+              hostedUrl: { type: string, nullable: true }
+
+    ContractorApplication:
+      type: object
+      additionalProperties: true
+      required:
+        - businessName
+        - email
+        - phone
+        - insuranceProvider
+        - insurancePolicyNumber
+        - insuranceExpirationDate
+        - acceptedTerms
+        - acceptedTCPA
+        - acceptedPrivacy
+        - serviceTypes
+        - serviceZipCodes
+
+    ApplicationResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        applicationId: { type: string }
+
+    PrivacyAcceptanceRequest:
+      type: object
+      required: [contractorId]
+      properties:
+        contractorId: { type: string }
+
+    DataExportResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        exportDate: { type: string, format: date-time }
+        data: { type: object, additionalProperties: true }
+
+    DeletionRequestResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+
+    AdminLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        admin:
+          type: object
+          properties:
+            id: { type: string }
+            email: { type: string }
+            name: { type: string, nullable: true }
+            role: { type: string }
+
+    AdminRefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    ComplianceSummary:
+      type: object
+      properties:
+        totalContractors: { type: integer }
+        fullyCompliant: { type: integer }
+        smsOptOuts: { type: integer }
+        pendingDeletion: { type: integer }
+        missingConsent: { type: integer }
+
+paths:
+
+  # ---------- Public ----------
+  /health:
+    get:
+      tags: [Public]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /api/leads/submit:
+    post:
+      tags: [Public]
+      summary: Submit a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadSubmission' }
+      responses:
+        '200':
+          description: Lead created / queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeadSubmitResponse' }
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/contractors/apply:
+    post:
+      tags: [Applications, Public]
+      summary: Submit contractor application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContractorApplication' }
+      responses:
+        '200':
+          description: Application accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationResponse' }
+        '400':
+          description: Validation error or duplicate
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/contractors/log-privacy-acceptance:
+    post:
+      tags: [Compliance, Public]
+      summary: Log privacy policy acceptance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrivacyAcceptanceRequest' }
+      responses:
+        '200':
+          description: Logged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /api/feedback/submit:
+    post:
+      tags: [Public]
+      summary: Submit customer feedback for an assigned lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackSubmission' }
+      responses:
+        '200':
+          description: Feedback stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        '400':
+          description: Already submitted or not assigned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Lead not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ---------- Webhooks ----------
+  /api/webhooks/stripe/subscription:
+    post:
+      tags: [Webhooks]
+      summary: Stripe subscription webhook
+      security: [{ StripeSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        '200':
+          description: Acknowledged
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { description: Signature verification failed }
+
+  /api/webhooks/sendgrid:
+    post:
+      tags: [Webhooks]
+      summary: SendGrid Email Events webhook
+      security: [{ SendgridEmailSig: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: array, items: { type: object, additionalProperties: true } }
+      responses:
+        '200': { description: Acknowledged }
+        '403': { description: Invalid signature }
+
+  /api/webhooks/twilio/call-status:
+    post:
+      tags: [Webhooks]
+      summary: Twilio Voice call-status webhook (routes/charges calls)
+      security: [{ TwilioSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK (may return TwiML for call control)
+          content:
+            text/xml: { schema: { type: string } }
+            application/json: { schema: { type: object, additionalProperties: true } }
+        '403': { description: Invalid signature }
+
+  /api/webhooks/twilio/sms-optout:
+    post:
+      tags: [Webhooks]
+      summary: SMS STOP/START handler (opt-out/in)
+      security: [{ TwilioSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK or TwiML response
+          content:
+            text/xml: { schema: { type: string } }
+            text/plain: { schema: { type: string } }
+        '403': { description: Invalid signature }
+
+  /api/webhooks/twilio/sms:
+    post:
+      tags: [Webhooks]
+      summary: General SMS webhook (TCPA compliant STOP/START/HELP)
+      security: [{ TwilioSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: OK or TwiML response
+          content:
+            text/xml: { schema: { type: string } }
+            text/plain: { schema: { type: string } }
+        '403': { description: Invalid signature }
+
+  # ---------- Cron ----------
+  /api/cron/recycle-numbers:
+    post:
+      tags: [Webhooks]
+      summary: Recycle expired tracking numbers
+      security: [{ CronSecret: [] }]
+      responses:
+        '200':
+          description: Pool status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecycleNumbersStatus' }
+        '401': { description: Unauthorized }
+
+  /api/cron/send-feedback-emails:
+    post:
+      tags: [Webhooks]
+      summary: Send feedback request emails
+      security: [{ CronSecretAlt: [] }]
+      responses:
+        '200':
+          description: Run summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  totalEligible: { type: integer }
+                  sent: { type: integer }
+                  failed: { type: integer }
+        '401': { description: Unauthorized }
+
+  # ---------- Contractor Auth & Profile ----------
+  /api/contractor/login:
+    post:
+      tags: [Contractor]
+      summary: Contractor login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Invalid credentials }
+
+  /api/contractor/profile:
+    get:
+      tags: [Contractor]
+      summary: Get contractor profile
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Unauthorized }
+
+  /api/contractor/change-password:
+    post:
+      tags: [Contractor]
+      summary: Change password
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        '200': { description: Changed }
+
+  # ---------- Contractor Leads/Billing/Disputes/Feedback ----------
+  /api/contractor/leads:
+    get:
+      tags: [Contractor]
+      summary: Get contractor's assigned leads
+      security: [{ ContractorBearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200':
+          description: Leads
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContractorLeadsResponse' }
+
+  /api/contractor/billing:
+    get:
+      tags: [Contractor, Billing]
+      summary: Contractor billing history and summary
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Billing summary + records
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/contractor/disputes:
+    get:
+      tags: [Contractor]
+      summary: List contractor disputes
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Disputes
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+    post:
+      tags: [Contractor]
+      summary: Submit a dispute for an assigned lead
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leadId, reason]
+              properties:
+                leadId: { type: string }
+                reason: { type: string }
+                description: { type: string, nullable: true }
+                evidence: { type: string, nullable: true }
+      responses:
+        '200': { description: Submitted }
+
+  /api/contractor/feedback:
+    get:
+      tags: [Contractor]
+      summary: Contractor’s feedback and summary
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Feedback
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  summary:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      avgRating: { type: string }
+                      wouldRecommend: { type: integer }
+                  feedback:
+                    type: array
+                    items: { $ref: '#/components/schemas/FeedbackItemWithLead' }
+
+  # ---------- Contractor Credit ----------
+  /api/contractors/credit/deposit:
+    post:
+      tags: [Credit, Contractor]
+      summary: Deposit any amount (100–10,000)
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditDepositRequest' }
+      responses:
+        '200': { description: Deposit succeeded }
+
+  /api/contractors/credit/balance:
+    get:
+      tags: [Credit, Contractor]
+      summary: Get credit balance + transactions
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Credit info
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditBalanceResponse' }
+
+  /api/contractor/credits/add:
+    post:
+      tags: [Credit, Contractor]
+      summary: Add preset credit amounts ($500, $1000, $2500)
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: integer, enum: [500, 1000, 2500] }
+      responses:
+        '200': { description: Deposit succeeded }
+
+  # ---------- Contractor Payments ----------
+  /api/contractor/payment/setup-intent:
+    post:
+      tags: [Contractor, Billing]
+      summary: Create SetupIntent for adding a payment method
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Client secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentSetupIntentResponse' }
+
+  /api/contractor/payment/save-method:
+    post:
+      tags: [Contractor, Billing]
+      summary: Save a created payment method
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SavePaymentMethodRequest' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/contractor/payment/status:
+    get:
+      tags: [Contractor, Billing]
+      summary: Has default payment method?
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentStatusResponse' }
+
+  /api/contractor/payment/update-method:
+    post:
+      tags: [Contractor, Billing]
+      summary: Start updating default payment method (new SetupIntent)
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Client secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentSetupIntentResponse' }
+
+  /api/contractor/payment/confirm-update:
+    post:
+      tags: [Contractor, Billing]
+      summary: Confirm and set new default payment method
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentUpdateConfirmRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentUpdateConfirmResponse' }
+
+  /api/contractor/payment/portal:
+    post:
+      tags: [Contractor, Billing]
+      summary: Create Stripe Customer Portal session
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Portal URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  url: { type: string }
+
+  # ---------- Contractor Subscription ----------
+  /api/contractor/subscription/plans:
+    get:
+      tags: [Subscription, Contractor]
+      summary: Get available subscription plans
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Plans
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlansResponse' }
+
+  /api/contractor/subscription/change-plan:
+    post:
+      tags: [Subscription, Contractor]
+      summary: Change subscription tier (prorated)
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePlanRequest' }
+      responses:
+        '200': { description: Changed }
+
+  /api/contractor/subscription/cancel:
+    post:
+      tags: [Subscription, Contractor]
+      summary: Cancel at period end
+      security: [{ ContractorBearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelRequest' }
+      responses:
+        '200': { description: Cancellation scheduled }
+
+  /api/contractor/subscription/reactivate:
+    post:
+      tags: [Subscription, Contractor]
+      summary: Reactivate a cancelling subscription
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200': { description: Reactivated }
+
+  /api/contractor/subscription/invoices:
+    get:
+      tags: [Subscription, Contractor]
+      summary: List recent invoices
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Invoices
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoicesResponse' }
+
+  # ---------- Contractor Dashboard ----------
+  /api/contractor/dashboard:
+    get:
+      tags: [Contractor]
+      summary: Contractor dashboard (DB-only, no Stripe calls)
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardResponse' }
+
+  # ---------- Checkout / Token ----------
+  /api/contractors/verify-token/{token}:
+    get:
+      tags: [Public, Contractor]
+      summary: Verify package selection token
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Valid token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerifyTokenResponse' }
+        '400': { description: Expired/Already active, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}} }
+        '404': { description: Invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}} }
+
+  /api/contractors/create-checkout:
+    post:
+      tags: [Public, Contractor]
+      summary: Create Stripe Checkout session (subscription)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCheckoutRequest' }
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateCheckoutResponse' }
+        '400': { description: Bad request }
+        '500': { description: Stripe error }
+
+  # ---------- Compliance & Privacy ----------
+  /api/contractor/data-export:
+    get:
+      tags: [Compliance, Contractor]
+      summary: Export contractor data (GDPR/CCPA)
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Export object
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataExportResponse' }
+
+  /api/contractor/request-deletion:
+    post:
+      tags: [Compliance, Contractor]
+      summary: Request account deletion (mark pending)
+      security: [{ ContractorBearerAuth: [] }]
+      responses:
+        '200':
+          description: Request recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionRequestResponse' }
+
+  # ---------- Admin: Disputes / Feedback / Billing / Contractors ----------
+  /api/admin/disputes:
+    get:
+      tags: [Admin]
+      summary: List disputes (admin)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, approved, denied, rejected] }
+      responses:
+        '200':
+          description: Disputes + summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  summary: { $ref: '#/components/schemas/DisputesSummary' }
+                  disputes:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/Dispute'
+                        - type: object
+                          properties:
+                            contractor: { type: object, additionalProperties: true }
+                            lead: { type: object, additionalProperties: true }
+
+  /api/admin/disputes/{id}:
+    patch:
+      tags: [Admin]
+      summary: Resolve a dispute (approve/deny/credit)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, resolution]
+              properties:
+                status: { type: string, enum: [approved, denied, rejected] }
+                resolution: { type: string, enum: [full_credit, partial_credit, denied] }
+                resolutionNotes: { type: string, nullable: true }
+                creditAmount: { type: number, nullable: true }
+      responses:
+        '200': { description: Dispute updated }
+
+  /api/admin/feedback:
+    get:
+      tags: [Admin]
+      summary: List feedback (admin) with summary
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: query
+          name: contractorId
+          schema: { type: string }
+        - in: query
+          name: contractorCalled
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Feedback
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  summary: { $ref: '#/components/schemas/FeedbackSummary' }
+                  feedback:
+                    type: array
+                    items: { $ref: '#/components/schemas/FeedbackItemWithLead' }
+
+  /api/admin/billing:
+    get:
+      tags: [Admin, Billing]
+      summary: List billing records (filters + summary)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: contractorId
+          schema: { type: string }
+        - in: query
+          name: startDate
+          schema: { type: string, format: date-time }
+        - in: query
+          name: endDate
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Billing records
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/billing/{id}:
+    get:
+      tags: [Admin, Billing]
+      summary: Get a billing record
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Record }
+    patch:
+      tags: [Admin, Billing]
+      summary: Update billing record status/notes
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Updated }
+
+  /api/admin/contractors:
+    get:
+      tags: [Admin]
+      summary: List contractors (admin)
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200':
+          description: Contractors
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/contractors/{id}/suspend:
+    post:
+      tags: [Admin]
+      summary: Suspend contractor
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Suspended }
+
+  /api/admin/contractors/{id}/reactivate:
+    post:
+      tags: [Admin]
+      summary: Reactivate contractor
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Reactivated }
+
+  /api/admin/bounced-emails:
+    get:
+      tags: [Admin]
+      summary: List bounced emails (contractors & customers)
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200':
+          description: Bounced list
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: High-level dashboard stats
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/compliance/status:
+    get:
+      tags: [Admin, Compliance]
+      summary: Compliance overview
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200':
+          description: Compliance summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  summary: { $ref: '#/components/schemas/ComplianceSummary' }
+                  contractors:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+
+  /api/admin/contractors/{id}/approve:
+    post:
+      tags: [Admin, Applications]
+      summary: Approve contractor & send onboarding
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/contractors/{id}/decline:
+    post:
+      tags: [Admin, Applications]
+      summary: Decline contractor application
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Declined }
+
+  # ---------- Admin: Applications workflow ----------
+  /api/admin/applications:
+    get:
+      tags: [Admin, Applications]
+      summary: List contractor applications (defaults to pending)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: sortBy
+          schema: { type: string, enum: [newest, oldest] }
+      responses:
+        '200':
+          description: Applications
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/admin/applications/{id}:
+    get:
+      tags: [Admin, Applications]
+      summary: Get single application
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Application }
+
+  /api/admin/applications/{id}/approve:
+    post:
+      tags: [Admin, Applications]
+      summary: Approve application (set tier/credit, email)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subscriptionTier: { type: string, enum: [starter, pro, elite, none] }
+                initialCredit: { type: number }
+                notes: { type: string }
+      responses:
+        '200': { description: Approved }
+
+  /api/admin/applications/{id}/reject:
+    post:
+      tags: [Admin, Applications]
+      summary: Reject application (email applicant)
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Rejected }
+
+  /api/admin/applications/{id}/request-info:
+    post:
+      tags: [Admin, Applications]
+      summary: Request more information from applicant
+      security: [{ AdminBearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+                requestedFields:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: Requested }
+
+  # ---------- Admin Auth ----------
+  /api/admin/login:
+    post:
+      tags: [Admin]
+      summary: Admin login (email/password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLoginRequest' }
+      responses:
+        '200':
+          description: Tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminLoginResponse' }
+        '401': { description: Invalid credentials }
+
+  /api/admin/refresh:
+    post:
+      tags: [Admin]
+      summary: Refresh admin access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminRefreshRequest' }
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  accessToken: { type: string }
+
+  /api/admin/logout:
+    post:
+      tags: [Admin]
+      summary: Admin logout
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200': { description: Logged out }
+
+  /api/admin/me:
+    get:
+      tags: [Admin]
+      summary: Current admin profile
+      security: [{ AdminBearerAuth: [] }]
+      responses:
+        '200':
+          description: Admin info
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
