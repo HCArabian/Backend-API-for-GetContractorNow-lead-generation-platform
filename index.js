@@ -2550,14 +2550,14 @@ app.post(
       const updatedContractor = await prisma.contractor.update({
         where: { id: contractorId },
         data: {
-          status: "approved", // Will become "active" after payment
+          status: "active", // ✅ FIXED: Use valid status
           isVerified: true,
           passwordHash: hashedPassword,
           requirePasswordChange: true,
           isApproved: true,
           packageSelectionToken: packageSelectionToken,
           packageSelectionTokenExpiry: tokenExpiry,
-          subscriptionStatus: "inactive", // Will become "active" after payment
+          subscriptionStatus: "pending", // ✅ FIXED: Will become "active" after payment
         },
       });
 
