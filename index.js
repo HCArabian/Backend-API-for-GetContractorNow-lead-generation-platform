@@ -272,6 +272,7 @@ app.post(
           console.log("   - Session ID:", session.id);
           console.log("   - Customer ID:", session.customer);
           console.log("   - Subscription ID:", session.subscription);
+          console.log("   - Metadata:", JSON.stringify(session.metadata));
 
           const contractorId = session.metadata?.contractorId;
 
@@ -280,33 +281,6 @@ app.post(
             return res
               .status(400)
               .json({ error: "Missing contractor ID in metadata" });
-          }
-
-          // Get subscription details from Stripe
-          const subscription = await stripe.subscriptions.retrieve(
-            session.subscription
-          );
-
-          // ✅ GET PAYMENT METHOD DETAILS
-          let paymentMethodDetails = null;
-          if (subscription.default_payment_method) {
-            try {
-              const pm = await stripe.paymentMethods.retrieve(
-                subscription.default_payment_method
-              );
-              paymentMethodDetails = {
-                last4: pm.card.last4,
-                brand: pm.card.brand,
-                expMonth: pm.card.exp_month,
-                expYear: pm.card.exp_year,
-              };
-              console.log("💳 Payment method retrieved:", paymentMethodDetails);
-            } catch (pmError) {
-              console.error(
-                "⚠️ Could not fetch payment method:",
-                pmError.message
-              );
-            }
           }
 
           // Map package to tier
@@ -319,51 +293,132 @@ app.post(
 
           console.log("💳 Updating contractor with Stripe info...");
 
-          // Update contractor in database WITH PAYMENT METHOD
+          // ✅ SAFE UPDATE - Handle missing subscription data
+          const updateData = {
+            stripeCustomerId: session.customer,
+            stripeSubscriptionId: session.subscription,
+            subscriptionStatus: "active",
+            subscriptionTier: tier,
+            status: "active",
+            isAcceptingLeads: true,
+            packageSelectionToken: null,
+            packageSelectionTokenExpiry: null,
+          };
+
+          // Only set dates if subscription exists and has valid data
+          if (session.subscription) {
+            try {
+              const subscription = await stripe.subscriptions.retrieve(
+                session.subscription
+              );
+
+              if (subscription.current_period_start) {
+                updateData.subscriptionStartDate = new Date(
+                  subscription.current_period_start * 1000
+                );
+              }
+              if (subscription.current_period_end) {
+                updateData.subscriptionEndDate = new Date(
+                  subscription.current_period_end * 1000
+                );
+              }
+
+              // ✅ GET PAYMENT METHOD DETAILS
+              if (subscription.default_payment_method) {
+                try {
+                  const pm = await stripe.paymentMethods.retrieve(
+                    subscription.default_payment_method
+                  );
+                  updateData.paymentMethodLast4 = pm.card.last4;
+                  updateData.paymentMethodBrand = pm.card.brand;
+                  updateData.paymentMethodExpMonth = pm.card.exp_month;
+                  updateData.paymentMethodExpYear = pm.card.exp_year;
+                  console.log(
+                    `💳 Payment method: ${pm.card.brand} ****${pm.card.last4}`
+                  );
+                } catch (pmError) {
+                  console.error(
+                    "⚠️ Could not fetch payment method:",
+                    pmError.message
+                  );
+                }
+              }
+            } catch (subError) {
+              console.error(
+                "⚠️ Could not fetch subscription details:",
+                subError.message
+              );
+              // Continue anyway - dates will be set by customer.subscription.created event
+            }
+          }
+
+          // Update contractor in database
           const updated = await prisma.contractor.update({
             where: { id: contractorId },
-            data: {
-              stripeCustomerId: session.customer,
-              stripeSubscriptionId: session.subscription,
-              subscriptionStatus: "active",
-              subscriptionTier: tier,
+            data: updateData,
+          });
+
+          console.log("✅ CONTRACTOR ACTIVATED SUCCESSFULLY");
+          console.log("   - ID:", updated.id);
+          console.log("   - Business:", updated.businessName);
+          console.log("   - Email:", updated.email);
+          console.log("   - Stripe Customer:", updated.stripeCustomerId);
+          console.log(
+            "   - Stripe Subscription:",
+            updated.stripeSubscriptionId
+          );
+          console.log("   - Tier:", updated.subscriptionTier);
+          console.log("   - Status:", updated.subscriptionStatus);
+
+          break;
+        }
+        case "customer.subscription.created": {
+          const subscription = event.data.object;
+
+          console.log("📝 Subscription created:", subscription.id);
+
+          const contractor = await prisma.contractor.findFirst({
+            where: { stripeSubscriptionId: subscription.id },
+          });
+
+          if (contractor) {
+            const updateData = {
               subscriptionStartDate: new Date(
                 subscription.current_period_start * 1000
               ),
               subscriptionEndDate: new Date(
                 subscription.current_period_end * 1000
               ),
-              status: "active",
-              isAcceptingLeads: true,
+            };
 
-              // ✅ SAVE PAYMENT METHOD DETAILS
-              paymentMethodLast4: paymentMethodDetails?.last4 || null,
-              paymentMethodBrand: paymentMethodDetails?.brand || null,
-              paymentMethodExpMonth: paymentMethodDetails?.expMonth || null,
-              paymentMethodExpYear: paymentMethodDetails?.expYear || null,
+            // Get payment method if available
+            if (subscription.default_payment_method) {
+              try {
+                const pm = await stripe.paymentMethods.retrieve(
+                  subscription.default_payment_method
+                );
+                updateData.paymentMethodLast4 = pm.card.last4;
+                updateData.paymentMethodBrand = pm.card.brand;
+                updateData.paymentMethodExpMonth = pm.card.exp_month;
+                updateData.paymentMethodExpYear = pm.card.exp_year;
+                console.log(
+                  `💳 Payment method saved: ${pm.card.brand} ****${pm.card.last4}`
+                );
+              } catch (pmError) {
+                console.error(
+                  "⚠️ Could not fetch payment method:",
+                  pmError.message
+                );
+              }
+            }
 
-              // Clear the package selection token since setup is complete
-              packageSelectionToken: null,
-              packageSelectionTokenExpiry: null,
-            },
-          });
+            await prisma.contractor.update({
+              where: { id: contractor.id },
+              data: updateData,
+            });
 
-          console.log("✅ CONTRACTOR ACTIVATED SUCCESSFULLY");
-          console.log("   - ID:", updated.id);
-          console.log("   - Business:", updated.businessName);
-          console.log("   - Stripe Customer:", updated.stripeCustomerId);
-          console.log(
-            "   - Stripe Subscription:",
-            updated.stripeSubscriptionId
-          );
-          console.log(
-            "   - Payment Method:",
-            paymentMethodDetails
-              ? `${paymentMethodDetails.brand} ****${paymentMethodDetails.last4}`
-              : "None"
-          );
-          console.log("   - Tier:", updated.subscriptionTier);
-
+            console.log("✅ Subscription dates and payment method updated");
+          }
           break;
         }
 
