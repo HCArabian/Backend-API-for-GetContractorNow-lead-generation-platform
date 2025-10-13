@@ -965,7 +965,15 @@ const authenticateContractor = async (req, res, next) => {
       return res.status(401).json({ error: "Contractor not found" });
     }
 
-    if (contractor.status !== "active") {
+    // Check if account is suspended
+    if (contractor.status === "suspended" || contractor.status === "declined") {
+      return res
+        .status(403)
+        .json({ error: "Contractor account is not active" });
+    }
+
+    // Check if verified by admin
+    if (!contractor.isVerified) {
       return res
         .status(403)
         .json({ error: "Contractor account is not active" });
