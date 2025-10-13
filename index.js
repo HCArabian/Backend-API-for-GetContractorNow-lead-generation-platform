@@ -193,78 +193,6 @@ app.post(
 
     try {
       switch (event.type) {
-        /* case "checkout.session.completed": {
-          const session = event.data.object;
-
-          console.log("📋 Checkout session completed");
-          console.log("   - Session ID:", session.id);
-          console.log("   - Customer ID:", session.customer);
-          console.log("   - Subscription ID:", session.subscription);
-          console.log("   - Metadata:", JSON.stringify(session.metadata));
-
-          const contractorId = session.metadata?.contractorId;
-
-          if (!contractorId) {
-            console.error("❌ NO CONTRACTOR ID IN METADATA!");
-            console.error(
-              "Full session metadata:",
-              JSON.stringify(session.metadata, null, 2)
-            );
-            return res
-              .status(400)
-              .json({ error: "Missing contractor ID in metadata" });
-          }
-
-          // Get subscription details from Stripe
-          const subscription = await stripe.subscriptions.retrieve(
-            session.subscription
-          );
-
-          // Map package to tier
-          const packageTierMap = {
-            starter: "STARTER",
-            pro: "PRO",
-            elite: "ELITE",
-          };
-          const tier = packageTierMap[session.metadata?.packageId] || "PRO";
-
-          console.log("💳 Updating contractor with Stripe info...");
-
-          // Update contractor in database
-          const updated = await prisma.contractor.update({
-            where: { id: contractorId },
-            data: {
-              stripeCustomerId: session.customer,
-              stripeSubscriptionId: session.subscription,
-              subscriptionStatus: "active",
-              subscriptionTier: tier,
-              subscriptionStartDate: new Date(
-                subscription.current_period_start * 1000
-              ),
-              subscriptionEndDate: new Date(
-                subscription.current_period_end * 1000
-              ),
-              status: "active",
-              isAcceptingLeads: true,
-              // Clear the package selection token since setup is complete
-              packageSelectionToken: null,
-              packageSelectionTokenExpiry: null,
-            },
-          });
-
-          console.log("✅ CONTRACTOR ACTIVATED SUCCESSFULLY");
-          console.log("   - ID:", updated.id);
-          console.log("   - Business:", updated.businessName);
-          console.log("   - Email:", updated.email);
-          console.log("   - Stripe Customer:", updated.stripeCustomerId);
-          console.log(
-            "   - Stripe Subscription:",
-            updated.stripeSubscriptionId
-          );
-          console.log("   - Tier:", updated.subscriptionTier);
-          console.log("   - Status:", updated.subscriptionStatus);
-
-          break; */
         case "checkout.session.completed": {
           const session = event.data.object;
 
@@ -329,6 +257,7 @@ app.post(
                   const pm = await stripe.paymentMethods.retrieve(
                     subscription.default_payment_method
                   );
+                  updateData.stripePaymentMethodId = pm.id; // 🔥 THE MISSING PIECE!
                   updateData.paymentMethodLast4 = pm.card.last4;
                   updateData.paymentMethodBrand = pm.card.brand;
                   updateData.paymentMethodExpMonth = pm.card.exp_month;
@@ -397,6 +326,7 @@ app.post(
                 const pm = await stripe.paymentMethods.retrieve(
                   subscription.default_payment_method
                 );
+                updateData.stripePaymentMethodId = pm.id; // 🔥 THE MISSING PIECE!
                 updateData.paymentMethodLast4 = pm.card.last4;
                 updateData.paymentMethodBrand = pm.card.brand;
                 updateData.paymentMethodExpMonth = pm.card.exp_month;
