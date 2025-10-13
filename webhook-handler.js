@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 // ============================================
 // SUBSCRIPTION CREATED - Save Everything!
 // ============================================
-async function handleSubscriptionCreated(subscription) {
+/* async function handleSubscriptionCreated(subscription) {
   console.log("📝 Saving subscription to database:", subscription.id);
 
   try {
@@ -86,6 +86,123 @@ async function handleSubscriptionCreated(subscription) {
     console.error("❌ Webhook handler error:", error);
     throw error;
   }
+} */
+
+async function handleSubscriptionCreated(subscription) {
+  console.log("📝 Saving subscription to database:", subscription.id);
+
+  try {
+    const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY_TEST);
+
+    // Get customer details
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    const customerEmail = customer.email;
+
+    console.log(`📧 Customer: ${customerEmail}`);
+
+    // Find contractor
+    const contractor = await prisma.contractor.findUnique({
+      where: { email: customerEmail.toLowerCase() },
+    });
+
+    if (!contractor) {
+      throw new Error(`No contractor found with email: ${customerEmail}`);
+    }
+
+    // Determine tier from price ID
+    const priceId = subscription.items.data[0].price.id;
+    let tier = "pro";
+
+    if (priceId === process.env.STRIPE_PRICE_STARTER) tier = "starter";
+    else if (priceId === process.env.STRIPE_PRICE_PRO) tier = "pro";
+    else if (priceId === process.env.STRIPE_PRICE_ELITE) tier = "elite";
+
+    // 🔥 ENHANCED: Get payment method with multiple fallbacks
+    let paymentData = {};
+    let pmId = null;
+
+    // Try 1: Get from subscription's default payment method
+    if (subscription.default_payment_method) {
+      pmId = subscription.default_payment_method;
+      console.log(
+        "💳 Found payment method from subscription.default_payment_method"
+      );
+    }
+    // Try 2: Get from customer invoice settings
+    else if (customer.invoice_settings?.default_payment_method) {
+      pmId = customer.invoice_settings.default_payment_method;
+      console.log("💳 Found payment method from customer.invoice_settings");
+    }
+    // Try 3: Get the most recent payment method attached to customer
+    else {
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: subscription.customer,
+        type: "card",
+        limit: 1,
+      });
+
+      if (paymentMethods.data.length > 0) {
+        pmId = paymentMethods.data[0].id;
+        console.log("💳 Found payment method from payment methods list");
+      }
+    }
+
+    // If we found a payment method, retrieve its details
+    if (pmId) {
+      const pm = await stripe.paymentMethods.retrieve(pmId);
+
+      // ✅ SECURITY: Store only last 4 digits and metadata
+      paymentData = {
+        stripePaymentMethodId: pm.id,
+        paymentMethodLast4: pm.card?.last4,
+        paymentMethodBrand: pm.card?.brand,
+        paymentMethodExpMonth: pm.card?.exp_month,
+        paymentMethodExpYear: pm.card?.exp_year,
+      };
+
+      console.log(`💳 Payment: ${pm.card?.brand} ****${pm.card?.last4}`);
+    } else {
+      console.warn(`⚠️ No payment method found for ${customerEmail}`);
+    }
+
+    // ✅ SAVE TO DATABASE (single source of truth)
+    const updated = await prisma.contractor.update({
+      where: { id: contractor.id },
+      data: {
+        // Stripe IDs
+        stripeCustomerId: subscription.customer,
+        stripeSubscriptionId: subscription.id,
+
+        // Payment Method (last 4 only!)
+        ...paymentData,
+
+        // Subscription Details
+        subscriptionTier: tier,
+        subscriptionStatus: "active",
+        subscriptionStartDate: new Date(
+          subscription.current_period_start * 1000
+        ),
+        subscriptionEndDate: new Date(subscription.current_period_end * 1000),
+
+        // Enable leads if they have credit
+        isAcceptingLeads: contractor.creditBalance >= 500,
+      },
+    });
+
+    console.log(`✅ Database updated: ${updated.businessName}`);
+    console.log(`   Tier: ${tier}`);
+    console.log(`   Status: active`);
+    if (paymentData.paymentMethodBrand) {
+      console.log(
+        `   Payment: ${paymentData.paymentMethodBrand} ****${paymentData.paymentMethodLast4}`
+      );
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("❌ Webhook handler error:", error);
+    throw error;
+  }
 }
 
 // ============================================
@@ -107,7 +224,7 @@ async function handleSubscriptionUpdated(subscription) {
     // Determine new tier
     const priceId = subscription.items.data[0].price.id;
     let tier = contractor.subscriptionTier;
-    
+
     if (priceId === process.env.STRIPE_PRICE_STARTER) tier = "starter";
     else if (priceId === process.env.STRIPE_PRICE_PRO) tier = "pro";
     else if (priceId === process.env.STRIPE_PRICE_ELITE) tier = "elite";
@@ -125,7 +242,8 @@ async function handleSubscriptionUpdated(subscription) {
         subscriptionTier: tier,
         subscriptionStatus: status,
         subscriptionEndDate: new Date(subscription.current_period_end * 1000),
-        isAcceptingLeads: status === "active" && contractor.creditBalance >= 500,
+        isAcceptingLeads:
+          status === "active" && contractor.creditBalance >= 500,
       },
     });
 
@@ -169,7 +287,9 @@ async function handlePaymentMethodAttached(paymentMethod) {
       },
     });
 
-    console.log(`✅ Payment method saved: ${paymentMethod.card?.brand} ****${paymentMethod.card?.last4}`);
+    console.log(
+      `✅ Payment method saved: ${paymentMethod.card?.brand} ****${paymentMethod.card?.last4}`
+    );
     return { success: true };
   } catch (error) {
     console.error("❌ Payment method handler error:", error);
