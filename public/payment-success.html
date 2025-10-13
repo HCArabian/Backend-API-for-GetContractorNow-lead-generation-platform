@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Successful - GetContractorNow</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 60px 40px;
+      text-align: center;
+    }
+    .success-icon {
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 30px;
+      animation: scaleIn 0.5s ease-out;
+    }
+    @keyframes scaleIn {
+      from { transform: scale(0); }
+      to { transform: scale(1); }
+    }
+    .checkmark {
+      color: white;
+      font-size: 60px;
+      font-weight: bold;
+    }
+    h1 {
+      font-size: 2.5rem;
+      color: #1a202c;
+      margin-bottom: 20px;
+    }
+    p {
+      font-size: 1.1rem;
+      color: #4a5568;
+      margin-bottom: 15px;
+      line-height: 1.6;
+    }
+    .info-box {
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 25px;
+      margin: 30px 0;
+      text-align: left;
+    }
+    .info-box h3 {
+      color: #2d3748;
+      margin-bottom: 15px;
+      font-size: 1.2rem;
+    }
+    .info-box ul {
+      list-style: none;
+      padding: 0;
+    }
+    .info-box li {
+      padding: 10px 0;
+      color: #4a5568;
+      display: flex;
+      align-items: center;
+    }
+    .info-box li::before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+      margin-right: 12px;
+      font-size: 1.3rem;
+    }
+    .portal-btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 18px 50px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-top: 20px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    .portal-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    .credentials-reminder {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      text-align: left;
+    }
+    .credentials-reminder strong {
+      color: #92400e;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .help-text {
+      margin-top: 30px;
+      padding-top: 30px;
+      border-top: 2px solid #e2e8f0;
+      font-size: 0.95rem;
+      color: #718096;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="success-icon">
+      <div class="checkmark">✓</div>
+    </div>
+
+    <h1>🎉 Payment Successful!</h1>
+    <p><strong>Your subscription is now active.</strong></p>
+    <p>Thank you for joining GetContractorNow! You're all set to start receiving qualified HVAC leads.</p>
+
+    <div class="info-box">
+      <h3>✅ What's Next:</h3>
+      <ul>
+        <li>Log in to your contractor portal</li>
+        <li>Change your temporary password (sent via email)</li>
+        <li>Add credit to your account ($500 minimum)</li>
+        <li>Start receiving leads in your service area!</li>
+      </ul>
+    </div>
+
+    <div class="credentials-reminder">
+      <strong>⚠️ Login Reminder:</strong>
+      Check your email for login credentials. You'll need to change your temporary password on first login for security.
+    </div>
+
+    <a href="https://app.getcontractornow.com/contractor/login.html" class="portal-btn">
+      Go to Contractor Portal →
+    </a>
+
+    <div class="help-text">
+      <p><strong>Need help?</strong></p>
+      <p>Email: support@getcontractornow.com</p>
+      <p>A confirmation email with your receipt has been sent to your email address.</p>
+    </div>
+  </div>
+</body>
+</html>
