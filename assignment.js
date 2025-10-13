@@ -73,6 +73,8 @@ async function assignContractor(lead) {
       console.log(
         "   All contractors failed payment method or credit requirements"
       );
+      return null;
+    }
       // Log selected contractor details for debugging
       console.log("📋 Selected contractor details:", {
         name: selectedContractor.businessName,
@@ -81,8 +83,6 @@ async function assignContractor(lead) {
         subscriptionStatus: selectedContractor.subscriptionStatus,
         subscriptionTier: selectedContractor.subscriptionTier,
       });
-      return null;
-    }
 
     // Calculate response deadline (24 hours for PLATINUM/GOLD, 48 for others)
     const responseDeadline = new Date();
