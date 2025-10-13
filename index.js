@@ -193,7 +193,7 @@ app.post(
 
     try {
       switch (event.type) {
-        case "checkout.session.completed": {
+        /* case "checkout.session.completed": {
           const session = event.data.object;
 
           console.log("📋 Checkout session completed");
@@ -263,6 +263,106 @@ app.post(
           );
           console.log("   - Tier:", updated.subscriptionTier);
           console.log("   - Status:", updated.subscriptionStatus);
+
+          break; */
+        case "checkout.session.completed": {
+          const session = event.data.object;
+
+          console.log("📋 Checkout session completed");
+          console.log("   - Session ID:", session.id);
+          console.log("   - Customer ID:", session.customer);
+          console.log("   - Subscription ID:", session.subscription);
+
+          const contractorId = session.metadata?.contractorId;
+
+          if (!contractorId) {
+            console.error("❌ NO CONTRACTOR ID IN METADATA!");
+            return res
+              .status(400)
+              .json({ error: "Missing contractor ID in metadata" });
+          }
+
+          // Get subscription details from Stripe
+          const subscription = await stripe.subscriptions.retrieve(
+            session.subscription
+          );
+
+          // ✅ GET PAYMENT METHOD DETAILS
+          let paymentMethodDetails = null;
+          if (subscription.default_payment_method) {
+            try {
+              const pm = await stripe.paymentMethods.retrieve(
+                subscription.default_payment_method
+              );
+              paymentMethodDetails = {
+                last4: pm.card.last4,
+                brand: pm.card.brand,
+                expMonth: pm.card.exp_month,
+                expYear: pm.card.exp_year,
+              };
+              console.log("💳 Payment method retrieved:", paymentMethodDetails);
+            } catch (pmError) {
+              console.error(
+                "⚠️ Could not fetch payment method:",
+                pmError.message
+              );
+            }
+          }
+
+          // Map package to tier
+          const packageTierMap = {
+            starter: "starter",
+            pro: "pro",
+            elite: "elite",
+          };
+          const tier = packageTierMap[session.metadata?.packageId] || "pro";
+
+          console.log("💳 Updating contractor with Stripe info...");
+
+          // Update contractor in database WITH PAYMENT METHOD
+          const updated = await prisma.contractor.update({
+            where: { id: contractorId },
+            data: {
+              stripeCustomerId: session.customer,
+              stripeSubscriptionId: session.subscription,
+              subscriptionStatus: "active",
+              subscriptionTier: tier,
+              subscriptionStartDate: new Date(
+                subscription.current_period_start * 1000
+              ),
+              subscriptionEndDate: new Date(
+                subscription.current_period_end * 1000
+              ),
+              status: "active",
+              isAcceptingLeads: true,
+
+              // ✅ SAVE PAYMENT METHOD DETAILS
+              paymentMethodLast4: paymentMethodDetails?.last4 || null,
+              paymentMethodBrand: paymentMethodDetails?.brand || null,
+              paymentMethodExpMonth: paymentMethodDetails?.expMonth || null,
+              paymentMethodExpYear: paymentMethodDetails?.expYear || null,
+
+              // Clear the package selection token since setup is complete
+              packageSelectionToken: null,
+              packageSelectionTokenExpiry: null,
+            },
+          });
+
+          console.log("✅ CONTRACTOR ACTIVATED SUCCESSFULLY");
+          console.log("   - ID:", updated.id);
+          console.log("   - Business:", updated.businessName);
+          console.log("   - Stripe Customer:", updated.stripeCustomerId);
+          console.log(
+            "   - Stripe Subscription:",
+            updated.stripeSubscriptionId
+          );
+          console.log(
+            "   - Payment Method:",
+            paymentMethodDetails
+              ? `${paymentMethodDetails.brand} ****${paymentMethodDetails.last4}`
+              : "None"
+          );
+          console.log("   - Tier:", updated.subscriptionTier);
 
           break;
         }
