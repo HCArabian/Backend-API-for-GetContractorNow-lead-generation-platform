@@ -201,7 +201,7 @@ async function sendNewLeadEmail(contractor, lead, assignment, trackingNumber) {
     
     <div class="footer">
       <p>GetContractorNow Lead Generation Platform</p>
-      <p>Questions? Contact support@getcontractornow.com</p>
+      <p>Questions? Contact <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></p>
     </div>
   </div>
 </body>

@@ -4654,7 +4654,7 @@ app.post("/api/webhooks/twilio/sms-optout", async (req, res) => {
     if (["HELP", "INFO"].includes(message)) {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>GetContractorNow: Receive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel. Contact: support@getcontractornow.com</Message>
+  <Message>GetContractorNow: Receive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel. Contact <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></Message>
 </Response>`;
 
       return res.type("text/xml").send(twiml);
@@ -5198,7 +5198,7 @@ app.post("/api/webhooks/twilio/sms", async (req, res) => {
     if (message === "HELP" || message === "INFO") {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Message>GetContractorNow: Receive exclusive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel, HELP for help. Contact: support@getcontractornow.com</Message>
+  <Message>GetContractorNow: Receive exclusive HVAC leads via SMS. Msg&data rates may apply. Reply STOP to cancel, HELP for help. Contact: <a href="mailto:support@getcontractornow.com">support@getcontractornow.com</a></Message>
 </Response>`;
 
       return res.type("text/xml").send(twiml);
