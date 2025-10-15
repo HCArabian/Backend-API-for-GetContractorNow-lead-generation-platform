@@ -366,12 +366,22 @@ model CreditTransaction {
   billingRecordId String?
   description     String
   createdAt       DateTime   @default(now())
+  
+  // ============================================
+  // ADD THESE 4 FIELDS FOR EXPIRATION LOGIC
+  // ============================================
+  updatedAt            DateTime   @updatedAt @default(now())   // Track when record updated (with default)
+  isExpired            Boolean    @default(false)                // Mark transaction as expired
+  warningEmailSent     Boolean    @default(false)                // Track if warning email sent
+  relatedTransactionId String?                                   // Link expiration to original deposit
+
   contractor      Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
 
   @@index([contractorId])
   @@index([type])
   @@index([expiresAt])
   @@index([createdAt])
+  @@index([isExpired])  // ADD THIS INDEX - Important for expiration queries
   @@map("CreditTransaction")
 }
 

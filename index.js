@@ -2,7 +2,7 @@
 // 1. ALL IMPORTS FIRST (MUST BE AT TOP)
 // ============================================
 require("dotenv").config();
-
+const cron = require('node-cron');
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
@@ -20,6 +20,10 @@ const Sentry = require("@sentry/node");
 const validator = require("validator");
 
 // Your custom imports
+const { 
+  processExpiredCredits, 
+  sendExpirationWarningEmails 
+} = require('./utils/creditExpiration');
 const { calculateLeadScore } = require("./scoring");
 const { assignContractor } = require("./assignment");
 const { createSetupIntent, savePaymentMethod } = require("./stripe-payments");
@@ -3071,6 +3075,7 @@ app.post(
   }
 );
 
+
 // Get credit balance and transaction history
 app.get(
   "/api/contractors/credit/balance",
@@ -3128,6 +3133,55 @@ app.get(
     }
   }
 );
+// ============================================
+// ADMIN ENDPOINTS - MANUAL TRIGGERS
+// ============================================
+
+/**
+ * Manual endpoint to trigger credit expiration
+ * Use this for testing or manual runs
+ */
+app.post('/api/admin/expire-credits', newAdminAuth, async (req, res) => {
+  try {
+    console.log('🔧 Manual credit expiration triggered');
+    const results = await processExpiredCredits();
+    
+    res.json({
+      success: true,
+      message: 'Credit expiration process completed',
+      ...results,
+    });
+  } catch (error) {
+    console.error('❌ Manual expiration failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to expire credits',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * Manual endpoint to send expiration warnings
+ */
+app.post('/api/admin/send-expiration-warnings', newAdminAuth, async (req, res) => {
+  try {
+    console.log('🔧 Manual expiration warnings triggered');
+    await sendExpirationWarningEmails();
+    
+    res.json({
+      success: true,
+      message: 'Expiration warnings sent',
+    });
+  } catch (error) {
+    console.error('❌ Manual warnings failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send warnings',
+      details: error.message,
+    });
+  }
+});
 
 // ============================================
 // SUBSCRIPTION WEBHOOK HANDLERS
