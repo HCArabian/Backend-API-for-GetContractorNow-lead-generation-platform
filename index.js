@@ -4592,6 +4592,11 @@ app.post("/api/contractors/apply", async (req, res) => {
         isVerified: false,
         applicationSubmittedAt: new Date(),
 
+        // Boolean flags (THAT they agreed)
+        acceptedTerms: true,
+        acceptedTCPA: true,
+        acceptedPrivacy: true,
+
         // Legal Compliance - ✅ VERIFIED FIELD NAMES
         acceptedTermsAt: new Date(),
         acceptedTCPAAt: new Date(),

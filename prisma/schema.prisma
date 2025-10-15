@@ -146,6 +146,9 @@ model Contractor {
   notes                   String? 
   ownerFirstName          String?
   ownerLastName           String?
+  acceptedTerms    Boolean   @default(false)
+  acceptedTCPA     Boolean   @default(false)
+  acceptedPrivacy  Boolean   @default(false)
 
   // ✅ ADD THESE TWO NEW FIELDS:
   packageSelectionToken       String?   @unique
