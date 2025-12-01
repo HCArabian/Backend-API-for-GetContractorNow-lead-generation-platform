@@ -18,6 +18,7 @@ const twilio = require("twilio");
 const path = require("path");
 const Sentry = require("@sentry/node");
 const validator = require("validator");
+// Removed all API endpoints and commented out for safekeeping
 
 // Your custom imports
 const { 
