@@ -8,7 +8,7 @@ try {
     stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
     console.log("✅ Stripe initialized in stripe-payments.js");
   } else {
-    console.warn("⚠️ STRIPE_SECRET_KEY not set — Stripe payments disabled");
+    console.warn("⚠️ STRIPE_SECRET_KEY is not set — Stripe payments disabled");
   }
 } catch (error) {
   console.error("⚠️ Stripe initialization failed:", error.message);

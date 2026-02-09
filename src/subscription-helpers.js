@@ -11,6 +11,7 @@ const prisma = require("./db");
  *   Pro:     $175/lead  (LEAD_COST_PRO=17500)
  *   Elite:   $300/lead  (LEAD_COST_ELITE=30000)
  */
+
 function getLeadCostForContractor(contractor) {
   // Beta testers pay special rate
   if (contractor.isBetaTester && contractor.betaTesterLeadCost) {
