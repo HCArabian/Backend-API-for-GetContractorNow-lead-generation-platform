@@ -51,7 +51,7 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
   authenticateAdmin: newAdminAuth,
-} = require("./admin-auth");
+} = require("./routes/admin-auth");
 const {
   sanitizeBusinessName,
   validateAndFormatPhone,
