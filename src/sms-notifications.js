@@ -1,13 +1,29 @@
 const prisma = require("./db");
 const twilio = require("twilio");
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+let client = null;
+
+try {
+  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
+    client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+    console.log("✅ Twilio client initialized");
+  } else {
+    console.warn("⚠️ Twilio credentials not set — SMS disabled");
+  }
+} catch (error) {
+  console.error("⚠️ Twilio initialization failed:", error.message);
+}
 
 async function sendSMS(to, message, leadId, contractorId) {
   try {
+    if (!client) {
+      console.warn("⚠️ SMS skipped — Twilio client not initialized");
+      return { success: false, error: "Twilio not configured" };
+    }
+
     const result = await client.messages.create({
       body: message,
       from: process.env.TWILIO_SMS_NUMBER,
