@@ -6,19 +6,18 @@ const cron = require('node-cron');
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-const Stripe = require("stripe");
-let stripe = null;
-
-try {
-  if (process.env.STRIPE_SECRET_KEY) {
-    stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-    console.log("✅ Stripe initialized");
-  } else {
-    console.warn("⚠️ STRIPE_SECRET_KEY not set — Stripe disabled");
-  }
-} catch (error) {
-  console.error("⚠️ Stripe initialization failed:", error.message);
-}
+const {
+  constructWebhookEvent,
+  retrieveSubscription,
+  updateSubscription,
+  retrievePaymentMethod,
+  createCheckoutSession,
+  createBillingPortalSession,
+  createPaymentIntent,
+  createSetupIntent: stripeCreateSetupIntent,
+  listCustomersByEmail,
+  listInvoices,
+} = require("./services/stripe");
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const prisma = require("./db");
@@ -52,7 +51,7 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
   authenticateAdmin: newAdminAuth,
-} = require("./routes/admin-auth");
+} = require("./admin-auth");
 const {
   sanitizeBusinessName,
   validateAndFormatPhone,
@@ -199,7 +198,7 @@ app.post(
     let event;
 
     try {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      event = constructWebhookEvent(req.body, sig, webhookSecret);
       console.log("✅ Stripe webhook received:", event.type);
     } catch (err) {
       console.error("❌ Webhook verification failed:", err.message);
@@ -251,7 +250,7 @@ app.post(
           // Only set dates if subscription exists and has valid data
           if (session.subscription) {
             try {
-              const subscription = await stripe.subscriptions.retrieve(
+              const subscription = await retrieveSubscription(
                 session.subscription
               );
 
@@ -269,7 +268,7 @@ app.post(
               // ✅ GET PAYMENT METHOD DETAILS
               if (subscription.default_payment_method) {
                 try {
-                  const pm = await stripe.paymentMethods.retrieve(
+                  const pm = await retrievePaymentMethod(
                     subscription.default_payment_method
                   );
                   updateData.stripePaymentMethodId = pm.id; // 🔥 THE MISSING PIECE!
@@ -338,7 +337,7 @@ app.post(
             // Get payment method if available
             if (subscription.default_payment_method) {
               try {
-                const pm = await stripe.paymentMethods.retrieve(
+                const pm = await retrievePaymentMethod(
                   subscription.default_payment_method
                 );
                 updateData.stripePaymentMethodId = pm.id; // 🔥 THE MISSING PIECE!
@@ -2610,7 +2609,7 @@ app.post("/api/contractors/create-checkout", async (req, res) => {
     console.log("   - Price ID:", priceId);
 
     // Create Stripe checkout session
-    const session = await stripe.checkout.sessions.create({
+    const session = await createCheckoutSession({
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [
@@ -2788,7 +2787,7 @@ app.post(
       );
 
       // Create Stripe payment intent
-      const paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntent = await createPaymentIntent({
         amount: Math.round(amount * 100), // Convert to cents
         currency: "usd",
         customer: contractor.stripeCustomerId,
@@ -3162,10 +3161,9 @@ app.post(
       }
 
       // Create setup intent for new card
-      const setupIntent = await stripe.setupIntents.create({
-        customer: contractor.stripeCustomerId,
-        payment_method_types: ["card"],
-      });
+      const setupIntent = await stripeCreateSetupIntent(
+        contractor.stripeCustomerId
+      );
 
       res.json({
         success: true,
@@ -3192,13 +3190,13 @@ app.post(
       });
 
       // Get payment method details
-      const paymentMethod = await stripe.paymentMethods.retrieve(
+      const paymentMethod = await retrievePaymentMethod(
         paymentMethodId
       );
 
       // Update subscription to use new payment method
       if (contractor.stripeSubscriptionId) {
-        await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+        await updateSubscription(contractor.stripeSubscriptionId, {
           default_payment_method: paymentMethodId,
         });
       }
@@ -3612,11 +3610,11 @@ app.post(
       else if (newTier === "elite") priceId = process.env.STRIPE_PRICE_ELITE;
 
       // Update subscription in Stripe
-      const subscription = await stripe.subscriptions.retrieve(
+      const subscription = await retrieveSubscription(
         contractor.stripeSubscriptionId
       );
 
-      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      await updateSubscription(contractor.stripeSubscriptionId, {
         items: [
           {
             id: subscription.items.data[0].id,
@@ -3667,7 +3665,7 @@ app.post(
       }
 
       // Cancel subscription in Stripe (at period end)
-      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      await updateSubscription(contractor.stripeSubscriptionId, {
         cancel_at_period_end: true,
         metadata: { cancellation_reason: reason || "Not provided" },
       });
@@ -3714,16 +3712,17 @@ app.post(
       }
 
       // Reactivate in Stripe
-      await stripe.subscriptions.update(contractor.stripeSubscriptionId, {
+      await updateSubscription(contractor.stripeSubscriptionId, {
         cancel_at_period_end: false,
       });
 
       // Update database
+      const minBalance = parseInt(process.env.MINIMUM_CREDIT_BALANCE) || 100000;
       await prisma.contractor.update({
         where: { id: contractorId },
         data: {
           subscriptionStatus: "active",
-          isAcceptingLeads: contractor.creditBalance >= 500,
+          isAcceptingLeads: contractor.creditBalance >= minBalance,
         },
       });
 
@@ -3755,10 +3754,7 @@ app.get(
         return res.json({ invoices: [] });
       }
 
-      const invoices = await stripe.invoices.list({
-        customer: contractor.stripeCustomerId,
-        limit: 12,
-      });
+      const invoices = await listInvoices(contractor.stripeCustomerId, 12);
 
       const formattedInvoices = invoices.data.map((inv) => ({
         id: inv.id,
@@ -3801,10 +3797,7 @@ app.post(
 
 
         // Search for customer by email
-        const customers = await stripe.customers.list({
-          email: contractor.email,
-          limit: 1,
-        });
+        const customers = await listCustomersByEmail(contractor.email, 1);
 
         if (customers.data.length > 0) {
           const stripeCustomer = customers.data[0];
@@ -3817,12 +3810,10 @@ app.post(
           });
 
           // Create portal session
-          const session = await stripe.billingPortal.sessions.create({
-            customer: stripeCustomer.id,
-            return_url: `${
-              process.env.RAILWAY_URL || "https://app.getcontractornow.com"
-            }/contractor`,
-          });
+          const returnUrl = `${
+            process.env.RAILWAY_URL || "https://app.getcontractornow.com"
+          }/contractor`;
+          const session = await createBillingPortalSession(stripeCustomer.id, returnUrl);
 
           return res.json({
             success: true,
@@ -3839,12 +3830,10 @@ app.post(
       }
 
       // Has stripeCustomerId - create portal normally
-      const session = await stripe.billingPortal.sessions.create({
-        customer: contractor.stripeCustomerId,
-        return_url: `${
-          process.env.RAILWAY_URL || "https://app.getcontractornow.com"
-        }/contractor`,
-      });
+      const portalReturnUrl = `${
+        process.env.RAILWAY_URL || "https://app.getcontractornow.com"
+      }/contractor`;
+      const session = await createBillingPortalSession(contractor.stripeCustomerId, portalReturnUrl);
 
       res.json({
         success: true,

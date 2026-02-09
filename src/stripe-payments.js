@@ -1,31 +1,21 @@
+// stripe-payments.js
+// High-level Stripe payment operations (customer creation, lead charging, payment methods)
+// Uses services/stripe.js for all Stripe API calls
+
 const Sentry = require("@sentry/node");
 const prisma = require("./db");
-
-let stripe = null;
-
-try {
-  if (process.env.STRIPE_SECRET_KEY) {
-    stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-    console.log("✅ Stripe initialized in stripe-payments.js");
-  } else {
-    console.warn("⚠️ STRIPE_SECRET_KEY is not set — Stripe payments disabled");
-  }
-} catch (error) {
-  console.error("⚠️ Stripe initialization failed:", error.message);
-}
-
-function requireStripe() {
-  if (!stripe) {
-    throw new Error("Stripe is not initialized — STRIPE_SECRET_KEY not set");
-  }
-  return stripe;
-}
+const {
+  createCustomer,
+  createPaymentIntent,
+  createSetupIntent: stripeCreateSetupIntent,
+  retrievePaymentMethod,
+  attachPaymentMethod,
+} = require("./services/stripe");
 
 // Create a customer in Stripe for a contractor
 async function createStripeCustomer(contractor) {
   try {
-    const s = requireStripe();
-    const customer = await s.customers.create({
+    const customer = await createCustomer({
       email: contractor.email,
       name: contractor.businessName,
       phone: contractor.phone,
@@ -46,13 +36,13 @@ async function createStripeCustomer(contractor) {
   } catch (error) {
     Sentry.captureException(error, {
       tags: {
-        operation: 'create_stripe_customer',
-        contractorId: contractor.id
+        operation: "create_stripe_customer",
+        contractorId: contractor.id,
       },
       extra: {
         contractorEmail: contractor.email,
-        businessName: contractor.businessName
-      }
+        businessName: contractor.businessName,
+      },
     });
     console.error("Stripe customer creation error:", error);
     throw error;
@@ -67,7 +57,6 @@ async function chargeContractorForLead(
   description
 ) {
   try {
-    const s = requireStripe();
     const contractor = await prisma.contractor.findUnique({
       where: { id: contractorId },
     });
@@ -81,7 +70,7 @@ async function chargeContractorForLead(
     }
 
     // Create payment intent
-    const paymentIntent = await s.paymentIntents.create({
+    const paymentIntent = await createPaymentIntent({
       amount: Math.round(amount * 100), // Convert to cents
       currency: "usd",
       customer: contractor.stripeCustomerId,
@@ -118,21 +107,21 @@ async function chargeContractorForLead(
   } catch (error) {
     Sentry.captureException(error, {
       tags: {
-        operation: 'charge_contractor',
+        operation: "charge_contractor",
         contractorId: contractorId,
-        leadId: leadId
+        leadId: leadId,
       },
       extra: {
         amount: amount,
         description: description,
         errorType: error.type,
-        errorCode: error.code
-      }
+        errorCode: error.code,
+      },
     });
     console.error("Payment error:", error);
 
-    // Update billing record with error - use updateMany to avoid errors if record doesn't exist
-    await prisma.billingRecord.updateMany({  // ✅ FIXED: Changed from update to updateMany
+    // Update billing record with error
+    await prisma.billingRecord.updateMany({
       where: {
         leadId: leadId,
         contractorId: contractorId,
@@ -153,7 +142,6 @@ async function chargeContractorForLead(
 // Create a setup intent for adding payment method
 async function createSetupIntent(contractorId) {
   try {
-    const s = requireStripe();
     const contractor = await prisma.contractor.findUnique({
       where: { id: contractorId },
     });
@@ -163,18 +151,17 @@ async function createSetupIntent(contractorId) {
       contractor.stripeCustomerId = customer.id;
     }
 
-    const setupIntent = await s.setupIntents.create({
-      customer: contractor.stripeCustomerId,
-      payment_method_types: ["card"],
-    });
+    const setupIntent = await stripeCreateSetupIntent(
+      contractor.stripeCustomerId
+    );
 
     return setupIntent;
   } catch (error) {
     Sentry.captureException(error, {
       tags: {
-        operation: 'create_setup_intent',
-        contractorId: contractorId
-      }
+        operation: "create_setup_intent",
+        contractorId: contractorId,
+      },
     });
     console.error("Setup intent error:", error);
     throw error;
@@ -184,32 +171,29 @@ async function createSetupIntent(contractorId) {
 // Save payment method after contractor adds it
 async function savePaymentMethod(contractorId, paymentMethodId) {
   try {
-    const s = requireStripe();
     // Get payment method details from Stripe
-    const paymentMethod = await s.paymentMethods.retrieve(paymentMethodId);
-    
+    const paymentMethod = await retrievePaymentMethod(paymentMethodId);
+
     // Get contractor's Stripe customer ID
     const contractor = await prisma.contractor.findUnique({
       where: { id: contractorId },
-      select: { stripeCustomerId: true }
+      select: { stripeCustomerId: true },
     });
-    
+
     // Attach payment method to customer if not already attached
     if (contractor.stripeCustomerId) {
-      await s.paymentMethods.attach(paymentMethodId, {
-        customer: contractor.stripeCustomerId,
-      });
+      await attachPaymentMethod(paymentMethodId, contractor.stripeCustomerId);
     }
-    
+
     // Save to database with card details
     await prisma.contractor.update({
       where: { id: contractorId },
-      data: { 
+      data: {
         stripePaymentMethodId: paymentMethodId,
-        paymentMethodLast4: paymentMethod.card?.last4 || null,  // ✅ ADDED
-        paymentMethodBrand: paymentMethod.card?.brand || null,  // ✅ ADDED
-        paymentMethodExpMonth: paymentMethod.card?.exp_month || null,  // ✅ ADDED
-        paymentMethodExpYear: paymentMethod.card?.exp_year || null,  // ✅ ADDED
+        paymentMethodLast4: paymentMethod.card?.last4 || null,
+        paymentMethodBrand: paymentMethod.card?.brand || null,
+        paymentMethodExpMonth: paymentMethod.card?.exp_month || null,
+        paymentMethodExpYear: paymentMethod.card?.exp_year || null,
       },
     });
 
@@ -218,12 +202,12 @@ async function savePaymentMethod(contractorId, paymentMethodId) {
   } catch (error) {
     Sentry.captureException(error, {
       tags: {
-        operation: 'save_payment_method',
-        contractorId: contractorId
+        operation: "save_payment_method",
+        contractorId: contractorId,
       },
       extra: {
-        paymentMethodId: paymentMethodId
-      }
+        paymentMethodId: paymentMethodId,
+      },
     });
     console.error("Save payment method error:", error);
     throw error;
