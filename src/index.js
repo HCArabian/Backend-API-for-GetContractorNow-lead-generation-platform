@@ -7,7 +7,18 @@ const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
 const Stripe = require("stripe");
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe = null;
+
+try {
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+    console.log("✅ Stripe initialized");
+  } else {
+    console.warn("⚠️ STRIPE_SECRET_KEY not set — Stripe disabled");
+  }
+} catch (error) {
+  console.error("⚠️ Stripe initialization failed:", error.message);
+}
 const rateLimit = require("express-rate-limit");
 const cors = require("cors");
 const prisma = require("./db");
@@ -3316,14 +3327,14 @@ app.get(
         monthlyPrice = 0;
         leadCost = contractor.betaTesterLeadCost || 50;
       } else if (contractor.subscriptionTier === "starter") {
-        monthlyPrice = 99;
-        leadCost = 75;
+        monthlyPrice = 150;
+        leadCost = 125;
       } else if (contractor.subscriptionTier === "pro") {
-        monthlyPrice = 125;
-        leadCost = 100;
+        monthlyPrice = 225;
+        leadCost = 175;
       } else if (contractor.subscriptionTier === "elite") {
-        monthlyPrice = 200;
-        leadCost = 250;
+        monthlyPrice = 350;
+        leadCost = 300;
       }
 
       // Get leads this month
@@ -3524,12 +3535,12 @@ app.get(
         {
           tier: "starter",
           name: "Starter",
-          price: 99,
-          leadCost: 75,
+          price: 150,
+          leadCost: 125,
           maxLeads: 15,
           features: [
             "Up to 15 leads/month",
-            "$75 per lead",
+            "$125 per lead",
             "Basic support",
             "Email notifications",
           ],
@@ -3537,12 +3548,12 @@ app.get(
         {
           tier: "pro",
           name: "Pro",
-          price: 125,
-          leadCost: 100,
+          price: 225,
+          leadCost: 175,
           maxLeads: 40,
           features: [
             "Up to 40 leads/month",
-            "$100 per lead",
+            "$175 per lead",
             "Priority support",
             "SMS + Email notifications",
             "Analytics dashboard",
@@ -3551,12 +3562,12 @@ app.get(
         {
           tier: "elite",
           name: "Elite",
-          price: 200,
-          leadCost: 250,
+          price: 350,
+          leadCost: 300,
           maxLeads: 999,
           features: [
             "Unlimited leads",
-            "$250 per premium lead",
+            "$300 per premium lead",
             "Dedicated account manager",
             "All notifications",
             "Advanced analytics",

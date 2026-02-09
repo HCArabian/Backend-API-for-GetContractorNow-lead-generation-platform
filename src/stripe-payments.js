@@ -1,11 +1,31 @@
 const Sentry = require("@sentry/node");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const prisma = require("./db");
+
+let stripe = null;
+
+try {
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    console.log("✅ Stripe initialized in stripe-payments.js");
+  } else {
+    console.warn("⚠️ STRIPE_SECRET_KEY not set — Stripe payments disabled");
+  }
+} catch (error) {
+  console.error("⚠️ Stripe initialization failed:", error.message);
+}
+
+function requireStripe() {
+  if (!stripe) {
+    throw new Error("Stripe is not initialized — STRIPE_SECRET_KEY not set");
+  }
+  return stripe;
+}
 
 // Create a customer in Stripe for a contractor
 async function createStripeCustomer(contractor) {
   try {
-    const customer = await stripe.customers.create({
+    const s = requireStripe();
+    const customer = await s.customers.create({
       email: contractor.email,
       name: contractor.businessName,
       phone: contractor.phone,
@@ -47,6 +67,7 @@ async function chargeContractorForLead(
   description
 ) {
   try {
+    const s = requireStripe();
     const contractor = await prisma.contractor.findUnique({
       where: { id: contractorId },
     });
@@ -60,7 +81,7 @@ async function chargeContractorForLead(
     }
 
     // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await s.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: "usd",
       customer: contractor.stripeCustomerId,
@@ -132,6 +153,7 @@ async function chargeContractorForLead(
 // Create a setup intent for adding payment method
 async function createSetupIntent(contractorId) {
   try {
+    const s = requireStripe();
     const contractor = await prisma.contractor.findUnique({
       where: { id: contractorId },
     });
@@ -141,7 +163,7 @@ async function createSetupIntent(contractorId) {
       contractor.stripeCustomerId = customer.id;
     }
 
-    const setupIntent = await stripe.setupIntents.create({
+    const setupIntent = await s.setupIntents.create({
       customer: contractor.stripeCustomerId,
       payment_method_types: ["card"],
     });
@@ -162,8 +184,9 @@ async function createSetupIntent(contractorId) {
 // Save payment method after contractor adds it
 async function savePaymentMethod(contractorId, paymentMethodId) {
   try {
+    const s = requireStripe();
     // Get payment method details from Stripe
-    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    const paymentMethod = await s.paymentMethods.retrieve(paymentMethodId);
     
     // Get contractor's Stripe customer ID
     const contractor = await prisma.contractor.findUnique({
@@ -173,7 +196,7 @@ async function savePaymentMethod(contractorId, paymentMethodId) {
     
     // Attach payment method to customer if not already attached
     if (contractor.stripeCustomerId) {
-      await stripe.paymentMethods.attach(paymentMethodId, {
+      await s.paymentMethods.attach(paymentMethodId, {
         customer: contractor.stripeCustomerId,
       });
     }
